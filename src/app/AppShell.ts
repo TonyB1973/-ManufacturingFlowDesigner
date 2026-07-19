@@ -5,6 +5,9 @@ import { createStatusBar, type StatusBarController } from '../components/statusb
 import { createTitleBar } from '../components/titlebar/TitleBar';
 import { createWorkspace } from '../components/workspace/Workspace';
 import { actionButton, element } from '../ui/dom';
+import { RESOURCE_TEMPLATES } from '../core/constants/resourceTemplates';
+import { ResourceStore } from '../services/ResourceStore';
+import { ResourceIdGenerator } from '../utilities/ResourceIdGenerator';
 
 export interface AppShellResult {
   readonly element: HTMLElement;
@@ -15,8 +18,9 @@ export interface AppShellResult {
 export function createAppShell(): AppShellResult {
   const shell = element('div', 'app-shell');
   const body = element('div', 'app-body');
-  const left = createLeftSidebar();
-  const right = createRightSidebar();
+  const resourceStore = new ResourceStore(RESOURCE_TEMPLATES, new ResourceIdGenerator());
+  const left = createLeftSidebar(resourceStore);
+  const right = createRightSidebar(resourceStore);
   const statusBar = createStatusBar();
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
   const rightToggle = actionButton('Hide inspector panels', 'panel-toggle panel-toggle--right');
@@ -36,10 +40,24 @@ export function createAppShell(): AppShellResult {
   const workspace = createWorkspace({
     application: shell,
     statusBar,
+    resourceStore,
     onFocusModeChange: (active) => shell.classList.toggle('app-shell--canvas-focus', active),
   });
-  body.append(left, leftToggle, workspace.element, rightToggle, right);
+  body.append(left.element, leftToggle, workspace.element, rightToggle, right.element);
   shell.append(createTitleBar(), createRibbon(), body, statusBar.element);
-  return { element: shell, statusBar, dispose: workspace.dispose };
+  const unsubscribeStatus = resourceStore.subscribe(() => {
+    statusBar.setSelectionCount(resourceStore.getSelectedResource() ? 1 : 0);
+    statusBar.setResourceCount(resourceStore.getResourceCount());
+  });
+  return {
+    element: shell,
+    statusBar,
+    dispose: () => {
+      unsubscribeStatus();
+      left.dispose();
+      right.dispose();
+      workspace.dispose();
+    },
+  };
 }
 

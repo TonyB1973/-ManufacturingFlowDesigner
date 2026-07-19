@@ -1,6 +1,17 @@
-import { CANVAS_COMMAND_EVENT, type CanvasCommand, reportPlaceholder } from '../../../core/events/uiEvents';
+import { CANVAS_COMMAND_EVENT, type CanvasCommand } from '../../../core/events/uiEvents';
 import { createCanvasState } from '../../../models/canvas/CanvasState';
+import type { ResourceStore } from '../../../services/ResourceStore';
+import { SnapService } from '../../../services/SnapService';
 import { element } from '../../../ui/dom';
+import {
+  RESOURCE_DRAG_ENDED_EVENT,
+  RESOURCE_DRAG_MOVED_EVENT,
+  RESOURCE_DRAG_STARTED_EVENT,
+  RESOURCE_KEYBOARD_PLACE_EVENT,
+  type ResourceDragDetail,
+} from '../../../core/events/resourceEvents';
+import { ResourceInteractionController } from '../resources/ResourceInteractionController';
+import { ResourceRenderer } from '../resources/ResourceRenderer';
 import { CanvasInteractionController } from './CanvasInteractionController';
 import { createCanvasToolbar, type CanvasToolbarCommand } from './CanvasToolbar';
 import { EngineeringGrid } from './EngineeringGrid';
@@ -12,6 +23,7 @@ export interface CanvasViewportCallbacks {
   readonly onCoordinatesChange: (point: Point | null) => void;
   readonly onFocusModeChange: (active: boolean) => void;
   readonly onStatusChange: (message: string) => void;
+  readonly onSnapChange: (enabled: boolean) => void;
 }
 
 export interface CanvasViewportController {
@@ -19,8 +31,9 @@ export interface CanvasViewportController {
   dispose(): void;
 }
 
-export function createCanvasViewport(application: HTMLElement, callbacks: CanvasViewportCallbacks): CanvasViewportController {
+export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, callbacks: CanvasViewportCallbacks): CanvasViewportController {
   const state = createCanvasState();
+  const snap = new SnapService();
   const workspace = element('main', 'workspace');
   const viewport = element('section', 'canvas-viewport');
   viewport.tabIndex = 0;
@@ -45,10 +58,12 @@ export function createCanvasViewport(application: HTMLElement, callbacks: Canvas
       toolbar.setTool(state.tool);
       toolbar.setGridVisible(state.gridVisible);
       toolbar.setOriginVisible(state.originVisible);
+      toolbar.setSnapEnabled(snap.enabled);
       toolbar.setFocusMode(focusMode);
       viewport.classList.toggle('canvas-viewport--pan-tool', state.tool === 'pan' || temporaryPan);
       callbacks.onZoomChange(state.zoom);
       callbacks.onGridVisibilityChange(state.gridVisible);
+      callbacks.onSnapChange(snap.enabled);
     });
   };
 
@@ -62,7 +77,7 @@ export function createCanvasViewport(application: HTMLElement, callbacks: Canvas
     switch (command) {
       case 'select':
         state.tool = 'select';
-        reportPlaceholder('Canvas selection');
+        callbacks.onStatusChange('Select tool active');
         break;
       case 'pan':
         state.tool = state.tool === 'pan' ? 'select' : 'pan';
@@ -90,6 +105,16 @@ export function createCanvasViewport(application: HTMLElement, callbacks: Canvas
         state.originVisible = !state.originVisible;
         callbacks.onStatusChange(`Origin ${state.originVisible ? 'shown' : 'hidden'}`);
         break;
+      case 'snap':
+        callbacks.onStatusChange(`Snap ${snap.toggle() ? 'enabled' : 'disabled'}`);
+        break;
+      case 'delete-selection':
+        resourceInteraction?.deleteSelection();
+        break;
+      case 'clear-selection':
+        resourceStore.clearSelection();
+        callbacks.onStatusChange('Selection cleared');
+        break;
       case 'focus':
         focusMode = !focusMode;
         callbacks.onFocusModeChange(focusMode);
@@ -101,6 +126,16 @@ export function createCanvasViewport(application: HTMLElement, callbacks: Canvas
 
   const toolbar = createCanvasToolbar(runCommand);
   workspace.append(toolbar.element, viewport);
+
+  const resourceRenderer = new ResourceRenderer(grid.getObjectLayer(), resourceStore);
+  let resourceInteraction: ResourceInteractionController | null = new ResourceInteractionController(
+    viewport,
+    application,
+    state,
+    resourceStore,
+    snap,
+    callbacks.onStatusChange,
+  );
 
   const interaction = new CanvasInteractionController(viewport, application, {
     getZoom: () => state.zoom,
@@ -121,6 +156,37 @@ export function createCanvasViewport(application: HTMLElement, callbacks: Canvas
     },
     onKeyboardCommand: runCommand,
   });
+
+  const isInsideViewport = (clientX: number, clientY: number): boolean => {
+    const bounds = viewport.getBoundingClientRect();
+    return clientX >= bounds.left && clientX <= bounds.right && clientY >= bounds.top && clientY <= bounds.bottom;
+  };
+
+  const placeTemplate = (templateId: string, viewportPoint: Point, bypassSnap: boolean): void => {
+    const worldPoint = snap.snapPoint(screenToWorld(viewportPoint, state), bypassSnap);
+    const resource = resourceStore.addResource(templateId, worldPoint.x, worldPoint.y);
+    if (resource) callbacks.onStatusChange(`Resource placed: ${resource.name}`);
+  };
+
+  const handleResourceDrag = (event: Event): void => {
+    const detail = (event as CustomEvent<ResourceDragDetail>).detail;
+    const inside = !detail.cancelled && isInsideViewport(detail.clientX, detail.clientY);
+    viewport.classList.toggle('canvas-viewport--drop-target', inside);
+    if (event.type !== RESOURCE_DRAG_ENDED_EVENT) return;
+    viewport.classList.remove('canvas-viewport--drop-target');
+    if (!inside) return;
+    const bounds = viewport.getBoundingClientRect();
+    placeTemplate(detail.templateId, { x: detail.clientX - bounds.left, y: detail.clientY - bounds.top }, detail.altKey);
+  };
+
+  const handleKeyboardPlacement = (event: Event): void => {
+    placeTemplate((event as CustomEvent<string>).detail, { x: size.width / 2, y: size.height / 2 }, false);
+    viewport.focus({ preventScroll: true });
+  };
+  document.addEventListener(RESOURCE_DRAG_STARTED_EVENT, handleResourceDrag);
+  document.addEventListener(RESOURCE_DRAG_MOVED_EVENT, handleResourceDrag);
+  document.addEventListener(RESOURCE_DRAG_ENDED_EVENT, handleResourceDrag);
+  document.addEventListener(RESOURCE_KEYBOARD_PLACE_EVENT, handleKeyboardPlacement);
 
   const resizeObserver = new ResizeObserver((entries) => {
     const bounds = entries[0]?.contentRect;
@@ -144,8 +210,15 @@ export function createCanvasViewport(application: HTMLElement, callbacks: Canvas
     element: workspace,
     dispose: () => {
       interaction.dispose();
+      resourceInteraction?.dispose();
+      resourceInteraction = null;
+      resourceRenderer.dispose();
       resizeObserver.disconnect();
       document.removeEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);
+      document.removeEventListener(RESOURCE_DRAG_STARTED_EVENT, handleResourceDrag);
+      document.removeEventListener(RESOURCE_DRAG_MOVED_EVENT, handleResourceDrag);
+      document.removeEventListener(RESOURCE_DRAG_ENDED_EVENT, handleResourceDrag);
+      document.removeEventListener(RESOURCE_KEYBOARD_PLACE_EVENT, handleKeyboardPlacement);
       if (renderFrame !== 0) cancelAnimationFrame(renderFrame);
     },
   };

@@ -29,6 +29,7 @@ export class EngineeringGrid {
   private readonly yAxis = svgElement('line');
   private readonly origin = svgElement('g');
   private readonly futureWorldLayer = svgElement('g');
+  private readonly objectLayer = svgElement('g');
 
   public constructor() {
     this.svg.classList.add('engineering-canvas');
@@ -82,13 +83,16 @@ export class EngineeringGrid {
 
     const connectionLayer = svgElement('g');
     connectionLayer.id = 'canvas-connections';
-    const objectLayer = svgElement('g');
-    objectLayer.id = 'canvas-objects';
+    this.objectLayer.id = 'canvas-objects';
     const interactionLayer = svgElement('g');
     interactionLayer.id = 'canvas-interactions';
     this.futureWorldLayer.id = 'canvas-world-layers';
-    this.futureWorldLayer.append(connectionLayer, objectLayer, interactionLayer);
+    this.futureWorldLayer.append(connectionLayer, this.objectLayer, interactionLayer);
     this.svg.append(definitions, background, this.gridLayer, this.axesLayer, this.futureWorldLayer);
+  }
+
+  public getObjectLayer(): SVGGElement {
+    return this.objectLayer;
   }
 
   public render(state: CanvasState, size: ViewportSize): void {
