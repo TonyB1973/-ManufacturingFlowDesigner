@@ -8,6 +8,8 @@
 .app-shell--left-collapsed .app-body { grid-template-columns: 0 minmax(340px, 1fr) var(--right-width); }
 .app-shell--right-collapsed .app-body { grid-template-columns: var(--left-width) minmax(340px, 1fr) 0; }
 .app-shell--left-collapsed.app-shell--right-collapsed .app-body { grid-template-columns: 0 minmax(340px, 1fr) 0; }
+.app-shell--canvas-focus .app-body { grid-template-columns: 0 minmax(340px, 1fr) 0; }
+.app-shell--canvas-focus .panel-toggle { display: none; }
 .panel-toggle { position: absolute; z-index: 5; top: 45%; width: 18px; height: 42px; padding: 0; color: var(--text-muted); background: var(--panel); border: 1px solid var(--border); cursor: pointer; }
 .panel-toggle--left { left: calc(var(--left-width) - 1px); transform: translateX(-100%); border-radius: 3px 0 0 3px; }
 .panel-toggle--right { right: calc(var(--right-width) - 1px); transform: translateX(100%); border-radius: 0 3px 3px 0; }

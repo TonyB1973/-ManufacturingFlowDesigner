@@ -1,8 +1,15 @@
 export const UI_STATUS_EVENT = 'mfd:status';
+export const CANVAS_COMMAND_EVENT = 'mfd:canvas-command';
+
+export type CanvasCommand = 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'grid' | 'origin' | 'focus';
 
 export function reportPlaceholder(action: string): void {
   document.dispatchEvent(new CustomEvent<string>(UI_STATUS_EVENT, {
     detail: `${action} is planned for a future sprint.`,
   }));
+}
+
+export function dispatchCanvasCommand(command: CanvasCommand): void {
+  document.dispatchEvent(new CustomEvent<CanvasCommand>(CANVAS_COMMAND_EVENT, { detail: command }));
 }
 

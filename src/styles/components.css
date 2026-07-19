@@ -54,22 +54,27 @@
 .validation-summary { padding: 12px; }
 .validation-healthy { color: var(--healthy); }
 .validation-metrics { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 8px; color: var(--text-muted); border-top: 1px solid var(--border); }
-.canvas-toolbar { display: flex; align-items: center; padding: 3px 7px; background: #1c2126; border-bottom: 1px solid var(--border); }
-.tool-button { height: 28px; padding: 0 10px; color: var(--text-muted); background: transparent; border: 1px solid transparent; cursor: pointer; }
+.canvas-toolbar { display: flex; align-items: center; gap: 2px; padding: 3px 7px; overflow-x: auto; overflow-y: hidden; background: #1c2126; border-bottom: 1px solid var(--border); scrollbar-width: thin; }
+.tool-button { flex: 0 0 auto; height: 28px; padding: 0 9px; color: var(--text-muted); background: transparent; border: 1px solid transparent; cursor: pointer; }
 .tool-button:hover { color: var(--text); background: var(--panel-hover); }
-.tool-button--active { color: var(--accent); border-color: #6b581c; background: var(--accent-dark); }
+.tool-button--active, .tool-button[aria-pressed="true"] { color: var(--accent); border-color: #6b581c; background: var(--accent-dark); }
 .toolbar-spacer { flex: 1; }
-.zoom-display { padding: 0 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.canvas-viewport { background-color: #14181c; background-image: linear-gradient(#30363c 1px, transparent 1px), linear-gradient(90deg, #30363c 1px, transparent 1px), linear-gradient(#22282e 1px, transparent 1px), linear-gradient(90deg, #22282e 1px, transparent 1px); background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px; }
-.engineering-canvas { position: absolute; inset: 0; }
-.origin-marker circle, .origin-marker line { fill: none; stroke: #f1c23288; stroke-width: 1; }
-.welcome-panel { position: absolute; top: 50%; left: 50%; width: min(480px, calc(100% - 48px)); transform: translate(-50%, -50%); padding: 30px; text-align: center; background: #1d2228ed; border: 1px solid var(--border-strong); box-shadow: 0 12px 32px #0008; }
-.welcome-mark { display: inline-block; padding: 5px 7px; margin-bottom: 15px; color: var(--accent); border: 1px solid #75601b; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
-.welcome-panel h1 { color: #e3e7ea; font-size: clamp(19px, 2.1vw, 25px); font-weight: 550; }
-.welcome-panel p { margin: 10px auto 20px; max-width: 380px; color: var(--text-muted); line-height: 1.55; }
-.welcome-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
-.canvas-coordinates { position: absolute; right: 9px; bottom: 8px; padding: 3px 7px; color: #818b94; background: #101317d9; border: 1px solid #30373e; font: 11px Consolas, monospace; }
+.zoom-display { flex: 0 0 auto; min-width: 46px; padding: 0 7px; color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
+.canvas-viewport { background: #14181c; cursor: crosshair; touch-action: none; user-select: none; }
+.canvas-viewport:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.canvas-viewport--pan-tool { cursor: grab; }
+.canvas-viewport--dragging, .canvas-viewport--dragging.canvas-viewport--pan-tool { cursor: grabbing; }
+.engineering-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; shape-rendering: crispEdges; }
+.canvas-background { fill: #14181c; }
+.grid-line { fill: none; vector-effect: non-scaling-stroke; }
+.grid-line--minor { stroke: #272e35; stroke-width: 1; }
+.grid-line--major { stroke: #3a434c; stroke-width: 1; }
+.origin-axis { stroke: #a88d348f; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.origin-marker circle, .origin-marker line { fill: #14181c; stroke: var(--accent); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.origin-marker line { fill: none; }
+.canvas-scale { position: absolute; right: 9px; bottom: 8px; padding: 3px 7px; color: #818b94; background: #101317d9; border: 1px solid #30373e; font: 11px Consolas, monospace; pointer-events: none; }
 .statusbar { display: flex; align-items: center; gap: 0; overflow: hidden; color: #9ca6af; background: #111519; border-top: 1px solid #394047; font-size: 11px; white-space: nowrap; }
 .statusbar span { padding: 0 10px; border-right: 1px solid #353c43; }
 .statusbar__message { flex: 1; min-width: 120px; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.statusbar__zoom, .statusbar__coordinate { font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .titlebar { gap: 10px; } .health { display: none; } .window-actions { display: none; } .statusbar span:nth-last-child(-n+2) { display: none; } }
