@@ -1,5 +1,5 @@
 import { RIBBON_TABS } from '../../core/constants/commands';
-import { reportPlaceholder } from '../../core/events/uiEvents';
+import { dispatchCanvasCommand, reportPlaceholder, type CanvasCommand } from '../../core/events/uiEvents';
 import { actionButton, element } from '../../ui/dom';
 
 export function createRibbon(): HTMLElement {
@@ -20,7 +20,11 @@ export function createRibbon(): HTMLElement {
       const commands = element('div', 'ribbon-group__commands');
       for (const command of group.commands) {
         const button = actionButton(command);
-        button.addEventListener('click', () => reportPlaceholder(command));
+        button.addEventListener('click', () => {
+          const canvasCommand = canvasCommands.get(command);
+          if (canvasCommand) dispatchCanvasCommand(canvasCommand);
+          else reportPlaceholder(command);
+        });
         commands.append(button);
       }
       groupNode.append(commands, element('span', 'ribbon-group__label', group.name));
@@ -38,4 +42,12 @@ export function createRibbon(): HTMLElement {
   activate(3);
   return ribbon;
 }
+
+const canvasCommands = new Map<string, CanvasCommand>([
+  ['Zoom In', 'zoom-in'],
+  ['Zoom Out', 'zoom-out'],
+  ['Fit View', 'fit'],
+  ['Grid', 'grid'],
+  ['Canvas Focus', 'focus'],
+]);
 

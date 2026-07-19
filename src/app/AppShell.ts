@@ -9,6 +9,7 @@ import { actionButton, element } from '../ui/dom';
 export interface AppShellResult {
   readonly element: HTMLElement;
   readonly statusBar: StatusBarController;
+  dispose(): void;
 }
 
 export function createAppShell(): AppShellResult {
@@ -16,6 +17,7 @@ export function createAppShell(): AppShellResult {
   const body = element('div', 'app-body');
   const left = createLeftSidebar();
   const right = createRightSidebar();
+  const statusBar = createStatusBar();
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
   const rightToggle = actionButton('Hide inspector panels', 'panel-toggle panel-toggle--right');
 
@@ -31,9 +33,13 @@ export function createAppShell(): AppShellResult {
     rightToggle.textContent = collapsed ? '‹' : '›';
     rightToggle.setAttribute('aria-label', `${collapsed ? 'Show' : 'Hide'} inspector panels`);
   });
-  body.append(left, leftToggle, createWorkspace(), rightToggle, right);
-  const statusBar = createStatusBar();
+  const workspace = createWorkspace({
+    application: shell,
+    statusBar,
+    onFocusModeChange: (active) => shell.classList.toggle('app-shell--canvas-focus', active),
+  });
+  body.append(left, leftToggle, workspace.element, rightToggle, right);
   shell.append(createTitleBar(), createRibbon(), body, statusBar.element);
-  return { element: shell, statusBar };
+  return { element: shell, statusBar, dispose: workspace.dispose };
 }
 
