@@ -1,7 +1,7 @@
 import type { CanvasTool } from '../../../models/canvas/CanvasState';
 import { actionButton, element } from '../../../ui/dom';
 
-export type CanvasToolbarCommand = 'select' | 'pan' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'grid' | 'origin' | 'focus';
+export type CanvasToolbarCommand = 'select' | 'pan' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'grid' | 'origin' | 'snap' | 'delete-selection' | 'clear-selection' | 'focus';
 
 export interface CanvasToolbarController {
   readonly element: HTMLElement;
@@ -9,6 +9,7 @@ export interface CanvasToolbarController {
   setTool(tool: CanvasTool): void;
   setGridVisible(visible: boolean): void;
   setOriginVisible(visible: boolean): void;
+  setSnapEnabled(enabled: boolean): void;
   setFocusMode(active: boolean): void;
 }
 
@@ -28,6 +29,9 @@ const COMMANDS: readonly CommandDefinition[] = [
   { command: 'fit', label: 'Fit', title: 'Fit origin in viewport (F)' },
   { command: 'grid', label: 'Grid', title: 'Toggle engineering grid', toggle: true },
   { command: 'origin', label: 'Origin', title: 'Toggle origin and axes', toggle: true },
+  { command: 'snap', label: 'Snap', title: 'Toggle Snap to Grid', toggle: true },
+  { command: 'delete-selection', label: 'Delete', title: 'Delete selected resource' },
+  { command: 'clear-selection', label: 'Clear', title: 'Clear resource selection' },
   { command: 'focus', label: 'Canvas Focus', title: 'Toggle Canvas Focus mode', toggle: true },
 ];
 
@@ -67,6 +71,7 @@ export function createCanvasToolbar(onCommand: (command: CanvasToolbarCommand) =
     },
     setGridVisible: (visible) => setPressed('grid', visible),
     setOriginVisible: (visible) => setPressed('origin', visible),
+    setSnapEnabled: (enabled) => setPressed('snap', enabled),
     setFocusMode: (active) => {
       setPressed('focus', active);
       const button = buttons.get('focus');

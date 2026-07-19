@@ -6,6 +6,9 @@ export interface StatusBarController {
   setZoom(zoom: number): void;
   setGridVisible(visible: boolean): void;
   setCoordinates(point: { readonly x: number; readonly y: number } | null): void;
+  setSnapEnabled(enabled: boolean): void;
+  setSelectionCount(count: number): void;
+  setResourceCount(count: number): void;
 }
 
 export function createStatusBar(): StatusBarController {
@@ -19,12 +22,18 @@ export function createStatusBar(): StatusBarController {
   const grid = element('span', 'statusbar__grid', 'Grid: On');
   const coordinateX = element('span', 'statusbar__coordinate', 'X: —');
   const coordinateY = element('span', 'statusbar__coordinate', 'Y: —');
-  bar.append(project, zoom, grid, coordinateX, coordinateY, element('span', '', 'Selected: 0'), element('span', '', 'Canvas Foundation'));
+  const snap = element('span', 'statusbar__snap', 'Snap: On');
+  const selection = element('span', 'statusbar__selection', 'Selected: 0');
+  const resources = element('span', 'statusbar__resources', 'Resources: 0');
+  bar.append(project, zoom, grid, snap, coordinateX, coordinateY, selection, resources, element('span', '', 'Resource Foundation'));
   return {
     element: bar,
     setMessage: (text) => { message.textContent = text; },
     setZoom: (value) => { zoom.textContent = `${Math.round(value * 100)}%`; },
     setGridVisible: (visible) => { grid.textContent = `Grid: ${visible ? 'On' : 'Off'}`; },
+    setSnapEnabled: (enabled) => { snap.textContent = `Snap: ${enabled ? 'On' : 'Off'}`; },
+    setSelectionCount: (value) => { selection.textContent = `Selected: ${value}`; },
+    setResourceCount: (value) => { resources.textContent = `Resources: ${value}`; },
     setCoordinates: (point) => {
       coordinateX.textContent = point ? `X: ${point.x.toFixed(3)}` : 'X: —';
       coordinateY.textContent = point ? `Y: ${point.y.toFixed(3)}` : 'Y: —';

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
-    "test:coordinates": "node scripts/verify-coordinate-transform.mjs"
+    "test:coordinates": "node scripts/verify-coordinate-transform.mjs",
+    "test:resources": "node scripts/verify-resource-system.mjs"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

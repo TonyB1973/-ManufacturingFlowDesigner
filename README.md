@@ -2,19 +2,19 @@
 
 Manufacturing Flow Designer is a professional engineering application for modelling manufacturing processes, factory layouts, standard work, resource allocation, and future simulation and digital-twin workflows.
 
-## Sprint 1.2 scope
+## Sprint 1.3 scope
 
-Sprint 1.2 adds the native SVG engineering-canvas foundation while preserving the Sprint 1.1 application shell. The canvas provides infinite world coordinates, adaptive CAD grid rendering, cursor-centred zoom, pan, accurate live coordinates, resize preservation, visibility controls, and Canvas Focus mode.
+Sprint 1.3 introduces the first genuine manufacturing resource system while preserving the responsive application shell and infinite SVG engineering canvas from Sprints 1.1 and 1.2.
 
-Manufacturing resources, operations, connections, routing, persistence, simulation, and analytics remain intentionally out of scope.
+It provides typed reusable templates, a searchable and filterable resource library, world-coordinate placement, single-resource selection and movement, engineering SVG visuals, validated properties, locking, visibility, deletion, status reporting, and optional grid snapping.
 
 ## Technology
 
 - Vite and strict TypeScript
 - Native semantic HTML and CSS
-- Native SVG rendering and Pointer Events
-- Standards-based web app manifest
-- No UI framework or canvas library
+- Native SVG and Pointer Events
+- Framework-free observable state services
+- No UI framework, state library, icon package, or canvas library
 
 ## Prerequisites and setup
 
@@ -27,82 +27,93 @@ npm run dev
 
 Open the local address shown by Vite. In PowerShell environments that block `npm.ps1`, use `npm.cmd` in place of `npm`.
 
-## Canvas controls
+## Resource library
 
-- **Select** — safe placeholder for future object selection
-- **Pan** — toggles primary-button drag panning
-- **+ / −** — zoom around the viewport centre
-- **100%** — resets zoom while preserving the world point at the viewport centre
-- **Fit** — centres the drawing origin at 100%
-- **Grid** — shows or hides adaptive minor and major grid lines
-- **Origin** — shows or hides the axes and origin marker
-- **Canvas Focus** — hides both side panels without resetting the viewport
+The left Resource Library contains 13 starter templates grouped into Machines, Manual Process, Quality, People, Material Handling, Documentation, and General categories.
 
-### Mouse and trackpad
+- Search matches names, descriptions, resource types, and tags.
+- The category selector limits the visible groups.
+- **Favourites** shows only starred templates.
+- The star on each card toggles that template's favourite state.
+- Category groups can be collapsed independently.
+- Drag a card onto the canvas to place it.
+- Focus a card and press `Enter` or `Space` to place it at the canvas centre.
 
-- Wheel or trackpad scroll over the canvas: cursor-centred zoom
+## Placement and selection
+
+- Dropping uses the exact world point beneath the pointer as the resource centre.
+- Click a resource to select it.
+- Drag a resource to move it without changing the pointer-to-resource offset.
+- Click empty canvas space or use **Clear** to clear selection.
+- **Delete** or the `Delete`/`Backspace` key removes the selected unlocked resource.
+- Locked resources remain selectable but cannot be moved or deleted.
+- Hidden resources remain in the model and can be restored from Properties while selected.
+
+Resource interactions take priority over background canvas interactions. Middle-button drag and Space-drag continue to pan the viewport.
+
+## Properties
+
+The right Properties inspector edits the selected resource without rebuilding the application shell:
+
+- Resource name
+- Read-only resource type
+- World X and Y position
+- Width and height with a minimum of 40 world units
+- Locked state
+- Visible state
+
+Coordinates and sizes display three decimal places. Invalid, empty, non-finite, or undersized values are rejected without corrupting resource state. The Selection Summary reports resource and template IDs, name, type, position, size, and lock state.
+
+## Grid snapping
+
+Snap to Grid is enabled by default and uses a 20-world-unit base interval.
+
+- Use the **Snap** toolbar toggle to enable or disable snapping.
+- The status bar reports `Snap: On` or `Snap: Off`.
+- Hold `Alt` while placing or moving to temporarily bypass snapping.
+- Snapping affects resource centres in world coordinates and never affects viewport pan.
+
+## Canvas navigation
+
+- Wheel or trackpad scroll: cursor-centred zoom
 - Middle-button drag: pan
-- Space plus primary-button drag: pan
-- Primary-button drag while the Pan tool is active: pan
-
-### Keyboard
-
-- Hold `Space`: temporary pan mode
-- `Escape`: cancel the active pointer interaction
+- Hold `Space` and primary-button drag: temporary pan
+- **Pan**: persistent primary-button pan mode
 - `+` / `-`: zoom in or out
 - `0`: reset to 100%
-- `F`: fit when the canvas has focus
+- `F`: fit origin when the canvas has focus
+- **Grid**, **Origin**, and **Canvas Focus** retain their Sprint 1.2 behaviour
 
-Canvas shortcuts are ignored while typing in an input, textarea, select, or editable element.
+Keyboard canvas shortcuts are ignored while typing in inputs and editable controls. `Escape` cancels an active resource or canvas interaction.
 
-### Touch and pen
+## Architecture
 
-- One-finger drag: pan
-- Two-finger gesture: pan and pinch zoom
-- Pen input uses the same pointer-safe interaction surface
-
-## Canvas architecture
-
-- `CanvasViewport` owns viewport state and coordinates rendering updates.
-- `ViewportTransform` contains framework-free world/screen conversion and zoom invariance mathematics.
-- `CanvasInteractionController` handles pointer, wheel, touch, keyboard, cancellation, and cleanup.
-- `EngineeringGrid` owns efficient SVG patterns and named future rendering layers.
-- `CanvasToolbar` exposes accessible navigation and visibility controls.
-- `CanvasState` defines pan, zoom limits, visibility, and active navigation tool.
-
-World coordinates are unbounded engineering units. Viewport/SVG coordinates are CSS pixels relative to the canvas top-left. Client coordinates come from browser pointer events and are converted to viewport coordinates before applying the inverse pan/zoom transform.
+- `models/resources` defines reusable templates and placed world-coordinate instances.
+- `ResourceStore` owns templates, instances, selection, validation, and focused subscriptions.
+- `ResourceIdGenerator` isolates stable human-readable IDs.
+- `SnapService` owns world-space snapping independently of rendering.
+- `ResourceLibrary` owns filtering, favourites, drag feedback, and keyboard placement.
+- `ResourceRenderer` updates persistent SVG nodes in the existing `canvas-objects` layer.
+- `ResourceInteractionController` owns selection, movement, pointer offset, cancellation, and deletion.
+- `RightSidebar` binds validated property controls to the shared store.
 
 ## Development commands
 
 ```shell
 npm run typecheck
 npm run test:coordinates
+npm run test:resources
 npm run build
 npm run preview
 ```
 
-`npm run build` creates production output in `dist/`.
-
-## Folder structure
-
-- `src/app` — application composition and shell orchestration
-- `src/components/workspace/canvas` — canvas rendering, controls, interaction, and transform logic
-- `src/components` — title bar, ribbon, sidebars, workspace, and status bar
-- `src/core` — shared constants and typed UI events
-- `src/models` — domain-facing and canvas state types
-- `src/services` — future application services
-- `src/styles` — reset, theme, layout, and component styling
-- `src/ui` — small reusable DOM helpers
-- `scripts` — lightweight engineering checks
-- `public` — manifest and icon assets
-
 ## Current limitations
 
-The canvas contains engineering reference content only. It has no object selection, resource placement, operations, process connections, selection rectangles, project persistence, undo/redo, factory-layout tooling, standard-work charts, simulation, analytics, or offline service worker.
+Sprint 1.3 intentionally has no process operations, connections, routing, multi-selection, rotation, custom-resource editor, image uploads, persistence, undo/redo, factory-layout dimensions, Standard Work, simulation, analytics, or offline service worker.
 
-## Planned Sprint 1.3
+## Planned Sprint 1.4
 
-Define the first shared manufacturing-domain primitives and introduce a tested operation/resource rendering boundary without coupling the domain model to SVG interaction or future simulation logic.
+Sprint 1.4 will introduce operations and process-flow modelling. Connections are not part of Sprint 1.3.
 
-Development for this sprint is performed on `feature/sprint-1.2-cad-canvas`. Do not push or merge without explicit approval.
+Development for this sprint is performed on `feature/sprint-1.3-resource-library`.
 

@@ -49,5 +49,6 @@ const canvasCommands = new Map<string, CanvasCommand>([
   ['Fit View', 'fit'],
   ['Grid', 'grid'],
   ['Canvas Focus', 'focus'],
+  ['Delete', 'delete-selection'],
 ]);
 
