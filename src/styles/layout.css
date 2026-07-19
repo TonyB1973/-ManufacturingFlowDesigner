@@ -1,0 +1,17 @@
+.app-shell { display: grid; grid-template-rows: var(--title-height) var(--ribbon-height) minmax(0, 1fr) var(--status-height); width: 100%; height: 100%; min-width: 760px; background: var(--bg-main); }
+.app-body { position: relative; display: grid; grid-template-columns: var(--left-width) minmax(340px, 1fr) var(--right-width); min-height: 0; overflow: hidden; }
+.sidebar { min-width: 0; overflow-y: auto; overflow-x: hidden; background: var(--panel); scrollbar-color: var(--border-strong) var(--panel); }
+.sidebar--left { border-right: 1px solid var(--border); }
+.sidebar--right { border-left: 1px solid var(--border); }
+.workspace { display: grid; grid-template-rows: 36px minmax(0, 1fr); min-width: 0; min-height: 0; }
+.canvas-viewport { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.app-shell--left-collapsed .app-body { grid-template-columns: 0 minmax(340px, 1fr) var(--right-width); }
+.app-shell--right-collapsed .app-body { grid-template-columns: var(--left-width) minmax(340px, 1fr) 0; }
+.app-shell--left-collapsed.app-shell--right-collapsed .app-body { grid-template-columns: 0 minmax(340px, 1fr) 0; }
+.panel-toggle { position: absolute; z-index: 5; top: 45%; width: 18px; height: 42px; padding: 0; color: var(--text-muted); background: var(--panel); border: 1px solid var(--border); cursor: pointer; }
+.panel-toggle--left { left: calc(var(--left-width) - 1px); transform: translateX(-100%); border-radius: 3px 0 0 3px; }
+.panel-toggle--right { right: calc(var(--right-width) - 1px); transform: translateX(100%); border-radius: 0 3px 3px 0; }
+.app-shell--left-collapsed .panel-toggle--left { left: 0; transform: none; }
+.app-shell--right-collapsed .panel-toggle--right { right: 0; transform: none; }
+@media (max-width: 980px) { :root { --left-width: 220px; --right-width: 220px; } .app-shell { min-width: 720px; } }
+

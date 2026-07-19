@@ -1,0 +1,14 @@
+{
+  "name": "Manufacturing Flow Designer",
+  "short_name": "Flow Designer",
+  "description": "Professional manufacturing process and factory-planning workspace.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#15181c",
+  "theme_color": "#15181c",
+  "icons": [
+    { "src": "/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/app-icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
+
