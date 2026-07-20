@@ -12,6 +12,7 @@ export interface StatusBarController {
   setOperationCount(count: number): void;
   setSelectionLabel(label: string): void;
   setHealth(errors: number, warnings: number): void;
+  setWorkspace(workspace: string): void;
 }
 
 export function createStatusBar(): StatusBarController {
@@ -21,6 +22,7 @@ export function createStatusBar(): StatusBarController {
   message.setAttribute('aria-live', 'polite');
   bar.append(message);
   const project = element('span', '', 'Untitled Project');
+  const workspace = element('span', 'statusbar__workspace', 'Workspace: Process Flow');
   const zoom = element('span', 'statusbar__zoom', '100%');
   const grid = element('span', 'statusbar__grid', 'Grid: On');
   const coordinateX = element('span', 'statusbar__coordinate', 'X: —');
@@ -30,10 +32,11 @@ export function createStatusBar(): StatusBarController {
   const resources = element('span', 'statusbar__resources', 'Resources: 0');
   const operations = element('span', 'statusbar__operations', 'Operations: 0');
   const health = element('span', 'statusbar__health', 'Health: Healthy');
-  bar.append(project, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, health, element('span', '', 'Process Foundation'));
+  bar.append(project, workspace, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, health, element('span', '', 'Workspace Foundation'));
   return {
     element: bar,
     setMessage: (text) => { message.textContent = text; },
+    setWorkspace: (value) => { workspace.textContent = `Workspace: ${value}`; },
     setZoom: (value) => { zoom.textContent = `${Math.round(value * 100)}%`; },
     setGridVisible: (visible) => { grid.textContent = `Grid: ${visible ? 'On' : 'Off'}`; },
     setSnapEnabled: (enabled) => { snap.textContent = `Snap: ${enabled ? 'On' : 'Off'}`; },

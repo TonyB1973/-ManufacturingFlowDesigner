@@ -20,4 +20,9 @@
 18. Keep future simulation logic separate from presentation code.
 19. Keep future rendering logic separate from the manufacturing domain model.
 20. Avoid unnecessary external packages.
+21. Resource Templates are reusable definitions; Resource Instances are physical Factory Layout assets.
+22. Operations exist in Process Flow and may reference only physical Factory Layout resource IDs.
+23. Multiple sequential operations may share one physical resource; concurrency validation is deferred until timing or simulation exists.
+24. Increase ordinary machinery capacity by adding physical Resource Instances rather than treating a numeric capacity as multiple machines.
+25. Keep Process Flow and Factory Layout rendering, placement, selection, and viewport state separated.
 

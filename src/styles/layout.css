@@ -3,7 +3,7 @@
 .sidebar { min-width: 0; overflow-y: auto; overflow-x: hidden; background: var(--panel); scrollbar-color: var(--border-strong) var(--panel); }
 .sidebar--left { border-right: 1px solid var(--border); }
 .sidebar--right { border-left: 1px solid var(--border); }
-.workspace { display: grid; grid-template-rows: 36px minmax(0, 1fr); min-width: 0; min-height: 0; }
+.workspace { display: grid; grid-template-rows: 34px 36px minmax(0, 1fr); min-width: 0; min-height: 0; }
 .canvas-viewport { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 .app-shell--left-collapsed .app-body { grid-template-columns: 0 minmax(340px, 1fr) var(--right-width); }
 .app-shell--right-collapsed .app-body { grid-template-columns: var(--left-width) minmax(340px, 1fr) 0; }

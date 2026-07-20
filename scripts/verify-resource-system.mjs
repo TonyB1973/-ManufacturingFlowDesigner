@@ -1,13 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import ts from 'typescript';
-
-async function loadTypeScriptModule(relativePath) {
-  const source = await readFile(new URL(relativePath, import.meta.url), 'utf8');
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
-}
+import { loadTypeScriptModule as loadModule } from './load-typescript-module.mjs';
+const loadTypeScriptModule = (path) => loadModule(path, import.meta.url);
 
 const { ResourceIdGenerator } = await loadTypeScriptModule('../src/utilities/ResourceIdGenerator.ts');
 const { ResourceStore } = await loadTypeScriptModule('../src/services/ResourceStore.ts');
@@ -49,9 +41,11 @@ assert(ids.next() === 'RES-0002', 'Resource IDs are unique and sequential');
 const store = new ResourceStore([template], new ResourceIdGenerator());
 const placed = store.addResource(template.id, 100, 60);
 assert(placed?.id === 'RES-0001', 'Placed resource receives a generated ID');
+assert(placed.layoutId === 'factory-layout-default' && placed.active && placed.capacity === 1 && placed.rotationDegrees === 0, 'Physical resource defaults are explicit');
 assert(store.getSelectedResourceId() === placed.id, 'Created resource becomes selected');
 
 assert(store.updateResource(placed.id, { locked: true }), 'Resource can be locked');
+assert(store.getAssignableResources().some((resource) => resource.id === placed.id), 'Locked physical resources remain assignable');
 assert(!store.moveResource(placed.id, 200, 200), 'Locked resource cannot move');
 assert(!store.updateResource(placed.id, { worldX: 200 }), 'Locked resource cannot move through properties');
 assert(placed.worldX === 100 && placed.worldY === 60, 'Locked movement does not corrupt coordinates');
@@ -59,11 +53,15 @@ assert(store.deleteSelected() === 'locked', 'Locked resource cannot be deleted')
 assert(store.getSelectedResourceId() === placed.id, 'Locked delete preserves selection');
 
 assert(store.updateResource(placed.id, { locked: false }), 'Resource can be unlocked');
+assert(store.updateResource(placed.id, { visible: false }) && store.getAssignableResources().some((resource) => resource.id === placed.id), 'Hidden physical resources remain assignable'); store.updateResource(placed.id, { visible: true });
+assert(store.updateResource(placed.id, { active: false }) && !store.getAssignableResources().some((resource) => resource.id === placed.id), 'Inactive resources are not newly assignable'); store.updateResource(placed.id, { active: true });
 assert(!store.updateResource(placed.id, { width: 2 }), 'Invalid size is rejected');
 assert(placed.width === 180, 'Invalid property input does not corrupt the model');
 assert(!store.updateResource(placed.id, { width: 99 }), 'Widths below the engineering minimum are rejected');
 assert(!store.updateResource(placed.id, { height: 59 }), 'Heights below the engineering minimum are rejected');
 assert(!store.updateResource(placed.id, { worldX: Number.NaN }), 'Non-finite positions are rejected');
+assert(!store.updateResource(placed.id, { capacity: 0 }), 'Invalid capacity is rejected');
+const duplicate = store.duplicateResource(placed.id); assert(duplicate.id === 'RES-0002' && duplicate.templateId === placed.templateId, 'Duplicate receives independent identity and keeps template'); assert(duplicate.worldX === placed.worldX + 20 && duplicate.worldY === placed.worldY + 20, 'Duplicate receives a visible offset'); assert(store.getSelectedResourceId() === duplicate.id, 'Duplicate becomes selected'); store.updateResource(duplicate.id, { name: 'Independent machine' }); assert(placed.name !== duplicate.name, 'Duplicate edits are independent'); store.deleteResource(duplicate.id); store.selectResource(placed.id);
 
 const longName = 'Incoming Material Inspection and Verification';
 const availableTextWidth = 122;
