@@ -13,6 +13,9 @@ import { OperationStore } from '../services/OperationStore';
 import { OperationIdGenerator } from '../utilities/OperationIdGenerator';
 import { SelectionStore } from '../services/SelectionStore';
 import { validateOperations } from '../services/OperationValidation';
+import { WorkspaceStore } from '../services/WorkspaceStore';
+import { validateResources } from '../services/ResourceValidation';
+import { createResourceDeletionDialog } from '../components/workspace/resources/ResourceDeletionDialog';
 
 export interface AppShellResult {
   readonly element: HTMLElement;
@@ -26,10 +29,13 @@ export function createAppShell(): AppShellResult {
   const selectionStore = new SelectionStore();
   const resourceStore = new ResourceStore(RESOURCE_TEMPLATES, new ResourceIdGenerator(), selectionStore);
   const operationStore = new OperationStore(OPERATION_TEMPLATES, new OperationIdGenerator(), selectionStore);
-  const left = createLeftSidebar(resourceStore, operationStore);
-  const right = createRightSidebar(resourceStore, operationStore, selectionStore);
+  const workspaceStore = new WorkspaceStore();
   const statusBar = createStatusBar();
   const titleBar = createTitleBar();
+  const deletionDialog = createResourceDeletionDialog(resourceStore, operationStore, statusBar.setMessage); shell.append(deletionDialog.element);
+  const requestResourceDeletion = (id: string): void => deletionDialog.request(id);
+  const left = createLeftSidebar(resourceStore, operationStore, workspaceStore);
+  const right = createRightSidebar(resourceStore, operationStore, workspaceStore, selectionStore, requestResourceDeletion);
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
   const rightToggle = actionButton('Hide inspector panels', 'panel-toggle panel-toggle--right');
 
@@ -50,22 +56,24 @@ export function createAppShell(): AppShellResult {
     statusBar,
     resourceStore,
     operationStore,
+    workspaceStore,
     selectionStore,
+    requestResourceDeletion,
     onFocusModeChange: (active) => shell.classList.toggle('app-shell--canvas-focus', active),
   });
   body.append(left.element, leftToggle, workspace.element, rightToggle, right.element);
-  shell.append(titleBar.element, createRibbon(), body, statusBar.element);
+  shell.append(titleBar.element, createRibbon(workspaceStore), body, statusBar.element);
   const updateStatus = (): void => {
     const selected = selectionStore.getSelection();
     const label = selected.kind === 'resource' ? `Resource ${resourceStore.getResource(selected.id)?.name ?? selected.id}` : selected.kind === 'operation' ? `Operation OP ${operationStore.getOperation(selected.id)?.sequence ?? selected.id}` : '0';
     statusBar.setSelectionLabel(label);
     statusBar.setResourceCount(resourceStore.getResourceCount());
     statusBar.setOperationCount(operationStore.getOperationCount());
-    const health = validateOperations(operationStore.getOperations(), (id) => Boolean(resourceStore.getResource(id)));
-    statusBar.setHealth(health.errors, health.warnings); titleBar.setHealth(health.errors, health.warnings);
+    const operationHealth = validateOperations(operationStore.getOperations(), (id) => resourceStore.getResource(id), (id) => Boolean(resourceStore.getTemplate(id))); const resourceHealth = validateResources(resourceStore.getPlacedResources(), resourceStore.getTemplates(), (id) => operationStore.getAssignmentCount(id)); const errors = operationHealth.errors + resourceHealth.errors; const warnings = operationHealth.warnings + resourceHealth.warnings;
+    statusBar.setHealth(errors, warnings); titleBar.setHealth(errors, warnings);
   };
   const unsubscribeResourceStatus = resourceStore.subscribe((change) => {
-    if (change.kind === 'updated' || change.kind === 'deleted') operationStore.handleResourceChange(change.kind === 'deleted' ? change.resourceId : change.resource.id, change.kind === 'deleted');
+    if (change.kind === 'deleted') operationStore.unassignResource(change.resourceId); else if (change.kind === 'updated') operationStore.handleResourceChange(change.resource.id, false);
     updateStatus();
   });
   const unsubscribeOperationStatus = operationStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(updateStatus); updateStatus();
@@ -77,6 +85,7 @@ export function createAppShell(): AppShellResult {
       left.dispose();
       right.dispose();
       workspace.dispose();
+      deletionDialog.dispose();
       operationStore.dispose(); resourceStore.dispose();
     },
   };

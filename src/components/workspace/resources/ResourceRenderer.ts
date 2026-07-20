@@ -154,12 +154,13 @@ export class ResourceRenderer {
       && availableTypeWidth >= estimateSvgTextWidth('…', TYPE_FONT_SIZE)
       && fittedType.length > 0;
     const nameBaseline = showType ? -4 : 4;
-    node.group.setAttribute('transform', `translate(${resource.worldX} ${resource.worldY})`);
+    node.group.setAttribute('transform', `translate(${resource.worldX} ${resource.worldY}) rotate(${resource.rotationDegrees})`);
     node.group.setAttribute('display', resource.visible ? 'inline' : 'none');
-    node.group.setAttribute('aria-label', `${resource.name}, ${resource.resourceType}${resource.locked ? ', locked' : ''}${resource.selected ? ', selected' : ''}`);
+    node.group.setAttribute('aria-label', `${resource.id}, ${resource.name}, ${resource.resourceType}, ${resource.active ? 'active' : 'inactive'}${resource.locked ? ', locked' : ''}${resource.selected ? ', selected' : ''}`);
     node.title.textContent = resource.name;
     node.group.classList.toggle('placed-resource--selected', resource.selected);
     node.group.classList.toggle('placed-resource--locked', resource.locked);
+    node.group.classList.toggle('placed-resource--inactive', !resource.active);
     for (const rectangle of [node.body, node.selection]) {
       rectangle.setAttribute('x', String(x));
       rectangle.setAttribute('y', String(y));

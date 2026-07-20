@@ -1,5 +1,6 @@
 import type { CanvasState } from '../../../models/canvas/CanvasState';
 import type { ViewportSize } from './ViewportTransform';
+import type { WorkspaceId } from '../../../models/workspace/Workspace';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -99,6 +100,7 @@ export class EngineeringGrid {
   }
 
   public getOperationLayer(): SVGGElement { return this.operationLayer; }
+  public setWorkspace(workspace: WorkspaceId): void { this.resourceLayer.setAttribute('display', workspace === 'factoryLayout' ? 'inline' : 'none'); this.operationLayer.setAttribute('display', workspace === 'processFlow' ? 'inline' : 'none'); }
 
   public render(state: CanvasState, size: ViewportSize): void {
     this.svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);
