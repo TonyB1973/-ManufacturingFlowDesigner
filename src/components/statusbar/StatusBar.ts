@@ -9,6 +9,9 @@ export interface StatusBarController {
   setSnapEnabled(enabled: boolean): void;
   setSelectionCount(count: number): void;
   setResourceCount(count: number): void;
+  setOperationCount(count: number): void;
+  setSelectionLabel(label: string): void;
+  setHealth(errors: number, warnings: number): void;
 }
 
 export function createStatusBar(): StatusBarController {
@@ -25,7 +28,9 @@ export function createStatusBar(): StatusBarController {
   const snap = element('span', 'statusbar__snap', 'Snap: On');
   const selection = element('span', 'statusbar__selection', 'Selected: 0');
   const resources = element('span', 'statusbar__resources', 'Resources: 0');
-  bar.append(project, zoom, grid, snap, coordinateX, coordinateY, selection, resources, element('span', '', 'Resource Foundation'));
+  const operations = element('span', 'statusbar__operations', 'Operations: 0');
+  const health = element('span', 'statusbar__health', 'Health: Healthy');
+  bar.append(project, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, health, element('span', '', 'Process Foundation'));
   return {
     element: bar,
     setMessage: (text) => { message.textContent = text; },
@@ -34,6 +39,9 @@ export function createStatusBar(): StatusBarController {
     setSnapEnabled: (enabled) => { snap.textContent = `Snap: ${enabled ? 'On' : 'Off'}`; },
     setSelectionCount: (value) => { selection.textContent = `Selected: ${value}`; },
     setResourceCount: (value) => { resources.textContent = `Resources: ${value}`; },
+    setOperationCount: (value) => { operations.textContent = `Operations: ${value}`; },
+    setSelectionLabel: (value) => { selection.textContent = `Selected: ${value}`; },
+    setHealth: (errors, warnings) => { health.textContent = errors ? `Health: ${errors} error${errors === 1 ? '' : 's'}` : warnings ? `Health: ${warnings} warning${warnings === 1 ? '' : 's'}` : 'Health: Healthy'; },
     setCoordinates: (point) => {
       coordinateX.textContent = point ? `X: ${point.x.toFixed(3)}` : 'X: —';
       coordinateY.textContent = point ? `Y: ${point.y.toFixed(3)}` : 'Y: —';

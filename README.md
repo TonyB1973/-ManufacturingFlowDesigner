@@ -1,22 +1,19 @@
 # Manufacturing Flow Designer
 
-Manufacturing Flow Designer is a professional engineering application for modelling manufacturing processes, factory layouts, standard work, resource allocation, and future simulation and digital-twin workflows.
+Manufacturing Flow Designer is a professional engineering application for modelling manufacturing processes, factory layouts, standard work, resource allocation, and future simulation workflows.
 
-## Sprint 1.3 scope
+## Sprint 1.4 scope
 
-Sprint 1.3 introduces the first genuine manufacturing resource system while preserving the responsive application shell and infinite SVG engineering canvas from Sprints 1.1 and 1.2.
-
-It provides typed reusable templates, a searchable and filterable resource library, world-coordinate placement, single-resource selection and movement, engineering SVG visuals, validated properties, locking, visibility, deletion, status reporting, and optional grid snapping.
+Sprint 1.4 adds the first process-modelling foundation: typed manufacturing operations, deterministic sequencing, resource assignment, cycle times, process validation, and a dedicated SVG operation layer. Operations are separate domain objects from physical resources and share a single typed selection model.
 
 ## Technology
 
 - Vite and strict TypeScript
-- Native semantic HTML and CSS
-- Native SVG and Pointer Events
+- Native semantic HTML, CSS, SVG, and Pointer Events
 - Framework-free observable state services
 - No UI framework, state library, icon package, or canvas library
 
-## Prerequisites and setup
+## Setup
 
 Install a current Node.js LTS release, then run:
 
@@ -25,79 +22,45 @@ npm install
 npm run dev
 ```
 
-Open the local address shown by Vite. In PowerShell environments that block `npm.ps1`, use `npm.cmd` in place of `npm`.
+Open the local address shown by Vite. In PowerShell environments that block `npm.ps1`, use `npm.cmd`.
 
-## Resource library
+## Operation workflow
 
-The left Resource Library contains 13 starter templates grouped into Machines, Manual Process, Quality, People, Material Handling, Documentation, and General categories.
+- Switch the left library between **Resources** and **Operations**.
+- Search or filter the 12 starter operations across manufacturing, quality, material-flow, finishing, logistics, support, storage, and planning categories.
+- Drag an operation card to the canvas, focus it and press `Enter`/`Space`, or use ribbon **Add Operation**.
+- Click or keyboard-focus a placed operation to select it; drag to move it in world coordinates.
+- Edit its name, type, timing category, cycle time, sequence, assigned resource, notes, position, size, lock, and visibility in Properties.
+- Use Process Flow in Project Explorer to inspect sequence order and reveal an operation on the canvas.
+- Use **Normalize Sequence** and confirm to renumber operations at intervals of 10.
 
-- Search matches names, descriptions, resource types, and tags.
-- The category selector limits the visible groups.
-- **Favourites** shows only starred templates.
-- The star on each card toggles that template's favourite state.
-- Category groups can be collapsed independently.
-- Drag a card onto the canvas to place it.
-- Focus a card and press `Enter` or `Space` to place it at the canvas centre.
+Operation cards show sequence, cycle time, type, timing classification, resource assignment, lock state, and a validation marker. Full names remain available through the SVG tooltip and accessible label when visible text is fitted.
 
-## Placement and selection
+## Selection and safety
 
-- Dropping uses the exact world point beneath the pointer as the resource centre.
-- Click a resource to select it.
-- Drag a resource to move it without changing the pointer-to-resource offset.
-- Click empty canvas space or use **Clear** to clear selection.
-- **Delete** or the `Delete`/`Backspace` key removes the selected unlocked resource.
-- Locked resources remain selectable but cannot be moved or deleted.
-- Hidden resources remain in the model and can be restored from Properties while selected.
+Selection is explicitly one resource, one operation, or none. Selecting either object type clears the other. `Delete`/`Backspace` and the toolbar Delete command act only on that typed selection. Locked objects remain selectable but cannot move or be deleted; `Escape` cancels active movement. Middle-button drag and Space-drag continue to pan the canvas, and `Alt` bypasses snapping during placement or movement.
 
-Resource interactions take priority over background canvas interactions. Middle-button drag and Space-drag continue to pan the viewport.
+Deleting a resource safely clears assignments from affected operations. Invalid numeric edits, empty names, non-positive cycle times, non-positive/non-integer sequences, and undersized cards are rejected without corrupting state.
 
-## Properties
+## Validation and health
 
-The right Properties inspector edits the selected resource without rebuilding the application shell:
+Deterministic validation reports:
 
-Starter resources are created at a consistent 180 × 80 world-unit size. SVG labels use measured fitting with an ellipsis and retain their full accessible name and tooltip.
+- invalid names, sequences, cycle times, or broken assignments as errors;
+- unassigned resources, duplicate sequences, and hidden operations as warnings.
 
-- Resource name
-- Read-only resource type
-- World X and Y position
-- Width and height with minimums of 100 and 60 world units respectively
-- Locked state
-- Visible state
-
-Coordinates and sizes display three decimal places. Invalid, empty, non-finite, or undersized values are rejected without corrupting resource state. The Selection Summary reports resource and template IDs, name, type, position, size, and lock state.
-
-## Grid snapping
-
-Snap to Grid is enabled by default and uses a 20-world-unit base interval.
-
-- Use the **Snap** toolbar toggle to enable or disable snapping.
-- The status bar reports `Snap: On` or `Snap: Off`.
-- Hold `Alt` while placing or moving to temporarily bypass snapping.
-- Snapping affects resource centres in world coordinates and never affects viewport pan.
-
-## Canvas navigation
-
-- Wheel or trackpad scroll: cursor-centred zoom
-- Middle-button drag: pan
-- Hold `Space` and primary-button drag: temporary pan
-- **Pan**: persistent primary-button pan mode
-- `+` / `-`: zoom in or out
-- `0`: reset to 100%
-- `F`: fit origin when the canvas has focus
-- **Grid**, **Origin**, and **Canvas Focus** retain their Sprint 1.2 behaviour
-
-Keyboard canvas shortcuts are ignored while typing in inputs and editable controls. `Escape` cancels an active resource or canvas interaction.
+The title bar, right Validation Summary, operation cards, and status bar reflect current project health. Notes are optional and never generate noise.
 
 ## Architecture
 
-- `models/resources` defines reusable templates and placed world-coordinate instances.
-- `ResourceStore` owns templates, instances, selection, validation, and focused subscriptions.
-- `ResourceIdGenerator` isolates stable human-readable IDs.
-- `SnapService` owns world-space snapping independently of rendering.
-- `ResourceLibrary` owns filtering, favourites, drag feedback, and keyboard placement.
-- `ResourceRenderer` updates persistent SVG nodes in the existing `canvas-objects` layer.
-- `ResourceInteractionController` owns selection, movement, pointer offset, cancellation, and deletion.
-- `RightSidebar` binds validated property controls to the shared store.
+- `models/operations` defines reusable operation templates and placed operation instances.
+- `OperationStore` owns operation instances, validated mutations, deterministic sequence ordering, and normalization.
+- `SelectionStore` is the single typed selection authority shared by resource and operation stores.
+- `OperationValidation` is a pure deterministic validation service.
+- `OperationLibrary` and `ProjectExplorer` provide placement and ordered process navigation.
+- `OperationRenderer` owns persistent SVG nodes in the dedicated `canvas-operations` layer.
+- `OperationInteractionController` owns pointer movement and cancellation without coupling domain state to SVG.
+- `RightSidebar` binds properties for either selected object type.
 
 ## Development commands
 
@@ -105,16 +68,16 @@ Keyboard canvas shortcuts are ignored while typing in inputs and editable contro
 npm run typecheck
 npm run test:coordinates
 npm run test:resources
+npm run test:operations
 npm run build
-npm run preview
 ```
 
 ## Current limitations
 
-Sprint 1.3 intentionally has no process operations, connections, routing, multi-selection, rotation, custom-resource editor, image uploads, persistence, undo/redo, factory-layout dimensions, Standard Work, simulation, analytics, or offline service worker.
+Sprint 1.4 intentionally has no connections, ports, routing, arrows, simulation, persistence, undo/redo, multi-selection, rotation, custom-template editor, image uploads, or offline service worker.
 
-## Planned Sprint 1.4
+## Planned Sprint 1.5
 
-Sprint 1.4 will introduce operations and process-flow modelling. Connections are not part of Sprint 1.3.
+Sprint 1.5 will introduce explicit operation ports, directed connections, and connection routing. Those concerns remain separate from the Sprint 1.4 operation and resource domain models.
 
-Development for this sprint is performed on `feature/sprint-1.3-resource-library`.
+Development for this sprint is performed on `feature/sprint-1.4-operations`.

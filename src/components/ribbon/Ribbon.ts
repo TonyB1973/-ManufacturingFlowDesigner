@@ -50,5 +50,6 @@ const canvasCommands = new Map<string, CanvasCommand>([
   ['Grid', 'grid'],
   ['Canvas Focus', 'focus'],
   ['Delete', 'delete-selection'],
+  ['Add Operation', 'add-operation'],
 ]);
 

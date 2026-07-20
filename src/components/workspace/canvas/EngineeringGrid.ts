@@ -29,11 +29,13 @@ export class EngineeringGrid {
   private readonly yAxis = svgElement('line');
   private readonly origin = svgElement('g');
   private readonly futureWorldLayer = svgElement('g');
-  private readonly objectLayer = svgElement('g');
+  private readonly resourceLayer = svgElement('g');
+  private readonly operationLayer = svgElement('g');
 
   public constructor() {
     this.svg.classList.add('engineering-canvas');
-    this.svg.setAttribute('aria-hidden', 'true');
+    this.svg.setAttribute('role', 'group');
+    this.svg.setAttribute('aria-label', 'Engineering canvas objects');
     this.svg.setAttribute('preserveAspectRatio', 'none');
 
     const definitions = svgElement('defs');
@@ -83,17 +85,20 @@ export class EngineeringGrid {
 
     const connectionLayer = svgElement('g');
     connectionLayer.id = 'canvas-connections';
-    this.objectLayer.id = 'canvas-objects';
+    this.resourceLayer.id = 'canvas-resources';
+    this.operationLayer.id = 'canvas-operations';
     const interactionLayer = svgElement('g');
     interactionLayer.id = 'canvas-interactions';
     this.futureWorldLayer.id = 'canvas-world-layers';
-    this.futureWorldLayer.append(connectionLayer, this.objectLayer, interactionLayer);
+    this.futureWorldLayer.append(connectionLayer, this.resourceLayer, this.operationLayer, interactionLayer);
     this.svg.append(definitions, background, this.gridLayer, this.axesLayer, this.futureWorldLayer);
   }
 
   public getObjectLayer(): SVGGElement {
-    return this.objectLayer;
+    return this.resourceLayer;
   }
+
+  public getOperationLayer(): SVGGElement { return this.operationLayer; }
 
   public render(state: CanvasState, size: ViewportSize): void {
     this.svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);
