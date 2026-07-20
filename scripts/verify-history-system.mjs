@@ -1,0 +1,83 @@
+import { loadTypeScriptModule as loadModule } from './load-typescript-module.mjs';
+const load = (path) => loadModule(path, import.meta.url);
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+
+const { ReversibleCommand } = await load('../src/services/history/ApplicationCommand.ts');
+const { CommandHistoryService } = await load('../src/services/history/CommandHistoryService.ts');
+const { CommandFactory } = await load('../src/services/history/CommandFactory.ts');
+const { ResourceStore } = await load('../src/services/ResourceStore.ts');
+const { OperationStore } = await load('../src/services/OperationStore.ts');
+const { ConnectionStore } = await load('../src/services/ConnectionStore.ts');
+const { WorkspaceStore } = await load('../src/services/WorkspaceStore.ts');
+const { SelectionStore } = await load('../src/services/SelectionStore.ts');
+const { ProjectSessionService } = await load('../src/services/project/ProjectSessionService.ts');
+const { ResourceIdGenerator } = await load('../src/utilities/ResourceIdGenerator.ts');
+const { OperationIdGenerator } = await load('../src/utilities/OperationIdGenerator.ts');
+const { ConnectionIdGenerator } = await load('../src/utilities/ConnectionIdGenerator.ts');
+const { RESOURCE_TEMPLATES } = await load('../src/core/constants/resourceTemplates.ts');
+const { OPERATION_TEMPLATES } = await load('../src/core/constants/operationTemplates.ts');
+
+const dummy = {};
+let value = 0; let notifications = 0;
+const history = new CommandHistoryService(dummy, 2); history.subscribe(() => { notifications += 1; });
+const setValue = (description, next) => { const before = value; return new ReversibleCommand(description, [], undefined, () => { value = next; }, () => { value = before; }); };
+assert(!history.canUndo && !history.canRedo && history.undo() === null && history.redo() === null, 'Empty Undo and Redo are safe');
+history.execute(setValue('Set one', 1)); assert(value === 1 && history.canUndo && history.undoDescription === 'Set one', 'Execute adds a described Undo entry');
+history.undo(); assert(value === 0 && history.canRedo && history.redoDescription === 'Set one', 'Undo restores state and exposes Redo');
+history.redo(); assert(value === 1, 'Redo reapplies state');
+history.undo(); history.execute(setValue('Set two', 2)); assert(!history.canRedo && value === 2, 'New command after Undo clears Redo');
+history.execute(setValue('Set three', 3)); history.execute(setValue('Set four', 4)); assert(history.getState().undoCount === 2, 'Maximum history depth is enforced');
+assert(notifications >= 6, 'History subscriptions receive state changes');
+
+history.clear(); value = 0; const order = [];
+const transactionCommand = (name, delta) => new ReversibleCommand(name, [], undefined, () => { order.push(`do-${name}`); value += delta; }, () => { order.push(`undo-${name}`); value -= delta; });
+history.beginTransaction('Compound edit'); history.execute(transactionCommand('A', 1)); history.execute(transactionCommand('B', 2)); history.commitTransaction(); assert(value === 3 && history.undoDescription === 'Compound edit', 'Transaction commits as one entry');
+history.undo(); assert(value === 0 && order.slice(-2).join(',') === 'undo-B,undo-A', 'Transaction Undo runs children in reverse order');
+history.redo(); assert(value === 3 && order.slice(-2).join(',') === 'do-A,do-B', 'Transaction Redo runs children in original order');
+history.beginTransaction('Cancelled edit'); history.execute(transactionCommand('C', 4)); history.cancelTransaction(); assert(value === 3 && history.undoDescription === 'Compound edit', 'Cancelled transaction restores state and adds no entry');
+history.clear(); value = 0; history.beginTransaction('Failed edit'); history.execute(transactionCommand('Safe', 5));
+let failed = false; try { history.execute(new ReversibleCommand('Fail', [], undefined, () => { throw new Error('Expected'); }, () => {})); } catch { failed = true; }
+assert(failed && value === 0 && !history.canUndo, 'Failed transaction rolls back prior children and does not enter history');
+let nestedRejected = false; history.beginTransaction('Outer'); try { history.beginTransaction('Inner'); } catch { nestedRejected = true; } history.cancelTransaction(); assert(nestedRejected, 'Nested transactions are rejected safely');
+
+const selection = new SelectionStore(); const resourceIds = new ResourceIdGenerator(); const operationIds = new OperationIdGenerator(); const connectionIds = new ConnectionIdGenerator();
+const resources = new ResourceStore(RESOURCE_TEMPLATES, resourceIds, selection); const operations = new OperationStore(OPERATION_TEMPLATES, operationIds, selection); const workspaces = new WorkspaceStore();
+const connections = new ConnectionStore(connectionIds, (id) => operations.getOperation(id), () => ({ points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], status: 'clear' }), selection);
+const session = new ProjectSessionService(resources, operations, connections, workspaces, selection, resourceIds, operationIds, connectionIds);
+const context = { resources, operations, connections, project: session, selection }; const modelHistory = new CommandHistoryService(context, 200); session.attachHistory(modelHistory); const commands = new CommandFactory(modelHistory, context);
+assert(commands.updateProjectMetadata({ name: 'History Project' }) && commands.updateProjectMetadata({ description: 'Command test' }) && commands.updateProjectMetadata({ author: 'Engineer' }) && commands.updateProjectMetadata({ company: 'Factory' }), 'Project metadata commands execute'); modelHistory.undo(); assert(session.getMetadata().company === '', 'Project metadata Undo restores the previous value'); modelHistory.redo(); assert(session.getMetadata().company === 'Factory', 'Project metadata Redo reapplies the value');
+assert(commands.updateProjectSettings({ gridBaseInterval: 25 }) && commands.updateProjectSettings({ routingClearance: 24 }) && commands.updateProjectSettings({ displayPrecision: 3 }), 'Project settings commands execute'); modelHistory.undo(); assert(session.getSettings().displayPrecision === 2, 'Project settings Undo restores the previous value'); modelHistory.redo(); assert(session.getSettings().displayPrecision === 3, 'Project settings Redo reapplies the value');
+const resource = commands.addResource(RESOURCE_TEMPLATES[0].id, 100, 200); assert(resource && session.isDirty(), 'Adding a resource is undoable and marks the project dirty'); const resourceId = resource.id;
+const favouriteBefore = resources.getTemplate(RESOURCE_TEMPLATES[0].id).isFavourite; commands.toggleResourceTemplateFavourite(RESOURCE_TEMPLATES[0].id); modelHistory.undo(); assert(resources.getTemplate(RESOURCE_TEMPLATES[0].id).isFavourite === favouriteBefore, 'Persisted resource-template favourites are undoable');
+modelHistory.undo(); assert(!resources.getResource(resourceId), 'Undo Add resource removes it'); modelHistory.redo(); assert(resources.getResource(resourceId)?.id === resourceId, 'Redo Add resource restores the same ID');
+assert(commands.updateResource(resourceId, { name: 'Primary Machine' }) && commands.updateResource(resourceId, { worldX: 150, worldY: 250 }) && commands.updateResource(resourceId, { width: 240, height: 120 }) && commands.updateResource(resourceId, { active: false }) && commands.updateResource(resourceId, { capacity: 2 }), 'Resource property commands execute');
+modelHistory.undo(); assert(resources.getResource(resourceId)?.capacity === 1, 'Resource capacity Undo restores the previous value'); modelHistory.redo(); assert(resources.getResource(resourceId)?.capacity === 2, 'Resource capacity Redo reapplies the value');
+assert(commands.updateResource(resourceId, { rotationDegrees: 90 }) && commands.updateResource(resourceId, { visible: false }) && commands.updateResource(resourceId, { locked: true }), 'Resource rotation, visibility, and lock commands execute'); modelHistory.undo(); assert(!resources.getResource(resourceId)?.locked, 'Resource locked-state Undo works'); commands.updateResource(resourceId, { visible: true });
+const duplicate = commands.duplicateResource(resourceId); assert(duplicate, 'Resource duplication executes'); const duplicateId = duplicate.id; modelHistory.undo(); assert(!resources.getResource(duplicateId), 'Undo duplication removes the duplicate'); modelHistory.redo(); assert(resources.getResource(duplicateId)?.id === duplicateId, 'Redo duplication restores the same ID');
+
+commands.updateResource(resourceId, { active: true }); const operationA = commands.addOperation(OPERATION_TEMPLATES[0].id, 300, 200); const operationB = commands.addOperation(OPERATION_TEMPLATES[0].id, 600, 200); assert(operationA && operationB, 'Operation additions execute');
+assert(commands.updateOperation(operationA.id, { name: 'Cut blank' }) && commands.updateOperation(operationA.id, { operationType: 'Machining' }) && commands.updateOperation(operationA.id, { cycleTimeSeconds: 75 }) && commands.updateOperation(operationA.id, { sequence: 15 }) && commands.updateOperation(operationA.id, { assignedResourceId: resourceId }) && commands.updateOperation(operationA.id, { notes: 'Fixture A' }) && commands.updateOperation(operationA.id, { timingCategory: 'Non-Value Added' }) && commands.updateOperation(operationA.id, { width: 260, height: 130 }) && commands.updateOperation(operationA.id, { visible: false }) && commands.updateOperation(operationA.id, { locked: true }), 'Operation property commands execute'); modelHistory.undo(); commands.updateOperation(operationA.id, { visible: true });
+const createdConnection = commands.createConnection(operationA.id, operationB.id, { side: 'right', offset: 0.5 }, { side: 'left', offset: 0.5 }); assert(createdConnection.result === 'created' && createdConnection.connection, 'Connection creation executes'); const connectionId = createdConnection.connection.id;
+modelHistory.undo(); assert(!connections.getConnection(connectionId), 'Undo Create connection removes it'); modelHistory.redo(); assert(connections.getConnection(connectionId)?.id === connectionId, 'Redo Create connection restores the same ID and anchors');
+assert(commands.updateConnection(connectionId, { label: 'Transfer' }) && commands.updateConnection(connectionId, { connectionType: 'Alternate' }) && commands.updateConnection(connectionId, { visible: false }) && commands.updateConnection(connectionId, { locked: true }), 'Connection label, type, visibility, and lock commands execute'); modelHistory.undo(); assert(!connections.getConnection(connectionId)?.locked, 'Connection locked-state Undo works');
+assert(commands.reverseConnection(connectionId) === 'updated', 'Connection reversal executes'); const reversedSource = connections.getConnection(connectionId)?.sourceOperationId; modelHistory.undo(); assert(connections.getConnection(connectionId)?.sourceOperationId === operationA.id, 'Undo reversal restores original direction'); modelHistory.redo(); assert(connections.getConnection(connectionId)?.sourceOperationId === reversedSource, 'Redo reversal reapplies direction');
+modelHistory.undo(); assert(commands.deleteConnection(connectionId) === 'deleted', 'Connection deletion executes'); modelHistory.undo(); assert(connections.getConnection(connectionId)?.id === connectionId, 'Undo Delete connection restores the same ID');
+
+assert(commands.deleteOperation(operationA.id) === 'deleted' && !connections.getConnection(connectionId), 'Deleting an operation removes attached connections'); modelHistory.undo(); assert(operations.getOperation(operationA.id)?.id === operationA.id && connections.getConnection(connectionId)?.id === connectionId, 'Undo Delete operation restores the operation and attached connections');
+assert(commands.deleteResource(resourceId) === 'deleted' && operations.getOperation(operationA.id)?.assignedResourceId === null, 'Deleting an assigned resource clears assignments'); modelHistory.undo(); assert(resources.getResource(resourceId)?.id === resourceId && operations.getOperation(operationA.id)?.assignedResourceId === resourceId, 'Undo Delete resource restores the resource and assignments');
+
+session.markSaved(session.getMetadata(), 'history-test.mflow'); assert(!session.isDirty() && modelHistory.isAtSavedCheckpoint(), 'Successful save establishes a clean history checkpoint');
+commands.updateOperation(operationA.id, { cycleTimeSeconds: 80 }); assert(session.isDirty(), 'Edit after save moves away from the checkpoint'); modelHistory.undo(); assert(!session.isDirty(), 'Undo to the saved checkpoint clears dirty state'); modelHistory.redo(); assert(session.isDirty(), 'Redo away from the checkpoint restores dirty state');
+modelHistory.undo(); session.markSaved(session.getMetadata(), 'history-test.mflow'); assert(modelHistory.canRedo && !session.isDirty(), 'Saving at an undone position preserves Redo and moves the checkpoint'); modelHistory.redo(); assert(session.isDirty(), 'Redo after saving at an undone position moves away from the checkpoint'); modelHistory.undo();
+selection.select({ kind: 'operation', id: operationA.id }); workspaces.updateViewport('processFlow', { panX: 400, zoom: 1.5 }); connections.recalculateAll(); assert(!session.isDirty() && modelHistory.isAtSavedCheckpoint(), 'Selection, viewport changes, and derived route recalculation do not enter history or dirty the project');
+const countBeforeUnchanged = modelHistory.getState().undoCount; assert(!commands.updateOperation(operationA.id, { cycleTimeSeconds: operations.getOperation(operationA.id).cycleTimeSeconds }) && modelHistory.getState().undoCount === countBeforeUnchanged, 'Unchanged property values create no command');
+assert(!commands.updateResource(resourceId, { capacity: 0 }) && modelHistory.getState().undoCount === countBeforeUnchanged, 'Invalid numeric property values create no command');
+commands.updateOperation(operationA.id, { locked: true }); const lockedCount = modelHistory.getState().undoCount; assert(!commands.commitOperationMove(operationA.id, { x: operationA.worldX, y: operationA.worldY }, { x: operationA.worldX + 10, y: operationA.worldY + 10 }) && modelHistory.getState().undoCount === lockedCount, 'Rejected locked-entity movement creates no history entry'); modelHistory.undo();
+
+session.newProject('2026-07-20T00:00:00.000Z'); assert(!session.isDirty() && !modelHistory.canUndo && !modelHistory.canRedo && resources.getResourceCount() === 0, 'New Project clears history and establishes a clean checkpoint');
+const newResource = commands.addResource(RESOURCE_TEMPLATES[0].id, 0, 0); assert(newResource && modelHistory.canUndo, 'New project accepts fresh history');
+const document = { format: 'ManufacturingFlowDesigner', schemaVersion: '1.0.0', applicationVersion: '0.2.0', project: { ...session.getMetadata(), name: 'Opened Project' }, resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES, resources: [], operations: [], connections: [], workspaces: { active: 'processFlow', processFlow: workspaces.getViewport('processFlow'), factoryLayout: workspaces.getViewport('factoryLayout') }, settings: session.getSettings() };
+session.openProject(document, 'opened.mflow'); assert(!session.isDirty() && !modelHistory.canUndo && resources.getResourceCount() === 0, 'Open Project clears previous-project history and starts clean');
+
+session.dispose(); connections.dispose(); operations.dispose(); resources.dispose();
+console.log('Command history checks passed.');

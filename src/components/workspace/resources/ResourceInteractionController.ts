@@ -3,6 +3,7 @@ import type { ResourceStore } from '../../../services/ResourceStore';
 import type { SnapService } from '../../../services/SnapService';
 import { positionFromPointer } from '../../../services/ResourcePlacement';
 import { screenToWorld, type Point } from '../canvas/ViewportTransform';
+import type { CommandFactory } from '../../../services/history/CommandFactory';
 
 interface ActiveResourceDrag {
   readonly pointerId: number;
@@ -31,7 +32,8 @@ export class ResourceInteractionController {
     private readonly store: ResourceStore,
     private readonly snap: SnapService,
     private readonly onStatus: (message: string) => void,
-    private readonly requestDelete?: (resourceId: string) => void,
+    private readonly requestDelete: (resourceId: string) => void,
+    private readonly commands: CommandFactory,
   ) {
     this.menu.className = 'resource-context-menu'; this.menu.setAttribute('role', 'menu'); this.menu.hidden = true; viewport.append(this.menu);
     viewport.addEventListener('pointerdown', this.handlePointerDown);
@@ -44,7 +46,7 @@ export class ResourceInteractionController {
   }
 
   public deleteSelection(): void {
-    const result = this.store.deleteSelected();
+    const selected = this.store.getSelectedResource(); const result = selected ? this.commands.deleteResource(selected.id) : 'none';
     if (result === 'deleted') this.onStatus('Resource deleted');
     else if (result === 'locked') this.onStatus('Resource is locked');
     else this.onStatus('No resource selected');
@@ -140,7 +142,7 @@ export class ResourceInteractionController {
 
   private readonly handleContextMenu = (event: MouseEvent): void => { const id = event.target instanceof Element ? event.target.closest<SVGGElement>('[data-resource-id]')?.dataset.resourceId : undefined; if (!id) return; event.preventDefault(); const bounds = this.viewport.getBoundingClientRect(); this.openMenu(id, event.clientX - bounds.left, event.clientY - bounds.top); };
   private readonly handleOutsideMenu = (event: PointerEvent): void => { if (!this.menu.hidden && event.target instanceof Node && !this.menu.contains(event.target)) this.closeMenu(); };
-  private openMenu(id: string, x: number, y: number): void { this.store.selectResource(id); this.menu.replaceChildren(); const add = (label: string, action: () => void): void => { const button = document.createElement('button'); button.type = 'button'; button.className = 'resource-context-menu__item'; button.setAttribute('role', 'menuitem'); button.textContent = label; button.addEventListener('click', () => { action(); this.closeMenu(); }); this.menu.append(button); }; add('Duplicate Resource', () => { const copy = this.store.duplicateResource(id); this.onStatus(copy ? `Resource duplicated: ${copy.id}` : 'Resource could not be duplicated'); }); add('Delete Resource', () => this.requestDelete?.(id)); this.menu.hidden = false; this.menu.style.left = `${Math.min(Math.max(0, x), Math.max(0, this.viewport.clientWidth - 185))}px`; this.menu.style.top = `${Math.min(Math.max(0, y), Math.max(0, this.viewport.clientHeight - 90))}px`; this.menu.querySelector<HTMLButtonElement>('button')?.focus(); }
+  private openMenu(id: string, x: number, y: number): void { this.store.selectResource(id); this.menu.replaceChildren(); const add = (label: string, action: () => void): void => { const button = document.createElement('button'); button.type = 'button'; button.className = 'resource-context-menu__item'; button.setAttribute('role', 'menuitem'); button.textContent = label; button.addEventListener('click', () => { action(); this.closeMenu(); }); this.menu.append(button); }; add('Duplicate Resource', () => { const copy = this.commands.duplicateResource(id); this.onStatus(copy ? `Resource duplicated: ${copy.id}` : 'Resource could not be duplicated'); }); add('Delete Resource', () => this.requestDelete?.(id)); this.menu.hidden = false; this.menu.style.left = `${Math.min(Math.max(0, x), Math.max(0, this.viewport.clientWidth - 185))}px`; this.menu.style.top = `${Math.min(Math.max(0, y), Math.max(0, this.viewport.clientHeight - 90))}px`; this.menu.querySelector<HTMLButtonElement>('button')?.focus(); }
   private closeMenu(): void { this.menu.hidden = true; this.menu.replaceChildren(); this.viewport.focus({ preventScroll: true }); }
 
   private readonly flushPendingMove = (): void => {
@@ -157,11 +159,13 @@ export class ResourceInteractionController {
     if (active.frame !== 0) cancelAnimationFrame(active.frame);
     if (commit && active.pending) this.store.moveResource(active.resourceId, active.pending.x, active.pending.y);
     if (!commit) this.store.moveResource(active.resourceId, active.original.x, active.original.y);
+    const final = this.store.getResource(active.resourceId); const changed = Boolean(commit && final && (final.worldX !== active.original.x || final.worldY !== active.original.y));
+    if (changed && final) this.commands.commitResourceMove(active.resourceId, active.original, { x: final.worldX, y: final.worldY });
     this.active = null;
     const node = this.viewport.querySelector<HTMLElement>(`[data-resource-id="${active.resourceId}"]`);
     node?.classList.remove('placed-resource--moving');
     if (this.viewport.hasPointerCapture(active.pointerId)) this.viewport.releasePointerCapture(active.pointerId);
-    this.onStatus(commit ? 'Resource position updated' : 'Resource move cancelled');
+    this.onStatus(commit ? changed ? 'Resource position updated' : 'Resource position unchanged' : 'Resource move cancelled');
   }
 
   private cancelDrag(): void {

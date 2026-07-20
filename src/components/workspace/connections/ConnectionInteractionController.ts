@@ -5,6 +5,7 @@ import { anchorWorldPosition, nearestOperationAnchor, operationBounds } from '..
 import type { OperationStore } from '../../../services/OperationStore';
 import { screenToWorld } from '../canvas/ViewportTransform';
 import { createConnectionContextMenu, type ConnectionContextMenuController } from './ConnectionContextMenu';
+import type { CommandFactory } from '../../../services/history/CommandFactory';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 function svg<K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] { return document.createElementNS(SVG_NAMESPACE, tag); }
@@ -18,7 +19,7 @@ export interface ConnectionInteractionCallbacks {
 export class ConnectionInteractionController {
   private readonly portGroup = svg('g'); private readonly portHit = svg('circle'); private readonly portVisible = svg('circle'); private readonly preview = svg('path');
   private source: { operationId: string; anchor: OperationAnchor; explicit: boolean } | null = null; private hovered: { operationId: string; anchor: OperationAnchor; explicit: boolean } | null = null; private activePointer: number | null = null; private frame = 0; private pendingPoint: WorldPoint | null = null; private readonly menu: ConnectionContextMenuController; private longPressTimer = 0;
-  public constructor(private readonly viewport: HTMLElement, private readonly application: HTMLElement, private readonly state: CanvasState, private readonly operations: OperationStore, private readonly connections: ConnectionStore, overlay: SVGGElement, private readonly callbacks: ConnectionInteractionCallbacks) {
+  public constructor(private readonly viewport: HTMLElement, private readonly application: HTMLElement, private readonly state: CanvasState, private readonly operations: OperationStore, private readonly connections: ConnectionStore, private readonly commands: CommandFactory, overlay: SVGGElement, private readonly callbacks: ConnectionInteractionCallbacks) {
     this.portGroup.classList.add('dynamic-operation-port'); this.portHit.classList.add('dynamic-operation-port__hit'); this.portVisible.classList.add('dynamic-operation-port__visible'); this.portGroup.append(this.portHit, this.portVisible); this.portGroup.setAttribute('display', 'none');
     this.preview.classList.add('connection-preview'); this.preview.setAttribute('display', 'none'); this.preview.setAttribute('marker-end', 'url(#process-arrowhead)'); overlay.append(this.preview, this.portGroup);
     this.menu = createConnectionContextMenu(viewport);
@@ -34,14 +35,14 @@ export class ConnectionInteractionController {
     else if (this.source) this.showPort(this.source.operationId, this.source.anchor);
     else { const selected = this.operations.getSelectedOperation(); if (selected?.visible) this.showPort(selected.id, { side: 'right', offset: 0.5 }); }
   }
-  public deleteSelection(): void { const result = this.connections.deleteSelected(); this.statusForDelete(result); }
-  public reverseSelection(): void { const connection = this.connections.getSelectedConnection(); if (!connection) { this.callbacks.onStatus('No connection selected'); return; } const result = this.connections.reverseConnection(connection.id); this.callbacks.onStatus(result === 'updated' ? 'Connection reversed' : result === 'duplicate' ? 'Cannot reverse: reverse Standard connection already exists' : result === 'locked' ? 'Connection is locked' : 'Connection not found'); }
+  public deleteSelection(): void { const selected = this.connections.getSelectedConnection(); const result = selected ? this.commands.deleteConnection(selected.id) : 'none'; this.statusForDelete(result); }
+  public reverseSelection(): void { const connection = this.connections.getSelectedConnection(); if (!connection) { this.callbacks.onStatus('No connection selected'); return; } const result = this.commands.reverseConnection(connection.id); this.callbacks.onStatus(result === 'updated' ? 'Connection reversed' : result === 'duplicate' ? 'Cannot reverse: reverse Standard connection already exists' : result === 'locked' ? 'Connection is locked' : 'Connection not found'); }
   public cancelCreation(): void { this.cancel(true); }
   public dispose(): void { this.cancel(false); this.menu.dispose(); this.viewport.removeEventListener('pointermove', this.pointerMove); this.viewport.removeEventListener('pointerdown', this.pointerDown); this.viewport.removeEventListener('pointerup', this.pointerUp); this.viewport.removeEventListener('pointercancel', this.pointerCancel); this.viewport.removeEventListener('contextmenu', this.contextMenu); document.removeEventListener('keydown', this.keyDown); this.preview.remove(); this.portGroup.remove(); }
 
   private readonly pointerDown = (event: PointerEvent): void => {
     const connectionId = this.connectionId(event.target); if (connectionId && event.button === 0) {
-      if (this.state.tool === 'delete-link') { event.preventDefault(); event.stopImmediatePropagation(); this.statusForDelete(this.connections.deleteConnection(connectionId)); return; }
+      if (this.state.tool === 'delete-link') { event.preventDefault(); event.stopImmediatePropagation(); this.statusForDelete(this.commands.deleteConnection(connectionId)); return; }
       if (this.state.tool === 'select') { event.preventDefault(); event.stopImmediatePropagation(); this.connections.selectConnection(connectionId); this.callbacks.onStatus(`Connection selected: ${connectionId}`); if (event.pointerType === 'touch') this.scheduleLongPress(event, connectionId); return; }
     }
     if (this.state.tool !== 'connect' || event.button !== 0) return;
@@ -84,7 +85,7 @@ export class ConnectionInteractionController {
     this.preview.setAttribute('d', points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ')); this.preview.setAttribute('display', 'inline');
   };
   private create(targetId: string, targetAnchor: OperationAnchor, targetExplicit: boolean): void {
-    if (!this.source) return; const resolved = this.resolveAnchors(targetId, targetAnchor, targetExplicit); const result = this.connections.createConnection(this.source.operationId, targetId, resolved.sourceAnchor, resolved.targetAnchor); const id = result.connection?.id;
+    if (!this.source) return; const resolved = this.resolveAnchors(targetId, targetAnchor, targetExplicit); const result = this.commands.createConnection(this.source.operationId, targetId, resolved.sourceAnchor, resolved.targetAnchor); const id = result.connection?.id;
     this.callbacks.onStatus(result.result === 'created' && id ? `Connection created: ${id}` : result.result === 'duplicate' ? 'Duplicate connection not permitted' : result.result === 'self' ? 'Self-connection not permitted' : 'Connection could not be created'); this.cancel(false); if (result.result === 'created') this.callbacks.setTool('select');
   }
   private cancel(report: boolean): void { if (this.frame) cancelAnimationFrame(this.frame); this.frame = 0; this.preview.setAttribute('display', 'none'); this.pendingPoint = null; this.hovered = null; this.source = null; if (this.activePointer !== null && this.viewport.hasPointerCapture(this.activePointer)) this.viewport.releasePointerCapture(this.activePointer); this.activePointer = null; this.clearLongPress(); if (report) this.callbacks.onStatus('Connection cancelled'); }
@@ -105,7 +106,7 @@ export class ConnectionInteractionController {
   private world(event: PointerEvent): WorldPoint { const bounds = this.viewport.getBoundingClientRect(); return screenToWorld({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, this.state); }
   private connectionId(target: EventTarget | null): string | undefined { return target instanceof Element ? target.closest<SVGElement>('[data-connection-id]')?.dataset.connectionId : undefined; }
   private statusForDelete(result: ConnectionMutationResult): void { this.callbacks.onStatus(result === 'deleted' ? 'Connection deleted' : result === 'locked' ? 'Connection is locked' : 'No connection selected'); }
-  private openMenu(clientX: number, clientY: number, id: string): void { const connection = this.connections.getConnection(id); if (!connection) return; this.connections.selectConnection(id); const bounds = this.viewport.getBoundingClientRect(); this.menu.open(clientX - bounds.left, clientY - bounds.top, id, { onDelete: () => this.statusForDelete(this.connections.deleteConnection(id)), onReverse: () => { const result = this.connections.reverseConnection(id); this.callbacks.onStatus(result === 'updated' ? 'Connection reversed' : result === 'duplicate' ? 'Cannot reverse: duplicate connection' : 'Connection is locked'); }, onSelectSource: () => this.operations.selectOperation(connection.sourceOperationId), onSelectTarget: () => this.operations.selectOperation(connection.targetOperationId) }); }
+  private openMenu(clientX: number, clientY: number, id: string): void { const connection = this.connections.getConnection(id); if (!connection) return; this.connections.selectConnection(id); const bounds = this.viewport.getBoundingClientRect(); this.menu.open(clientX - bounds.left, clientY - bounds.top, id, { onDelete: () => this.statusForDelete(this.commands.deleteConnection(id)), onReverse: () => { const result = this.commands.reverseConnection(id); this.callbacks.onStatus(result === 'updated' ? 'Connection reversed' : result === 'duplicate' ? 'Cannot reverse: duplicate connection' : 'Connection is locked'); }, onSelectSource: () => this.operations.selectOperation(connection.sourceOperationId), onSelectTarget: () => this.operations.selectOperation(connection.targetOperationId) }); }
   private scheduleLongPress(event: PointerEvent, id: string): void { this.clearLongPress(); const x = event.clientX; const y = event.clientY; this.longPressTimer = window.setTimeout(() => this.openMenu(x, y, id), 600); }
   private clearLongPress(): void { if (this.longPressTimer) window.clearTimeout(this.longPressTimer); this.longPressTimer = 0; }
 }

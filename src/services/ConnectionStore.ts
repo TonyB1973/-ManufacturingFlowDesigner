@@ -44,6 +44,11 @@ export class ConnectionStore {
     this.connections.set(connection.id, connection); this.recalculate(connection); this.notify({ kind: 'created', connection }); this.selection.select({ kind: 'connection', id: connection.id }); this.notify({ kind: 'validation' });
     return { result: 'created', connection };
   }
+  public restoreConnection(connection: ProcessConnection): boolean {
+    if (this.connections.has(connection.id) || !this.getOperation(connection.sourceOperationId) || !this.getOperation(connection.targetOperationId) || this.isDuplicate(connection.sourceOperationId, connection.targetOperationId, connection.connectionType)) return false;
+    const restored: ProcessConnection = { ...connection, sourceAnchor: { ...connection.sourceAnchor }, targetAnchor: { ...connection.targetAnchor }, routePoints: [], routeStatus: 'clear', selected: false };
+    this.connections.set(restored.id, restored); this.recalculate(restored); this.notify({ kind: 'created', connection: restored }); this.notify({ kind: 'validation' }); return true;
+  }
   public selectConnection(id: string): boolean { if (!this.connections.has(id)) return false; this.selection.select({ kind: 'connection', id }); return true; }
   public updateConnection(id: string, patch: ProcessConnectionPatch): boolean {
     const connection = this.connections.get(id); if (!connection || !this.validPatch(patch)) return false;

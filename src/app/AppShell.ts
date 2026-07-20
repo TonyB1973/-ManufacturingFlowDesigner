@@ -25,6 +25,9 @@ import { ProjectSessionService } from '../services/project/ProjectSessionService
 import { ProjectFileService } from '../services/project/ProjectFileService';
 import { ProjectFileController } from '../services/project/ProjectFileController';
 import { createProjectDialogs } from '../components/project/ProjectDialogs';
+import { CommandHistoryService } from '../services/history/CommandHistoryService';
+import { CommandFactory } from '../services/history/CommandFactory';
+import { HistoryController } from '../services/history/HistoryController';
 
 export interface AppShellResult {
   readonly element: HTMLElement;
@@ -49,12 +52,14 @@ export function createAppShell(): AppShellResult {
     return { points: route.points, status: route.fallback ? 'fallback' : 'clear' };
   }, selectionStore);
   projectSession = new ProjectSessionService(resourceStore, operationStore, connectionStore, workspaceStore, selectionStore, resourceIds, operationIds, connectionIds);
+  const commandContext = { resources: resourceStore, operations: operationStore, connections: connectionStore, project: projectSession, selection: selectionStore };
+  const history = new CommandHistoryService(commandContext, 200); projectSession.attachHistory(history); const commands = new CommandFactory(history, commandContext);
   const statusBar = createStatusBar();
   const titleBar = createTitleBar();
-  const projectDialogs = createProjectDialogs(); const deletionDialog = createResourceDeletionDialog(resourceStore, operationStore, statusBar.setMessage); shell.append(projectDialogs.element, deletionDialog.element);
+  const projectDialogs = createProjectDialogs(); const deletionDialog = createResourceDeletionDialog(resourceStore, operationStore, commands, statusBar.setMessage); shell.append(projectDialogs.element, deletionDialog.element);
   const requestResourceDeletion = (id: string): void => deletionDialog.request(id);
-  const left = createLeftSidebar(resourceStore, operationStore, connectionStore, workspaceStore, projectSession, selectionStore);
-  const right = createRightSidebar(resourceStore, operationStore, connectionStore, workspaceStore, selectionStore, requestResourceDeletion, projectSession);
+  const left = createLeftSidebar(resourceStore, operationStore, connectionStore, workspaceStore, projectSession, selectionStore, commands);
+  const right = createRightSidebar(resourceStore, operationStore, connectionStore, workspaceStore, selectionStore, requestResourceDeletion, projectSession, commands);
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
   const rightToggle = actionButton('Hide inspector panels', 'panel-toggle panel-toggle--right');
 
@@ -78,11 +83,12 @@ export function createAppShell(): AppShellResult {
     connectionStore,
     workspaceStore,
     selectionStore,
+    commands,
     requestResourceDeletion,
     onFocusModeChange: (active) => shell.classList.toggle('app-shell--canvas-focus', active),
   });
   body.append(left.element, leftToggle, workspace.element, rightToggle, right.element);
-  const ribbon = createRibbon(workspaceStore); const projectFiles = new ProjectFileController(projectSession, new ProjectFileService(), projectDialogs, ribbon.setFileBusy); ribbon.setFileCommands(projectFiles);
+  const ribbon = createRibbon(workspaceStore); const historyController = new HistoryController(history, shell, workspace.cancelActiveInteractions, statusBar.setMessage); ribbon.setHistoryCommands(historyController); const projectFiles = new ProjectFileController(projectSession, new ProjectFileService(), projectDialogs, ribbon.setFileBusy, workspace.cancelActiveInteractions); ribbon.setFileCommands(projectFiles);
   shell.append(titleBar.element, ribbon.element, body, statusBar.element);
   const updateStatus = (): void => {
     const selected = selectionStore.getSelection();
@@ -103,17 +109,18 @@ export function createAppShell(): AppShellResult {
   });
   const unsubscribeOperationStatus = operationStore.subscribe((change) => { if (change.kind === 'deleted') { connectionStore.deleteForOperation(change.operationId); connectionStore.recalculateAll(); } else if (change.kind === 'created' || change.kind === 'updated') connectionStore.recalculateAll(); updateStatus(); });
   const unsubscribeConnectionStatus = connectionStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(updateStatus); updateStatus();
+  const unsubscribeHistory = history.subscribe(statusBar.setHistory); statusBar.setHistory(history.getState());
   const unsubscribeProject = projectSession.subscribe((state) => { titleBar.setProject(state.metadata.name, state.dirty, state.fileName); statusBar.setProject(state.metadata.name, state.dirty); updateStatus(); }); const initialProject = projectSession.getState(); titleBar.setProject(initialProject.metadata.name, initialProject.dirty, initialProject.fileName); statusBar.setProject(initialProject.metadata.name, initialProject.dirty);
   return {
     element: shell,
     statusBar,
     dispose: () => {
-      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeSelectionStatus(); unsubscribeProject();
+      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeSelectionStatus(); unsubscribeProject(); unsubscribeHistory();
       left.dispose();
       right.dispose();
       workspace.dispose();
       deletionDialog.dispose();
-      projectFiles.dispose(); projectDialogs.dispose(); ribbon.dispose(); projectSession.dispose();
+      projectFiles.dispose(); historyController.dispose(); projectDialogs.dispose(); ribbon.dispose(); projectSession.dispose();
       connectionStore.dispose(); operationStore.dispose(); resourceStore.dispose();
     },
   };

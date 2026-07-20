@@ -16,6 +16,7 @@ import type { OperationStore, OperationStoreChange } from '../OperationStore';
 import type { ResourceStore, ResourceStoreChange } from '../ResourceStore';
 import type { WorkspaceStore } from '../WorkspaceStore';
 import { DirtyStateService } from './DirtyStateService';
+import type { CommandHistoryService } from '../history/CommandHistoryService';
 
 export interface ProjectSessionState {
   readonly metadata: ProjectMetadata;
@@ -32,6 +33,8 @@ export class ProjectSessionService {
   private readonly listeners = new Set<(state: ProjectSessionState) => void>();
   private readonly dirtyState = new DirtyStateService();
   private readonly unsubscribers: (() => void)[];
+  private history: CommandHistoryService | null = null;
+  private unsubscribeHistory: (() => void) | null = null;
 
   public constructor(
     public readonly resources: ResourceStore,
@@ -59,16 +62,20 @@ export class ProjectSessionService {
   public isDirty(): boolean { return this.dirtyState.isDirty(); }
   public subscribe(listener: (state: ProjectSessionState) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
 
-  public updateMetadata(patch: Partial<Pick<ProjectMetadata, 'name' | 'description' | 'author' | 'company'>>): void {
+  public applyMetadata(patch: Partial<Pick<ProjectMetadata, 'name' | 'description' | 'author' | 'company'>>): boolean {
     const next = { ...this.metadata, ...patch };
-    if (!next.name.trim() || next.name.length > 200 || next.description.length > 10000 || next.author.length > 200 || next.company.length > 200) return;
-    this.metadata = next; this.dirtyState.markDirty(); this.notify();
+    if (!next.name.trim() || next.name.length > 200 || next.description.length > 10000 || next.author.length > 200 || next.company.length > 200) return false;
+    this.metadata = next; this.notify(); return true;
   }
-  public updateSettings(patch: Partial<ProjectSettings>): void {
+  public applySettings(patch: Partial<ProjectSettings>): boolean {
     const next = { ...this.settings, ...patch };
-    if (!Number.isFinite(next.gridBaseInterval) || next.gridBaseInterval <= 0 || !Number.isFinite(next.routingClearance) || next.routingClearance < 0 || next.unitSystem !== 'metric' || !Number.isInteger(next.displayPrecision) || next.displayPrecision < 0 || next.displayPrecision > 6) return;
-    this.settings = next; if (patch.routingClearance !== undefined) this.connections.recalculateAll(); this.dirtyState.markDirty(); this.notify();
+    if (!Number.isFinite(next.gridBaseInterval) || next.gridBaseInterval <= 0 || !Number.isFinite(next.routingClearance) || next.routingClearance < 0 || next.unitSystem !== 'metric' || !Number.isInteger(next.displayPrecision) || next.displayPrecision < 0 || next.displayPrecision > 6) return false;
+    this.settings = next; if (patch.routingClearance !== undefined) this.connections.recalculateAll(); this.notify(); return true;
   }
+
+  public updateMetadata(patch: Partial<Pick<ProjectMetadata, 'name' | 'description' | 'author' | 'company'>>): void { if (this.applyMetadata(patch) && !this.history) this.dirtyState.markDirty(); }
+  public updateSettings(patch: Partial<ProjectSettings>): void { if (this.applySettings(patch) && !this.history) this.dirtyState.markDirty(); }
+  public attachHistory(history: CommandHistoryService): void { this.unsubscribeHistory?.(); this.history = history; this.unsubscribeHistory = history.subscribe((state) => { if (state.atSavedCheckpoint) this.dirtyState.markClean(); else this.dirtyState.markDirty(); }); this.dirtyState.markClean(); }
 
   public newProject(now = new Date().toISOString()): void {
     const metadata = this.createMetadata(now);
@@ -82,8 +89,8 @@ export class ProjectSessionService {
   }
 
   public openProject(document: ProjectDocument, fileName: string): void { this.replace(document, fileName); }
-  public markSaved(metadata: ProjectMetadata, fileName: string): void { this.metadata = { ...metadata }; this.fileName = fileName; this.dirtyState.markClean(); this.notify(); }
-  public dispose(): void { this.unsubscribers.forEach((unsubscribe) => unsubscribe()); this.listeners.clear(); }
+  public markSaved(metadata: ProjectMetadata, fileName: string): void { this.metadata = { ...metadata }; this.fileName = fileName; if (this.history) this.history.markSaved(); else this.dirtyState.markClean(); this.notify(); }
+  public dispose(): void { this.unsubscribeHistory?.(); this.unsubscribers.forEach((unsubscribe) => unsubscribe()); this.listeners.clear(); }
 
   private replace(document: ProjectDocument, fileName: string | null): void {
     this.loading = true;
@@ -104,7 +111,7 @@ export class ProjectSessionService {
       this.connectionIds.ensureAfter(connections.map((item) => item.id));
       this.projectIds.ensureAfter([document.project.id]);
       this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.workspaces.publish();
-      this.dirtyState.markClean();
+      if (this.history) this.history.clear(); else this.dirtyState.markClean();
     } finally { this.loading = false; }
     this.notify();
   }
@@ -112,8 +119,8 @@ export class ProjectSessionService {
   private createMetadata(now = new Date().toISOString()): ProjectMetadata {
     return { id: this.projectIds.next(), name: 'Untitled Project', description: '', author: '', company: '', createdUtc: now, modifiedUtc: now };
   }
-  private resourceChanged(change: ResourceStoreChange): void { if (!this.loading && change.kind !== 'selection' && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private operationChanged(change: OperationStoreChange): void { if (!this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private connectionChanged(change: ConnectionStoreChange): void { if (!this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private resourceChanged(change: ResourceStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private operationChanged(change: OperationStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private connectionChanged(change: ConnectionStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private notify(): void { const state = this.getState(); for (const listener of this.listeners) listener(state); }
 }

@@ -11,10 +11,11 @@ import type { ResourceStore } from '../../services/ResourceStore';
 import { validateResources } from '../../services/ResourceValidation';
 import type { WorkspaceStore } from '../../services/WorkspaceStore';
 import { actionButton, element } from '../../ui/dom';
+import type { CommandFactory } from '../../services/history/CommandFactory';
 
 export interface ProjectExplorerController { readonly element: HTMLElement; dispose(): void; }
 
-export function createProjectExplorer(operationsStore: OperationStore, connectionsStore: ConnectionStore, resourcesStore: ResourceStore, workspaceStore: WorkspaceStore, project: ProjectSessionService, selection: SelectionController): ProjectExplorerController {
+export function createProjectExplorer(operationsStore: OperationStore, connectionsStore: ConnectionStore, resourcesStore: ResourceStore, workspaceStore: WorkspaceStore, project: ProjectSessionService, selection: SelectionController, commands: CommandFactory): ProjectExplorerController {
   const explorer = element('section', 'panel-section project-explorer'); explorer.append(element('h2', 'panel-heading', 'Project Explorer'));
   const tree = element('nav', 'project-tree'); tree.setAttribute('aria-label', 'Project explorer');
   const list = element('ul'); const root = element('li', 'project-tree__root'); const rootButton = actionButton('Project', 'tree-item tree-item--label project-root-button'); rootButton.addEventListener('click', () => selection.select({ kind: 'project', id: project.getMetadata().id })); root.append(rootButton);
@@ -24,7 +25,7 @@ export function createProjectExplorer(operationsStore: OperationStore, connectio
   const normalize = actionButton('Normalize Sequence', 'normalize-sequence'); processDetails.append(processSummary, operationHeading, operations, connectionHeading, connections, normalize); process.append(processDetails);
   const layout = element('li'); const layoutDetails = element('details', 'process-tree'); layoutDetails.open = true; const layoutSummary = element('summary'); const resources = element('ol', 'process-operation-list resource-instance-list'); layoutDetails.append(layoutSummary, resources); layout.append(layoutDetails);
   list.append(root, process, layout); tree.append(list); explorer.append(tree);
-  normalize.addEventListener('click', () => { operationsStore.normalizeSequences(); reportStatus('Operation sequence normalized'); });
+  normalize.addEventListener('click', () => { reportStatus(commands.normalizeOperationSequences() ? 'Operation sequence normalized' : 'Operation sequence already normalized'); });
 
   const render = (): void => {
     const projectState = project.getState(); rootButton.textContent = `▾ ${projectState.metadata.name}${projectState.dirty ? ' *' : ''} (${projectState.metadata.id}) — ${operationsStore.getOperationCount()} ops, ${connectionsStore.getConnectionCount()} links, ${resourcesStore.getResourceCount()} resources`; rootButton.classList.toggle('project-root-button--selected', selection.getSelection().kind === 'project');
