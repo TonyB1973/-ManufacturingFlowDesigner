@@ -1,4 +1,6 @@
 import { TIMING_CATEGORIES } from '../../core/constants/operationTemplates';
+import { revealConnection } from '../../core/events/connectionEvents';
+import { revealOperation } from '../../core/events/operationEvents';
 import { revealResource } from '../../core/events/resourceEvents';
 import { reportStatus } from '../../core/events/uiEvents';
 import type { ConnectionType, ProcessConnection } from '../../models/connections/ProcessConnection';
@@ -13,6 +15,7 @@ import { routeBendCount, routeLength } from '../../services/OrthogonalRouter';
 import { MIN_RESOURCE_HEIGHT, MIN_RESOURCE_WIDTH, type ResourceStore } from '../../services/ResourceStore';
 import { validateResources } from '../../services/ResourceValidation';
 import type { WorkspaceStore } from '../../services/WorkspaceStore';
+import type { ProjectSessionService } from '../../services/project/ProjectSessionService';
 import { actionButton, element } from '../../ui/dom';
 
 export interface RightSidebarController { readonly element: HTMLElement; dispose(): void; }
@@ -26,10 +29,17 @@ function checkbox(label: string): HTMLInputElement { const node = element('input
 function toggle(labelText: string, control: HTMLInputElement): HTMLLabelElement { const label = element('label', 'property-toggle'); label.append(control, element('span', '', labelText)); return label; }
 function summaryRow(container: HTMLElement, label: string, value: string): void { container.append(element('span', '', label), element('strong', '', value)); }
 
-export function createRightSidebar(resources: ResourceStore, operations: OperationStore, connections: ConnectionStore, workspaces: WorkspaceStore, selection: SelectionController, requestDelete: (resourceId: string) => void): RightSidebarController {
+interface ValidationListEntry {
+  readonly severity: 'error' | 'warning';
+  readonly location: string;
+  readonly message: string;
+  readonly navigate: () => void;
+}
+
+export function createRightSidebar(resources: ResourceStore, operations: OperationStore, connections: ConnectionStore, workspaces: WorkspaceStore, selection: SelectionController, requestDelete: (resourceId: string) => void, project: ProjectSessionService): RightSidebarController {
   const sidebar = element('aside', 'sidebar sidebar--right'); sidebar.setAttribute('aria-label', 'Inspector panels');
   const properties = element('div', 'properties-content'); const summary = element('div', 'summary-grid'); const validation = element('div', 'validation-summary');
-  sidebar.append(section('Properties', properties), section('Selection Summary', summary), section('Validation Summary', validation));
+  sidebar.append(section('Validation Issues', validation), section('Properties', properties), section('Selection Summary', summary));
   const bindNumber = (control: HTMLInputElement, commit: (value: number) => boolean, minimum: number, integer = false): void => { const run = (): void => { const value = Number(control.value); const valid = Number.isFinite(value) && value >= minimum && (!integer || Number.isInteger(value)); control.setAttribute('aria-invalid', String(!valid || (valid && !commit(value)))); }; control.addEventListener('change', run); control.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); run(); } }); };
   const bindText = (control: HTMLInputElement, commit: (value: string) => boolean): void => { const run = (): void => control.setAttribute('aria-invalid', String(!commit(control.value.trim()))); control.addEventListener('change', run); control.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); run(); } }); };
 
@@ -71,19 +81,58 @@ export function createRightSidebar(resources: ResourceStore, operations: Operati
     form.append(field('Connection ID', output(connection.id)), field('Source operation', output(sourceOperation ? `OP ${sourceOperation.sequence} — ${sourceOperation.name}` : connection.sourceOperationId)), field('Target operation', output(targetOperation ? `OP ${targetOperation.sequence} — ${targetOperation.name}` : connection.targetOperationId)), field('Connection type', type), field('Label', label), field('Source anchor', output(`${connection.sourceAnchor.side} @ ${connection.sourceAnchor.offset.toFixed(3)}`)), field('Target anchor', output(`${connection.targetAnchor.side} @ ${connection.targetAnchor.offset.toFixed(3)}`)), field('Route status', output(connection.routeStatus === 'clear' ? 'Clear route' : 'Fallback routing warning')), field('Route length', output(`${routeLength(connection.routePoints).toFixed(1)} units`)), field('Bend count', output(String(routeBendCount(connection.routePoints)))), toggles, actions); properties.replaceChildren(form);
   };
 
+  const renderProject = (): void => {
+    const state = project.getState(); const metadata = state.metadata; const form = element('form', 'properties-form project-properties'); form.addEventListener('submit', (event) => event.preventDefault());
+    const name = input('text'); name.value = metadata.name; bindText(name, (value) => { if (!value) return false; project.updateMetadata({ name: value }); return true; });
+    const description = element('textarea', 'property-input property-textarea'); description.rows = 4; description.value = metadata.description; description.addEventListener('change', () => project.updateMetadata({ description: description.value.trim() }));
+    const author = input('text'); author.value = metadata.author; bindText(author, (value) => { project.updateMetadata({ author: value }); return true; });
+    const company = input('text'); company.value = metadata.company; bindText(company, (value) => { project.updateMetadata({ company: value }); return true; });
+    form.append(field('Project name', name), field('Description', description), field('Author', author), field('Company', company), field('Project ID', output(metadata.id)), field('Created UTC', output(metadata.createdUtc)), field('Modified UTC', output(metadata.modifiedUtc)), field('Schema version', output('1.0.0')), field('File', output(state.fileName ?? 'Not saved'))); properties.replaceChildren(form);
+  };
+
   const render = (): void => {
     const selected = selection.getSelection(); const workspace = workspaces.getActive(); const resource = resources.getSelectedResource(); const operation = operations.getSelectedOperation(); const connection = connections.getSelectedConnection();
-    if (workspace === 'factoryLayout' && selected.kind === 'resource' && resource) renderResource(); else if (workspace === 'processFlow' && selected.kind === 'operation' && operation) renderOperation(); else if (workspace === 'processFlow' && selected.kind === 'connection' && connection) renderConnection(connection); else properties.replaceChildren(element('div', 'empty-inspector', `No ${workspace === 'processFlow' ? 'operation or connection' : 'physical resource'} selected`));
+    if (selected.kind === 'project') renderProject(); else if (workspace === 'factoryLayout' && selected.kind === 'resource' && resource) renderResource(); else if (workspace === 'processFlow' && selected.kind === 'operation' && operation) renderOperation(); else if (workspace === 'processFlow' && selected.kind === 'connection' && connection) renderConnection(connection); else properties.replaceChildren(element('div', 'empty-inspector', `No ${workspace === 'processFlow' ? 'operation or connection' : 'physical resource'} selected`));
     summary.replaceChildren();
-    if (workspace === 'factoryLayout' && resource) { summaryRow(summary, 'Object type', 'Physical Resource'); summaryRow(summary, 'ID', resource.id); summaryRow(summary, 'Active', resource.active ? 'Yes' : 'No'); summaryRow(summary, 'Assignments', String(operations.getAssignmentCount(resource.id))); }
+    if (selected.kind === 'project') { const state = project.getState(); summaryRow(summary, 'Object type', 'Project'); summaryRow(summary, 'ID', state.metadata.id); summaryRow(summary, 'Status', state.dirty ? 'Unsaved changes' : 'Saved'); summaryRow(summary, 'Operations', String(operations.getOperationCount())); summaryRow(summary, 'Connections', String(connections.getConnectionCount())); summaryRow(summary, 'Resources', String(resources.getResourceCount())); }
+    else if (workspace === 'factoryLayout' && resource) { summaryRow(summary, 'Object type', 'Physical Resource'); summaryRow(summary, 'ID', resource.id); summaryRow(summary, 'Active', resource.active ? 'Yes' : 'No'); summaryRow(summary, 'Assignments', String(operations.getAssignmentCount(resource.id))); }
     else if (workspace === 'processFlow' && operation) { summaryRow(summary, 'Object type', 'Operation'); summaryRow(summary, 'ID', operation.id); summaryRow(summary, 'Sequence', `OP ${operation.sequence}`); summaryRow(summary, 'Resource', operation.assignedResourceId ?? 'Unassigned'); }
     else if (workspace === 'processFlow' && connection) { const source = operations.getOperation(connection.sourceOperationId); const target = operations.getOperation(connection.targetOperationId); summaryRow(summary, 'Object type', 'Connection'); summaryRow(summary, 'ID', connection.id); summaryRow(summary, 'Type', connection.connectionType); summaryRow(summary, 'Source', `${source?.id ?? connection.sourceOperationId} — ${source?.name ?? 'Missing'}`); summaryRow(summary, 'Target', `${target?.id ?? connection.targetOperationId} — ${target?.name ?? 'Missing'}`); summaryRow(summary, 'Route length', routeLength(connection.routePoints).toFixed(1)); summaryRow(summary, 'Bends', String(routeBendCount(connection.routePoints))); }
     else summaryRow(summary, 'Selected items', '0');
     const operationHealth = validateOperations(operations.getOperations(), (id) => resources.getResource(id), (id) => Boolean(resources.getTemplate(id))); const resourceHealth = validateResources(resources.getPlacedResources(), resources.getTemplates(), (id) => operations.getAssignmentCount(id)); const connectionHealth = validateProcessConnections(operations.getOperations(), connections.getConnections()); const errors = operationHealth.errors + resourceHealth.errors + connectionHealth.errors; const warnings = operationHealth.warnings + resourceHealth.warnings + connectionHealth.warnings;
     validation.replaceChildren(element('div', errors ? 'validation-error' : warnings ? 'validation-warning' : 'validation-healthy', errors ? '● Project has errors' : warnings ? '● Review warnings' : '● Project healthy')); const metrics = element('div', 'validation-metrics'); metrics.append(element('span', '', `${errors} Errors`), element('span', '', `${warnings} Warnings`)); validation.append(metrics);
-    const issues = workspace === 'processFlow' && operation ? operationHealth.issues.filter((entry) => entry.operationId === operation.id) : workspace === 'processFlow' && connection ? connectionHealth.issues.filter((entry) => entry.connectionId === connection.id) : workspace === 'factoryLayout' && resource ? resourceHealth.issues.filter((entry) => entry.resourceId === resource.id) : [];
-    if (issues.length) { const list = element('ul', 'validation-issues'); issues.forEach((entry) => list.append(element('li', `validation-issue validation-issue--${entry.severity}`, entry.message))); validation.append(list); }
+    const issueEntries: ValidationListEntry[] = [];
+    for (const entry of operationHealth.issues) {
+      const affected = operations.getOperation(entry.operationId); const location = affected ? `OP ${affected.sequence} — ${affected.name}` : `Operation ${entry.operationId}`;
+      issueEntries.push({ severity: entry.severity, location, message: entry.message, navigate: () => { workspaces.activate('processFlow'); operations.selectOperation(entry.operationId); revealOperation(entry.operationId); reportStatus(`Showing validation issue at ${location}`); } });
+    }
+    for (const entry of resourceHealth.issues) {
+      const affected = resources.getResource(entry.resourceId); const location = affected ? `${affected.id} — ${affected.name}` : `Resource ${entry.resourceId}`;
+      issueEntries.push({ severity: entry.severity, location, message: entry.message, navigate: () => { workspaces.activate('factoryLayout'); resources.selectResource(entry.resourceId); revealResource(entry.resourceId); reportStatus(`Showing validation issue at ${location}`); } });
+    }
+    for (const entry of connectionHealth.issues) {
+      if (entry.connectionId) {
+        const location = `Connection ${entry.connectionId}`;
+        issueEntries.push({ severity: entry.severity, location, message: entry.message, navigate: () => { workspaces.activate('processFlow'); connections.selectConnection(entry.connectionId!); revealConnection(entry.connectionId!); reportStatus(`Showing validation issue at ${location}`); } });
+      } else if (entry.operationId) {
+        const affected = operations.getOperation(entry.operationId); const location = affected ? `OP ${affected.sequence} — ${affected.name}` : `Operation ${entry.operationId}`;
+        issueEntries.push({ severity: entry.severity, location, message: entry.message, navigate: () => { workspaces.activate('processFlow'); operations.selectOperation(entry.operationId!); revealOperation(entry.operationId!); reportStatus(`Showing validation issue at ${location}`); } });
+      } else {
+        issueEntries.push({ severity: entry.severity, location: 'Process Flow', message: entry.message, navigate: () => { workspaces.activate('processFlow'); reportStatus('Showing Process Flow validation issue'); } });
+      }
+    }
+    issueEntries.sort((left, right) => left.severity === right.severity ? left.location.localeCompare(right.location) || left.message.localeCompare(right.message) : left.severity === 'error' ? -1 : 1);
+    if (issueEntries.length) {
+      validation.append(element('div', 'validation-list-heading', `${issueEntries.length} issue${issueEntries.length === 1 ? '' : 's'} — select one to locate it`));
+      const list = element('ul', 'validation-issues');
+      for (const entry of issueEntries) {
+        const item = element('li', `validation-issue validation-issue--${entry.severity}`); const button = actionButton(`${entry.location}: ${entry.message}`, 'validation-issue__button');
+        button.replaceChildren(element('span', 'validation-issue__icon', entry.severity === 'error' ? '⛔' : '⚠'), element('strong', 'validation-issue__location', entry.location), element('span', 'validation-issue__message', entry.message));
+        button.setAttribute('aria-label', `${entry.severity === 'error' ? 'Error' : 'Warning'} at ${entry.location}: ${entry.message}. Select to locate.`); button.addEventListener('click', entry.navigate); item.append(button); list.append(item);
+      }
+      validation.append(list);
+    }
   };
-  const unsubscribers = [resources.subscribe(render), operations.subscribe(render), connections.subscribe(render), workspaces.subscribe(render), selection.subscribe(render)]; render();
+  const unsubscribers = [resources.subscribe(render), operations.subscribe(render), connections.subscribe(render), workspaces.subscribe(render), selection.subscribe(render), project.subscribe(render)]; render();
   return { element: sidebar, dispose: () => unsubscribers.forEach((unsubscribe) => unsubscribe()) };
 }

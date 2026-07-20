@@ -15,6 +15,7 @@ export interface StatusBarController {
   setSelectionLabel(label: string): void;
   setHealth(errors: number, warnings: number): void;
   setWorkspace(workspace: string): void;
+  setProject(name: string, dirty: boolean): void;
 }
 
 export function createStatusBar(): StatusBarController {
@@ -36,10 +37,11 @@ export function createStatusBar(): StatusBarController {
   const connections = element('span', 'statusbar__connections', 'Connections: 0');
   const activeTool = element('span', 'statusbar__tool', 'Tool: Select');
   const health = element('span', 'statusbar__health', 'Health: Healthy');
-  bar.append(project, workspace, activeTool, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, connections, health, element('span', '', 'Workspace + Connection Foundation'));
+  bar.append(project, workspace, activeTool, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, connections, health, element('span', '', 'Project Persistence'));
   return {
     element: bar,
     setMessage: (text) => { message.textContent = text; },
+    setProject: (name, dirty) => { project.textContent = `${name}${dirty ? ' *' : ''}`; },
     setWorkspace: (value) => { workspace.textContent = `Workspace: ${value}`; },
     setZoom: (value) => { zoom.textContent = `${Math.round(value * 100)}%`; },
     setGridVisible: (visible) => { grid.textContent = `Grid: ${visible ? 'On' : 'Off'}`; },

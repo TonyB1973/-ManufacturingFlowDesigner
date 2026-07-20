@@ -12,7 +12,8 @@ export type ResourceStoreChange =
   | { readonly kind: 'updated'; readonly resource: PlacedResource }
   | { readonly kind: 'deleted'; readonly resourceId: string }
   | { readonly kind: 'selection'; readonly resourceId: string | null }
-  | { readonly kind: 'template'; readonly templateId: string };
+  | { readonly kind: 'template'; readonly templateId: string }
+  | { readonly kind: 'reset' };
 
 export type ResourceStoreListener = (change: ResourceStoreChange) => void;
 export type DeleteResult = 'deleted' | 'locked' | 'none';
@@ -152,6 +153,16 @@ export class ResourceStore {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+
+  public replaceAll(templates: readonly ResourceTemplate[], resources: readonly PlacedResource[], notify = true): void {
+    this.templateMap.clear();
+    templates.forEach((template) => this.templateMap.set(template.id, { ...template, tags: [...template.tags] }));
+    this.resources.clear();
+    resources.forEach((resource) => this.resources.set(resource.id, { ...resource, selected: false }));
+    if (notify) this.publishReset();
+  }
+
+  public publishReset(): void { this.notify({ kind: 'reset' }); }
 
   public dispose(): void { this.unsubscribeSelection(); }
 

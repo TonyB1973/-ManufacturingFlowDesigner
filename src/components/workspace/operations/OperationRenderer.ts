@@ -19,7 +19,8 @@ export class OperationRenderer {
   }
   public dispose(): void { this.unsubscribe(); this.unsubscribeResources(); this.layer.replaceChildren(); this.nodes.clear(); }
   private readonly change = (change: OperationStoreChange): void => {
-    if (change.kind === 'created') this.add(change.operation);
+    if (change.kind === 'reset') { this.layer.replaceChildren(); this.nodes.clear(); this.store.getOperations().forEach((operation) => this.add(operation)); }
+    else if (change.kind === 'created') this.add(change.operation);
     else if (change.kind === 'updated') this.render(change.operation);
     else if (change.kind === 'deleted') { this.nodes.get(change.operationId)?.group.remove(); this.nodes.delete(change.operationId); }
     else this.renderAll();
