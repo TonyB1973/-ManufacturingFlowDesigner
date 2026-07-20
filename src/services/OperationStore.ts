@@ -75,6 +75,12 @@ export class OperationStore {
     return operation;
   }
 
+  public restoreOperation(operation: OperationInstance): boolean {
+    if (this.operations.has(operation.id) || !this.templates.has(operation.templateId) || !this.isValidPatch(operation)) return false;
+    const restored = { ...operation, selected: false };
+    this.operations.set(restored.id, restored); this.notify({ kind: 'created', operation: restored }); this.notify({ kind: 'validation' }); return true;
+  }
+
   public selectOperation(operationId: string): boolean {
     if (!this.operations.has(operationId)) return false;
     this.selection.select({ kind: 'operation', id: operationId });
@@ -103,12 +109,13 @@ export class OperationStore {
   public deleteSelected(): OperationDeleteResult {
     const operation = this.getSelectedOperation();
     if (!operation) return 'none';
-    if (operation.locked) return 'locked';
-    this.operations.delete(operation.id);
-    this.selection.clear();
-    this.notify({ kind: 'deleted', operationId: operation.id });
-    this.notify({ kind: 'validation' });
-    return 'deleted';
+    return this.deleteOperation(operation.id);
+  }
+
+  public deleteOperation(operationId: string): OperationDeleteResult {
+    const operation = this.operations.get(operationId); if (!operation) return 'none'; if (operation.locked) return 'locked';
+    this.operations.delete(operationId); const selected = this.selection.getSelection(); if (selected.kind === 'operation' && selected.id === operationId) this.selection.clear();
+    this.notify({ kind: 'deleted', operationId }); this.notify({ kind: 'validation' }); return 'deleted';
   }
 
   public normalizeSequences(): void {

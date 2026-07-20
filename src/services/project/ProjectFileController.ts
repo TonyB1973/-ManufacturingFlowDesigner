@@ -11,11 +11,11 @@ export class ProjectFileController implements ProjectFileCommands {
   private handle: ProjectFileHandle | null = null;
   private busy = false;
   private readonly beforeUnload = (event: BeforeUnloadEvent): void => { if (!this.session.isDirty()) return; event.preventDefault(); event.returnValue = ''; };
-  public constructor(private readonly session: ProjectSessionService, private readonly files: ProjectFileService, private readonly dialogs: ProjectDialogsController, private readonly setBusy: (busy: boolean) => void) {
+  public constructor(private readonly session: ProjectSessionService, private readonly files: ProjectFileService, private readonly dialogs: ProjectDialogsController, private readonly setBusy: (busy: boolean) => void, private readonly beforeReplace: () => void = () => {}) {
     window.addEventListener('beforeunload', this.beforeUnload);
     files.registerLaunchConsumer((opened) => { void this.acceptOpenedFile(opened); }, (error) => { void this.run(async () => { throw error; }, 'Project could not be opened'); });
   }
-  public async newProject(): Promise<void> { await this.run(async () => { if (!await this.allowReplace('create a new project')) { reportStatus('New project cancelled'); return; } this.handle = null; this.session.newProject(); reportStatus('New project created'); }, 'New project could not be created'); }
+  public async newProject(): Promise<void> { await this.run(async () => { if (!await this.allowReplace('create a new project')) { reportStatus('New project cancelled'); return; } this.beforeReplace(); this.handle = null; this.session.newProject(); reportStatus('New project created'); }, 'New project could not be created'); }
   public async open(): Promise<void> {
     await this.run(async () => {
       if (!await this.allowReplace('open another project')) { reportStatus('Open cancelled'); return; }
@@ -29,7 +29,7 @@ export class ProjectFileController implements ProjectFileCommands {
   public dispose(): void { window.removeEventListener('beforeunload', this.beforeUnload); }
   private async allowReplace(action: string): Promise<boolean> { return !this.session.isDirty() || this.dialogs.confirmDiscard(action); }
   private async acceptOpenedFile(opened: NonNullable<Awaited<ReturnType<ProjectFileService['open']>>>): Promise<void> { await this.run(async () => { if (!await this.allowReplace('open the launched project')) { reportStatus('Open cancelled'); return; } this.loadCandidate(opened); }, 'Project could not be opened'); }
-  private loadCandidate(opened: NonNullable<Awaited<ReturnType<ProjectFileService['open']>>>): void { const candidate = deserializeProject(opened.text); this.session.openProject(candidate.document, opened.name); this.handle = opened.handle; reportStatus(candidate.migratedFrom ? `Project opened and migrated from schema ${candidate.migratedFrom}` : `Project opened: ${opened.name}`); }
+  private loadCandidate(opened: NonNullable<Awaited<ReturnType<ProjectFileService['open']>>>): void { const candidate = deserializeProject(opened.text); this.beforeReplace(); this.session.openProject(candidate.document, opened.name); this.handle = opened.handle; reportStatus(candidate.migratedFrom ? `Project opened and migrated from schema ${candidate.migratedFrom}` : `Project opened: ${opened.name}`); }
   private async write(saveAs: boolean): Promise<boolean> {
     let successful = false;
     await this.run(async () => {

@@ -5,6 +5,7 @@ import {
 import type { OperationCategory, OperationTemplate } from '../../models/operations/OperationTemplate';
 import type { OperationStore } from '../../services/OperationStore';
 import { element } from '../../ui/dom';
+import { CANCEL_ACTIVE_INTERACTIONS_EVENT } from '../../core/events/uiEvents';
 
 interface DragState {
   readonly pointerId: number; readonly template: OperationTemplate; readonly startX: number;
@@ -81,6 +82,11 @@ export function createOperationLibrary(store: OperationStore): OperationLibraryC
   };
   const pointerUp = (event: PointerEvent): void => finish(event, false);
   const pointerCancel = (event: PointerEvent): void => finish(event, true);
+  const cancelActiveDrag = (): void => {
+    if (!drag) return; if (drag.captureElement.hasPointerCapture(drag.pointerId)) drag.captureElement.releasePointerCapture(drag.pointerId);
+    if (drag.active) dispatchOperationDrag(OPERATION_DRAG_ENDED_EVENT, { templateId: drag.template.id, clientX: drag.startX, clientY: drag.startY, altKey: false, cancelled: true });
+    drag.ghost?.remove(); document.body.classList.remove('resource-template-dragging'); drag = null;
+  };
   const keyDown = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const templateId = (event.target as Element).closest<HTMLElement>('[data-operation-template-id]')?.dataset.operationTemplateId;
@@ -89,6 +95,7 @@ export function createOperationLibrary(store: OperationStore): OperationLibraryC
   search.addEventListener('input', render); category.addEventListener('change', () => { selectedCategory = category.value as OperationCategory | 'All'; render(); });
   results.addEventListener('pointerdown', pointerDown); results.addEventListener('keydown', keyDown);
   document.addEventListener('pointermove', pointerMove); document.addEventListener('pointerup', pointerUp); document.addEventListener('pointercancel', pointerCancel);
+  document.addEventListener(CANCEL_ACTIVE_INTERACTIONS_EVENT, cancelActiveDrag);
   render();
-  return { element: library, dispose: () => { document.removeEventListener('pointermove', pointerMove); document.removeEventListener('pointerup', pointerUp); document.removeEventListener('pointercancel', pointerCancel); drag?.ghost?.remove(); document.body.classList.remove('resource-template-dragging'); } };
+  return { element: library, dispose: () => { document.removeEventListener('pointermove', pointerMove); document.removeEventListener('pointerup', pointerUp); document.removeEventListener('pointercancel', pointerCancel); document.removeEventListener(CANCEL_ACTIVE_INTERACTIONS_EVENT, cancelActiveDrag); drag?.ghost?.remove(); document.body.classList.remove('resource-template-dragging'); } };
 }

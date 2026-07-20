@@ -1,4 +1,4 @@
-import { CANVAS_COMMAND_EVENT, type CanvasCommand } from '../../../core/events/uiEvents';
+import { CANCEL_ACTIVE_INTERACTIONS_EVENT, CANVAS_COMMAND_EVENT, type CanvasCommand } from '../../../core/events/uiEvents';
 import { createCanvasState } from '../../../models/canvas/CanvasState';
 import type { ResourceStore } from '../../../services/ResourceStore';
 import type { OperationStore } from '../../../services/OperationStore';
@@ -33,6 +33,7 @@ import { CanvasInteractionController } from './CanvasInteractionController';
 import { createCanvasToolbar, type CanvasToolbarCommand } from './CanvasToolbar';
 import { EngineeringGrid } from './EngineeringGrid';
 import { centreOrigin, screenToWorld, zoomAroundPoint, type Point, type ViewportSize } from './ViewportTransform';
+import type { CommandFactory } from '../../../services/history/CommandFactory';
 
 export interface CanvasViewportCallbacks {
   readonly onZoomChange: (zoom: number) => void;
@@ -48,10 +49,11 @@ export interface CanvasViewportCallbacks {
 
 export interface CanvasViewportController {
   readonly element: HTMLElement;
+  cancelActiveInteractions(): void;
   dispose(): void;
 }
 
-export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, workspaceStore: WorkspaceStore, selectionStore: SelectionController, callbacks: CanvasViewportCallbacks): CanvasViewportController {
+export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, workspaceStore: WorkspaceStore, selectionStore: SelectionController, commands: CommandFactory, callbacks: CanvasViewportCallbacks): CanvasViewportController {
   const state = createCanvasState();
   const snap = new SnapService();
   const workspace = element('main', 'workspace');
@@ -187,14 +189,15 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     snap,
     callbacks.onStatusChange,
     callbacks.requestResourceDeletion,
+    commands,
   );
-  let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange);
+  let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange, commands);
   const previewRoute = (sourceId: string, targetId: string, sourceAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor, targetAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor) => {
     const source = operationStore.getOperation(sourceId); const target = operationStore.getOperation(targetId); if (!source || !target) return { points: [], status: 'fallback' as const };
     const obstacles = operationStore.getOperations().filter((operation) => operation.visible && operation.id !== sourceId && operation.id !== targetId).map(operationBounds);
     const route = routeOrthogonal({ source: anchorWorldPosition(source, sourceAnchor), sourceDirection: anchorDirection(sourceAnchor), target: anchorWorldPosition(target, targetAnchor), targetDirection: anchorDirection(targetAnchor), obstacles, clearance: 16 }); return { points: route.points, status: route.fallback ? 'fallback' as const : 'clear' as const };
   };
-  let connectionInteraction: ConnectionInteractionController | null = new ConnectionInteractionController(viewport, application, state, operationStore, connectionStore, grid.getInteractionLayer(), { setTool: (tool) => { if (state.tool !== tool) runCommand(tool); }, onStatus: callbacks.onStatusChange, routePreview: previewRoute });
+  let connectionInteraction: ConnectionInteractionController | null = new ConnectionInteractionController(viewport, application, state, operationStore, connectionStore, commands, grid.getInteractionLayer(), { setTool: (tool) => { if (state.tool !== tool) runCommand(tool); }, onStatus: callbacks.onStatusChange, routePreview: previewRoute });
 
   const interaction = new CanvasInteractionController(viewport, application, {
     getZoom: () => state.zoom,
@@ -232,12 +235,12 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
 
   const placeTemplate = (templateId: string, viewportPoint: Point, bypassSnap: boolean): void => {
     const worldPoint = snap.snapPoint(screenToWorld(viewportPoint, state), bypassSnap);
-    const resource = resourceStore.addResource(templateId, worldPoint.x, worldPoint.y);
+    const resource = commands.addResource(templateId, worldPoint.x, worldPoint.y);
     if (resource) callbacks.onStatusChange(`Resource placed: ${resource.name}`);
   };
   function placeOperation(templateId: string, viewportPoint: Point, bypassSnap: boolean): void {
     const worldPoint = snap.snapPoint(screenToWorld(viewportPoint, state), bypassSnap);
-    const operation = operationStore.addOperation(templateId, worldPoint.x, worldPoint.y);
+    const operation = commands.addOperation(templateId, worldPoint.x, worldPoint.y);
     if (operation) callbacks.onStatusChange(`Operation placed: OP ${operation.sequence} ${operation.name}`);
   }
 
@@ -312,7 +315,9 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   document.addEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);
   const activateWorkspace = (workspaceId: WorkspaceId): void => workspaceStore.activate(workspaceId);
   processTab.addEventListener('click', () => activateWorkspace('processFlow')); layoutTab.addEventListener('click', () => activateWorkspace('factoryLayout'));
+  const cancelActiveInteractions = (): void => { resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool === 'connect' || state.tool === 'delete-link') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
   const renderWorkspace = (workspaceId: WorkspaceId): void => {
+    if (workspaceId !== activeWorkspace) cancelActiveInteractions();
     saveViewport(); activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.clear(); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
     const processActive = workspaceId === 'processFlow'; toolbar.setConnectionToolsEnabled(processActive); processTab.setAttribute('aria-selected', String(processActive)); layoutTab.setAttribute('aria-selected', String(!processActive)); processTab.tabIndex = processActive ? 0 : -1; layoutTab.tabIndex = processActive ? -1 : 0; canvasTitle.textContent = processActive ? 'Process Flow — Operations' : 'Factory Layout — Physical Resources'; viewport.setAttribute('aria-label', `${processActive ? 'Process Flow' : 'Factory Layout'} engineering canvas. Use the mouse wheel to zoom and middle mouse or Space plus drag to pan.`); callbacks.onWorkspaceChange(workspaceId); callbacks.onStatusChange(`Workspace: ${processActive ? 'Process Flow' : 'Factory Layout'}`); requestRender();
   };
@@ -321,6 +326,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
 
   return {
     element: workspace,
+    cancelActiveInteractions,
     dispose: () => {
       interaction.dispose();
       resourceInteraction?.dispose();

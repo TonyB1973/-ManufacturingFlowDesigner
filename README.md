@@ -2,9 +2,23 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
-## Sprint 2.1 scope
+## Sprint 2.2 scope
 
-Sprint 2.1 introduces safe local project persistence with the versioned, human-readable `.mflow` format. New, Open, Save, and Save As are available from the File ribbon. The UI reports the project name and dirty state in the title bar and Project Explorer, and selecting the project root exposes editable project properties.
+Sprint 2.2 adds bounded multi-step Undo and Redo through explicit reversible application commands. The Edit ribbon exposes live Undo/Redo availability and descriptions, the status bar reports history counts, and keyboard shortcuts work whenever the application—not a text-editing control—has focus. Sprint 2.1 project persistence, dirty-state safeguards, and workspace separation remain intact.
+
+## Undo, Redo, and command history
+
+Undoable actions include project metadata and engineering settings; adding, duplicating, deleting, moving, resizing, renaming, activating, showing, locking, rotating, and changing capacity for physical resources; adding, deleting, moving, resizing, renaming, sequencing, timing, assigning, showing, locking, and editing operations; and creating, deleting, reversing, labeling, typing, showing, and locking process connections.
+
+Meaningful descriptions identify the action and affected item. Undo and Redo buttons disable immediately when unavailable and expose the next description in their tooltip. Supported shortcuts are `Ctrl+Z` for Undo, `Ctrl+Y` or `Ctrl+Shift+Z` for Redo, and the equivalent `Meta+Z`/`Meta+Shift+Z` combinations. Native editing Undo is never intercepted inside inputs, text areas, selects, or contenteditable controls.
+
+Deleting an assigned physical resource is one compound action that restores the same resource ID and all previous operation assignments on Undo. Deleting an operation similarly includes every attached process connection and restores original IDs and anchors. Transactions execute atomically, Undo children in reverse order, and Redo them in original order.
+
+Live resource and operation dragging remains responsive but commits only one Move history entry on pointer release. Escape, pointer cancellation, lost capture, workspace switching, project replacement, Undo, and Redo cancel incomplete interactions safely. Invalid or unchanged Properties values create no entry.
+
+History is limited to 200 entries and is intentionally excluded from `.mflow` files. Selection, validation, derived routing, pan, zoom, Canvas Focus, workspace switching, and temporary display controls are not undoable. Both workspace viewports still persist as project data, but ordinary view navigation remains outside history.
+
+Successful Save or Save As records the current history position as the clean checkpoint without clearing Undo or Redo. Returning exactly to that position with Undo clears the dirty marker; Redo away from it restores the marker. New and Open clear all previous-project history and start clean. A cancelled or failed save does not move the checkpoint.
 
 ## Technology
 
@@ -45,7 +59,7 @@ Open parses, migrates, and validates a complete candidate before changing the cu
 
 New and Open display an accessible Cancel/Discard prompt when unsaved changes exist. Closing or navigating away also invokes the browser safeguard. Save updates `modifiedUtc` and clears dirty state only after a successful write or download. Browsers with the File System Access API can reuse a selected file handle; other browsers download a new `.mflow` file and use a standard file picker for Open. Installed supporting PWAs can be registered as `.mflow` file handlers.
 
-There is no autosave or recovery file in Sprint 2.1. Save intentionally remains an explicit engineering action.
+There is no autosave or recovery file in Sprint 2.2. Save intentionally remains an explicit engineering action.
 
 ## Workspaces and domain model
 
@@ -81,6 +95,7 @@ npm run test:operations
 npm run test:connections
 npm run test:workspaces
 npm run test:persistence
+npm run test:history
 npm run build
 git diff --check
 ```
@@ -94,14 +109,17 @@ git diff --check
 - `ProjectSessionService` owns metadata, settings, dirty state, coordinated replacement, and stable-ID continuation.
 - `ProjectFileService` isolates browser file capabilities and fallbacks.
 - `ProjectFileController` coordinates user commands, unsaved guards, save completion, launch files, and error reporting.
+- `CommandHistoryService` owns bounded linear history, transactions, Undo/Redo state, and saved checkpoints.
+- `CommandFactory` creates focused reversible commands for normal persistent model edits.
+- `HistoryController` coordinates ribbon/keyboard actions, interaction cancellation, and status feedback.
 - Domain stores remain the runtime authorities for resources, operations, connections, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation and [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, and [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints.
 
-## Current limitations and next sprint
+## Current limitations and planned Sprint 2.3
 
-The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no autosave/recovery, cloud sync, scenario comparison, custom-template editor, walls/dimensions, multi-selection, concurrency simulation, or WPF implementation yet. Browser download fallback cannot overwrite an existing file silently.
+The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no persistent/collaborative history, autosave/recovery, cloud sync, scenario comparison, custom-template editor, walls/dimensions, concurrency simulation, or WPF history implementation yet. Browser download fallback cannot overwrite an existing file silently.
 
-Sprint 2.2 is planned to add undo and redo as a separate command-history architecture, including clear policy for project replacement and dirty-state interaction.
+Sprint 2.3 is planned to add copy, paste, duplication, and multi-selection foundations.
 
-Development for this sprint is performed on `feature/sprint-2.1-project-persistence`.
+Development for this sprint is performed on `feature/sprint-2.2-undo-redo`.

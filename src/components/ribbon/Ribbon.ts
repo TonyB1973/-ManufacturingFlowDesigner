@@ -3,8 +3,9 @@ import { dispatchCanvasCommand, reportPlaceholder, type CanvasCommand } from '..
 import { actionButton, element } from '../../ui/dom';
 import type { WorkspaceStore } from '../../services/WorkspaceStore';
 import type { ProjectFileCommands } from '../../services/project/ProjectFileController';
+import type { HistoryCommands } from '../../services/history/HistoryController';
 
-export interface RibbonController { readonly element: HTMLElement; setFileCommands(commands: ProjectFileCommands): void; setFileBusy(busy: boolean): void; dispose(): void; }
+export interface RibbonController { readonly element: HTMLElement; setFileCommands(commands: ProjectFileCommands): void; setHistoryCommands(commands: HistoryCommands): void; setFileBusy(busy: boolean): void; dispose(): void; }
 
 export function createRibbon(workspaceStore?: WorkspaceStore): RibbonController {
   const ribbon = element('section', 'ribbon');
@@ -13,6 +14,8 @@ export function createRibbon(workspaceStore?: WorkspaceStore): RibbonController 
   tabs.setAttribute('role', 'tablist');
   const content = element('div', 'ribbon__content');
   let fileCommands: ProjectFileCommands | null = null;
+  let historyCommands: HistoryCommands | null = null;
+  let unsubscribeHistory: (() => void) | null = null;
   let fileBusy = false;
 
   const activate = (index: number): void => {
@@ -30,7 +33,9 @@ export function createRibbon(workspaceStore?: WorkspaceStore): RibbonController 
         button.addEventListener('click', () => {
           const canvasCommand = canvasCommands.get(command);
           const fileCommand = fileCommandNames.get(command);
+          const historyCommand = historyCommandNames.get(command);
           if (fileCommand && fileCommands) void fileCommands[fileCommand]();
+          else if (historyCommand && historyCommands) historyCommands[historyCommand]();
           else if (canvasCommand) dispatchCanvasCommand(canvasCommand);
           else reportPlaceholder(command);
         });
@@ -42,7 +47,7 @@ export function createRibbon(workspaceStore?: WorkspaceStore): RibbonController 
     updateWorkspaceCommands();
   };
 
-  const updateWorkspaceCommands = (): void => { const workspace = workspaceStore?.getActive() ?? 'processFlow'; content.querySelectorAll<HTMLButtonElement>('[data-command-name]').forEach((button) => { const command = button.dataset.commandName; button.disabled = (fileBusy && Boolean(command && fileCommandNames.has(command))) || ((command === 'Add Operation' || command === 'Connect' || command === 'Delete Link') && workspace !== 'processFlow') || (command === 'Add Resource' && workspace !== 'factoryLayout'); }); };
+  const updateWorkspaceCommands = (): void => { const workspace = workspaceStore?.getActive() ?? 'processFlow'; const history = historyCommands?.getState(); content.querySelectorAll<HTMLButtonElement>('[data-command-name]').forEach((button) => { const command = button.dataset.commandName; button.disabled = (fileBusy && Boolean(command && fileCommandNames.has(command))) || (command === 'Undo' && !history?.canUndo) || (command === 'Redo' && !history?.canRedo) || ((command === 'Add Operation' || command === 'Connect' || command === 'Delete Link') && workspace !== 'processFlow') || (command === 'Add Resource' && workspace !== 'factoryLayout'); if (command === 'Undo') { const label = history?.undoDescription ? `Undo ${history.undoDescription}` : 'Nothing to undo'; button.title = `${label} (Ctrl+Z)`; button.setAttribute('aria-label', label); } else if (command === 'Redo') { const label = history?.redoDescription ? `Redo ${history.redoDescription}` : 'Nothing to redo'; button.title = `${label} (Ctrl+Y or Ctrl+Shift+Z)`; button.setAttribute('aria-label', label); } }); };
 
   RIBBON_TABS.forEach((tab, index) => {
     const button = actionButton(tab.name, 'ribbon-tab');
@@ -53,10 +58,11 @@ export function createRibbon(workspaceStore?: WorkspaceStore): RibbonController 
   ribbon.append(tabs, content);
   activate(3);
   const unsubscribe = workspaceStore?.subscribe(updateWorkspaceCommands);
-  return { element: ribbon, setFileCommands: (commands) => { fileCommands = commands; }, setFileBusy: (busy) => { fileBusy = busy; updateWorkspaceCommands(); }, dispose: () => unsubscribe?.() };
+  return { element: ribbon, setFileCommands: (commands) => { fileCommands = commands; }, setHistoryCommands: (commands) => { unsubscribeHistory?.(); historyCommands = commands; unsubscribeHistory = commands.subscribe(updateWorkspaceCommands); updateWorkspaceCommands(); }, setFileBusy: (busy) => { fileBusy = busy; updateWorkspaceCommands(); }, dispose: () => { unsubscribe?.(); unsubscribeHistory?.(); } };
 }
 
 const fileCommandNames = new Map<string, keyof ProjectFileCommands>([['New', 'newProject'], ['Open', 'open'], ['Save', 'save'], ['Save As', 'saveAs']]);
+const historyCommandNames = new Map<string, 'undo' | 'redo'>([['Undo', 'undo'], ['Redo', 'redo']]);
 
 const canvasCommands = new Map<string, CanvasCommand>([
   ['Zoom In', 'zoom-in'],

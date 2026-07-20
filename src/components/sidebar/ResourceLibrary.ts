@@ -9,6 +9,8 @@ import { RESOURCE_CATEGORIES, type ResourceCategory, type ResourceTemplate } fro
 import type { ResourceStore } from '../../services/ResourceStore';
 import { actionButton, element } from '../../ui/dom';
 import { createResourceIcon } from '../../ui/resourceIcons';
+import type { CommandFactory } from '../../services/history/CommandFactory';
+import { CANCEL_ACTIVE_INTERACTIONS_EVENT } from '../../core/events/uiEvents';
 
 export interface ResourceLibraryController {
   readonly element: HTMLElement;
@@ -25,7 +27,7 @@ interface DragState {
   ghost: HTMLElement | null;
 }
 
-export function createResourceLibrary(store: ResourceStore): ResourceLibraryController {
+export function createResourceLibrary(store: ResourceStore, commands: CommandFactory): ResourceLibraryController {
   const library = element('section', 'panel-section resource-library');
   const titleRow = element('div', 'panel-heading-row');
   const count = element('span', 'count-badge');
@@ -176,11 +178,16 @@ export function createResourceLibrary(store: ResourceStore): ResourceLibraryCont
   const handlePointerCancel = (event: PointerEvent): void => {
     if (drag?.pointerId === event.pointerId) finishDrag(event, true);
   };
+  const cancelActiveDrag = (): void => {
+    if (!drag) return; if (drag.captureElement.hasPointerCapture(drag.pointerId)) drag.captureElement.releasePointerCapture(drag.pointerId);
+    if (drag.active) dispatchResourceDrag(RESOURCE_DRAG_ENDED_EVENT, { templateId: drag.template.id, clientX: drag.startX, clientY: drag.startY, altKey: false, cancelled: true });
+    drag.ghost?.remove(); document.body.classList.remove('resource-template-dragging'); drag = null;
+  };
 
   const handleClick = (event: MouseEvent): void => {
     const button = (event.target as Element).closest<HTMLElement>('[data-favourite-template-id]');
     const templateId = button?.dataset.favouriteTemplateId;
-    if (templateId) store.toggleFavourite(templateId);
+    if (templateId) commands.toggleResourceTemplateFavourite(templateId);
   };
 
   const handleKeyDown = (event: KeyboardEvent): void => {
@@ -207,6 +214,7 @@ export function createResourceLibrary(store: ResourceStore): ResourceLibraryCont
   document.addEventListener('pointermove', handlePointerMove);
   document.addEventListener('pointerup', handlePointerUp);
   document.addEventListener('pointercancel', handlePointerCancel);
+  document.addEventListener(CANCEL_ACTIVE_INTERACTIONS_EVENT, cancelActiveDrag);
   results.addEventListener('click', handleClick);
   results.addEventListener('keydown', handleKeyDown);
   const unsubscribe = store.subscribe((change) => { if (change.kind === 'template') render(); });
@@ -219,6 +227,7 @@ export function createResourceLibrary(store: ResourceStore): ResourceLibraryCont
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
       document.removeEventListener('pointercancel', handlePointerCancel);
+      document.removeEventListener(CANCEL_ACTIVE_INTERACTIONS_EVENT, cancelActiveDrag);
       drag?.ghost?.remove();
       document.body.classList.remove('resource-template-dragging');
     },

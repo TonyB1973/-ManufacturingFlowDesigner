@@ -14,7 +14,8 @@
     "test:connections": "node scripts/verify-connection-system.mjs",
     "test:workspaces": "node scripts/verify-workspace-system.mjs",
     "test:persistence": "node scripts/verify-project-persistence.mjs",
-    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence"
+    "test:history": "node scripts/verify-history-system.mjs",
+    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

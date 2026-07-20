@@ -103,6 +103,12 @@ export class ResourceStore {
     this.resources.set(duplicate.id, duplicate); this.notify({ kind: 'created', resource: duplicate }); this.selection.select({ kind: 'resource', id: duplicate.id }); return duplicate;
   }
 
+  public restoreResource(resource: PlacedResource): boolean {
+    if (this.resources.has(resource.id) || !this.templateMap.has(resource.templateId) || !this.isValidPatch(resource)) return false;
+    const restored = { ...resource, selected: false };
+    this.resources.set(restored.id, restored); this.notify({ kind: 'created', resource: restored }); return true;
+  }
+
   public selectResource(resourceId: string): boolean {
     const resource = this.resources.get(resourceId);
     if (!resource) return false;

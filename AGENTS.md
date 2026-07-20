@@ -29,4 +29,8 @@
 27. Keep schema versions explicit; add documented migrations instead of silently changing an existing schema.
 28. Persist authored domain data and both workspace viewports, but exclude transient selection, gestures, file handles, and derived route caches.
 29. Mark a project clean only after a successful open, save, or Save As result; selection and validation updates do not make a project dirty.
+30. Route normal persistent user edits through explicit reversible application commands; commands must not retain DOM, SVG, browser-event, dialog, or file-handle objects.
+31. Keep command history transient and out of `.mflow` files. Validation, derived routes, selection, workspace switching, pan, zoom, and temporary view state are not history entries.
+32. New and Open clear history and establish a clean checkpoint. Successful Save and Save As move the saved-history checkpoint without clearing history.
+33. Commit a completed resource or operation drag as at most one Move command; cancellation restores the original state and creates no entry.
 
