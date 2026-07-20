@@ -1,4 +1,6 @@
 import { TIMING_CATEGORIES } from '../../core/constants/operationTemplates';
+import { revealConnection } from '../../core/events/connectionEvents';
+import { revealOperation } from '../../core/events/operationEvents';
 import { revealResource } from '../../core/events/resourceEvents';
 import { reportStatus } from '../../core/events/uiEvents';
 import type { ConnectionType, ProcessConnection } from '../../models/connections/ProcessConnection';
@@ -27,10 +29,17 @@ function checkbox(label: string): HTMLInputElement { const node = element('input
 function toggle(labelText: string, control: HTMLInputElement): HTMLLabelElement { const label = element('label', 'property-toggle'); label.append(control, element('span', '', labelText)); return label; }
 function summaryRow(container: HTMLElement, label: string, value: string): void { container.append(element('span', '', label), element('strong', '', value)); }
 
+interface ValidationListEntry {
+  readonly severity: 'error' | 'warning';
+  readonly location: string;
+  readonly message: string;
+  readonly navigate: () => void;
+}
+
 export function createRightSidebar(resources: ResourceStore, operations: OperationStore, connections: ConnectionStore, workspaces: WorkspaceStore, selection: SelectionController, requestDelete: (resourceId: string) => void, project: ProjectSessionService): RightSidebarController {
   const sidebar = element('aside', 'sidebar sidebar--right'); sidebar.setAttribute('aria-label', 'Inspector panels');
   const properties = element('div', 'properties-content'); const summary = element('div', 'summary-grid'); const validation = element('div', 'validation-summary');
-  sidebar.append(section('Properties', properties), section('Selection Summary', summary), section('Validation Summary', validation));
+  sidebar.append(section('Validation Issues', validation), section('Properties', properties), section('Selection Summary', summary));
   const bindNumber = (control: HTMLInputElement, commit: (value: number) => boolean, minimum: number, integer = false): void => { const run = (): void => { const value = Number(control.value); const valid = Number.isFinite(value) && value >= minimum && (!integer || Number.isInteger(value)); control.setAttribute('aria-invalid', String(!valid || (valid && !commit(value)))); }; control.addEventListener('change', run); control.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); run(); } }); };
   const bindText = (control: HTMLInputElement, commit: (value: string) => boolean): void => { const run = (): void => control.setAttribute('aria-invalid', String(!commit(control.value.trim()))); control.addEventListener('change', run); control.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); run(); } }); };
 
@@ -92,8 +101,37 @@ export function createRightSidebar(resources: ResourceStore, operations: Operati
     else summaryRow(summary, 'Selected items', '0');
     const operationHealth = validateOperations(operations.getOperations(), (id) => resources.getResource(id), (id) => Boolean(resources.getTemplate(id))); const resourceHealth = validateResources(resources.getPlacedResources(), resources.getTemplates(), (id) => operations.getAssignmentCount(id)); const connectionHealth = validateProcessConnections(operations.getOperations(), connections.getConnections()); const errors = operationHealth.errors + resourceHealth.errors + connectionHealth.errors; const warnings = operationHealth.warnings + resourceHealth.warnings + connectionHealth.warnings;
     validation.replaceChildren(element('div', errors ? 'validation-error' : warnings ? 'validation-warning' : 'validation-healthy', errors ? '● Project has errors' : warnings ? '● Review warnings' : '● Project healthy')); const metrics = element('div', 'validation-metrics'); metrics.append(element('span', '', `${errors} Errors`), element('span', '', `${warnings} Warnings`)); validation.append(metrics);
-    const issues = workspace === 'processFlow' && operation ? operationHealth.issues.filter((entry) => entry.operationId === operation.id) : workspace === 'processFlow' && connection ? connectionHealth.issues.filter((entry) => entry.connectionId === connection.id) : workspace === 'factoryLayout' && resource ? resourceHealth.issues.filter((entry) => entry.resourceId === resource.id) : [];
-    if (issues.length) { const list = element('ul', 'validation-issues'); issues.forEach((entry) => list.append(element('li', `validation-issue validation-issue--${entry.severity}`, entry.message))); validation.append(list); }
+    const issueEntries: ValidationListEntry[] = [];
+    for (const entry of operationHealth.issues) {
+      const affected = operations.getOperation(entry.operationId); const location = affected ? `OP ${affected.sequence} — ${affected.name}` : `Operation ${entry.operationId}`;
+      issueEntries.push({ severity: entry.severity, location, message: entry.message, navigate: () => { workspaces.activate('processFlow'); operations.selectOperation(entry.operationId); revealOperation(entry.operationId); reportStatus(`Showing validation issue at ${location}`); } });
+    }
+    for (const entry of resourceHealth.issues) {
+      const affected = resources.getResource(entry.resourceId); const location = affected ? `${affected.id} — ${affected.name}` : `Resource ${entry.resourceId}`;
+      issueEntries.push({ severity: entry.severity, location, message: entry.message, navigate: () => { workspaces.activate('factoryLayout'); resources.selectResource(entry.resourceId); revealResource(entry.resourceId); reportStatus(`Showing validation issue at ${location}`); } });
+    }
+    for (const entry of connectionHealth.issues) {
+      if (entry.connectionId) {
+        const location = `Connection ${entry.connectionId}`;
+        issueEntries.push({ severity: entry.severity, location, message: entry.message, navigate: () => { workspaces.activate('processFlow'); connections.selectConnection(entry.connectionId!); revealConnection(entry.connectionId!); reportStatus(`Showing validation issue at ${location}`); } });
+      } else if (entry.operationId) {
+        const affected = operations.getOperation(entry.operationId); const location = affected ? `OP ${affected.sequence} — ${affected.name}` : `Operation ${entry.operationId}`;
+        issueEntries.push({ severity: entry.severity, location, message: entry.message, navigate: () => { workspaces.activate('processFlow'); operations.selectOperation(entry.operationId!); revealOperation(entry.operationId!); reportStatus(`Showing validation issue at ${location}`); } });
+      } else {
+        issueEntries.push({ severity: entry.severity, location: 'Process Flow', message: entry.message, navigate: () => { workspaces.activate('processFlow'); reportStatus('Showing Process Flow validation issue'); } });
+      }
+    }
+    issueEntries.sort((left, right) => left.severity === right.severity ? left.location.localeCompare(right.location) || left.message.localeCompare(right.message) : left.severity === 'error' ? -1 : 1);
+    if (issueEntries.length) {
+      validation.append(element('div', 'validation-list-heading', `${issueEntries.length} issue${issueEntries.length === 1 ? '' : 's'} — select one to locate it`));
+      const list = element('ul', 'validation-issues');
+      for (const entry of issueEntries) {
+        const item = element('li', `validation-issue validation-issue--${entry.severity}`); const button = actionButton(`${entry.location}: ${entry.message}`, 'validation-issue__button');
+        button.replaceChildren(element('span', 'validation-issue__icon', entry.severity === 'error' ? '⛔' : '⚠'), element('strong', 'validation-issue__location', entry.location), element('span', 'validation-issue__message', entry.message));
+        button.setAttribute('aria-label', `${entry.severity === 'error' ? 'Error' : 'Warning'} at ${entry.location}: ${entry.message}. Select to locate.`); button.addEventListener('click', entry.navigate); item.append(button); list.append(item);
+      }
+      validation.append(list);
+    }
   };
   const unsubscribers = [resources.subscribe(render), operations.subscribe(render), connections.subscribe(render), workspaces.subscribe(render), selection.subscribe(render), project.subscribe(render)]; render();
   return { element: sidebar, dispose: () => unsubscribers.forEach((unsubscribe) => unsubscribe()) };

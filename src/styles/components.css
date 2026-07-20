@@ -139,9 +139,15 @@
 .validation-healthy { color: var(--healthy); }
 .validation-warning { color: var(--warning); }
 .validation-error { color: var(--error); }
-.validation-issues { display: grid; gap: 4px; margin-top: 9px; padding-left: 17px; color: var(--text-muted); font-size: 10px; }
-.validation-issue--error { color: #f29a9a; }
-.validation-issue--warning { color: #eab968; }
+.validation-list-heading { margin-top: 10px; color: var(--text-muted); font-size: 10px; }
+.validation-issues { display: grid; gap: 6px; margin: 7px 0 0; padding: 0; list-style: none; }
+.validation-issue__button { display: grid; grid-template-columns: auto minmax(0, 1fr); width: 100%; gap: 2px 7px; padding: 7px 8px; color: var(--text); background: #171c20; border: 1px solid var(--border); cursor: pointer; text-align: left; }
+.validation-issue__button:hover, .validation-issue__button:focus-visible { background: var(--panel-hover); border-color: var(--border-strong); outline: none; }
+.validation-issue__icon { grid-row: 1 / 3; align-self: start; font-size: 12px; line-height: 1.2; }
+.validation-issue__location { overflow: hidden; color: #cdd5dc; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.validation-issue__message { color: var(--text-muted); font-size: 10px; line-height: 1.35; }
+.validation-issue--error .validation-issue__icon, .validation-issue--error .validation-issue__message { color: #f29a9a; }
+.validation-issue--warning .validation-issue__icon, .validation-issue--warning .validation-issue__message { color: #eab968; }
 .validation-metrics { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 8px; color: var(--text-muted); border-top: 1px solid var(--border); }
 .canvas-toolbar { display: flex; align-items: center; gap: 2px; padding: 3px 7px; overflow-x: auto; overflow-y: hidden; background: #1c2126; border-bottom: 1px solid var(--border); scrollbar-width: thin; }
 .workspace-header { display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 0 8px; background: #161b20; border-bottom: 1px solid var(--border); }
