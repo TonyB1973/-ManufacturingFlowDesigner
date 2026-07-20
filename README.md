@@ -55,10 +55,12 @@ Resource interactions take priority over background canvas interactions. Middle-
 
 The right Properties inspector edits the selected resource without rebuilding the application shell:
 
+Starter resources are created at a consistent 180 × 80 world-unit size. SVG labels use measured fitting with an ellipsis and retain their full accessible name and tooltip.
+
 - Resource name
 - Read-only resource type
 - World X and Y position
-- Width and height with a minimum of 40 world units
+- Width and height with minimums of 100 and 60 world units respectively
 - Locked state
 - Visible state
 
@@ -116,4 +118,3 @@ Sprint 1.3 intentionally has no process operations, connections, routing, multi-
 Sprint 1.4 will introduce operations and process-flow modelling. Connections are not part of Sprint 1.3.
 
 Development for this sprint is performed on `feature/sprint-1.3-resource-library`.
-

@@ -2,7 +2,8 @@ import type { PlacedResource, PlacedResourcePatch } from '../models/resources/Pl
 import type { ResourceTemplate } from '../models/resources/ResourceTemplate';
 import type { ResourceIdProvider } from '../utilities/ResourceIdGenerator';
 
-export const MIN_RESOURCE_SIZE = 40;
+export const MIN_RESOURCE_WIDTH = 100;
+export const MIN_RESOURCE_HEIGHT = 60;
 
 export type ResourceStoreChange =
   | { readonly kind: 'created'; readonly resource: PlacedResource }
@@ -141,9 +142,8 @@ export class ResourceStore {
     for (const value of [patch.worldX, patch.worldY]) {
       if (value !== undefined && !Number.isFinite(value)) return false;
     }
-    for (const value of [patch.width, patch.height]) {
-      if (value !== undefined && (!Number.isFinite(value) || value < MIN_RESOURCE_SIZE)) return false;
-    }
+    if (patch.width !== undefined && (!Number.isFinite(patch.width) || patch.width < MIN_RESOURCE_WIDTH)) return false;
+    if (patch.height !== undefined && (!Number.isFinite(patch.height) || patch.height < MIN_RESOURCE_HEIGHT)) return false;
     return true;
   }
 
