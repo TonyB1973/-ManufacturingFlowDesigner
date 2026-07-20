@@ -49,6 +49,7 @@ export class OperationStore {
   public getOperations(): readonly OperationInstance[] { return [...this.operations.values()]; }
   public getOperation(id: string): OperationInstance | undefined { return this.operations.get(id); }
   public getOperationCount(): number { return this.operations.size; }
+  public getAssignmentCount(resourceId: string): number { return [...this.operations.values()].filter((operation) => operation.assignedResourceId === resourceId).length; }
 
   public getSelectedOperation(): OperationInstance | null {
     const selected = this.selection.getSelection();
@@ -131,6 +132,8 @@ export class OperationStore {
     }
     this.notify({ kind: 'validation' });
   }
+
+  public unassignResource(resourceId: string): number { let count = 0; for (const operation of this.operations.values()) { if (operation.assignedResourceId !== resourceId) continue; operation.assignedResourceId = null; count += 1; this.notify({ kind: 'updated', operation }); } if (count) this.notify({ kind: 'validation' }); return count; }
 
   public subscribe(listener: OperationStoreListener): () => void {
     this.listeners.add(listener);

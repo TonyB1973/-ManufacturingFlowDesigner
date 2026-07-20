@@ -11,6 +11,7 @@ export interface CanvasToolbarController {
   setOriginVisible(visible: boolean): void;
   setSnapEnabled(enabled: boolean): void;
   setFocusMode(active: boolean): void;
+  setConnectionToolsEnabled(enabled: boolean): void;
 }
 
 interface CommandDefinition {
@@ -76,6 +77,12 @@ export function createCanvasToolbar(onCommand: (command: CanvasToolbarCommand) =
     setGridVisible: (visible) => setPressed('grid', visible),
     setOriginVisible: (visible) => setPressed('origin', visible),
     setSnapEnabled: (enabled) => setPressed('snap', enabled),
+    setConnectionToolsEnabled: (enabled) => {
+      for (const command of ['connect', 'delete-link'] as const) {
+        const button = buttons.get(command);
+        if (button) button.disabled = !enabled;
+      }
+    },
     setFocusMode: (active) => {
       setPressed('focus', active);
       const button = buttons.get('focus');

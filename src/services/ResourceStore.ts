@@ -2,6 +2,7 @@ import type { PlacedResource, PlacedResourcePatch } from '../models/resources/Pl
 import type { ResourceTemplate } from '../models/resources/ResourceTemplate';
 import type { ResourceIdProvider } from '../utilities/ResourceIdGenerator';
 import type { SelectionController } from '../models/selection/Selection';
+import { DEFAULT_FACTORY_LAYOUT_ID } from '../models/workspace/Workspace';
 
 export const MIN_RESOURCE_WIDTH = 100;
 export const MIN_RESOURCE_HEIGHT = 60;
@@ -51,6 +52,9 @@ export class ResourceStore {
     return this.resources.get(id);
   }
 
+  public getTemplate(id: string): ResourceTemplate | undefined { return this.templateMap.get(id); }
+  public getAssignableResources(): readonly PlacedResource[] { return this.getPlacedResources().filter((resource) => resource.active && resource.layoutId === DEFAULT_FACTORY_LAYOUT_ID); }
+
   public getSelectedResource(): PlacedResource | null {
     const selected = this.selection.getSelection();
     return selected.kind === 'resource' ? this.resources.get(selected.id) ?? null : null;
@@ -73,18 +77,29 @@ export class ResourceStore {
       templateId: template.id,
       name: template.name,
       resourceType: template.resourceType,
+      layoutId: DEFAULT_FACTORY_LAYOUT_ID,
       worldX,
       worldY,
       width: template.defaultWidth,
       height: template.defaultHeight,
+      rotationDegrees: 0,
+      active: true,
       selected: false,
       locked: false,
       visible: true,
+      capacity: 1,
     };
     this.resources.set(resource.id, resource);
     this.notify({ kind: 'created', resource });
     this.selection.select({ kind: 'resource', id: resource.id });
     return resource;
+  }
+
+  public duplicateResource(resourceId: string, offset = 20): PlacedResource | null {
+    const original = this.resources.get(resourceId); if (!original) return null;
+    const base = original.name.replace(/\s+#\d+$/, ''); const siblings = [...this.resources.values()].filter((resource) => resource.templateId === original.templateId);
+    const duplicate: PlacedResource = { ...original, id: this.idProvider.next(), name: `${base} #${siblings.length + 1}`, worldX: original.worldX + offset, worldY: original.worldY + offset, selected: false, locked: false };
+    this.resources.set(duplicate.id, duplicate); this.notify({ kind: 'created', resource: duplicate }); this.selection.select({ kind: 'resource', id: duplicate.id }); return duplicate;
   }
 
   public selectResource(resourceId: string): boolean {
@@ -120,13 +135,10 @@ export class ResourceStore {
   public deleteSelected(): DeleteResult {
     const resource = this.getSelectedResource();
     if (!resource) return 'none';
-    if (resource.locked) return 'locked';
-    const resourceId = resource.id;
-    this.resources.delete(resourceId);
-    this.selection.clear();
-    this.notify({ kind: 'deleted', resourceId });
-    return 'deleted';
+    return this.deleteResource(resource.id);
   }
+
+  public deleteResource(resourceId: string): DeleteResult { const resource = this.resources.get(resourceId); if (!resource) return 'none'; if (resource.locked) return 'locked'; this.resources.delete(resourceId); if (this.getSelectedResourceId() === resourceId) this.selection.clear(); this.notify({ kind: 'deleted', resourceId }); return 'deleted'; }
 
   public toggleFavourite(templateId: string): boolean | null {
     const template = this.templateMap.get(templateId);
@@ -156,6 +168,9 @@ export class ResourceStore {
     }
     if (patch.width !== undefined && (!Number.isFinite(patch.width) || patch.width < MIN_RESOURCE_WIDTH)) return false;
     if (patch.height !== undefined && (!Number.isFinite(patch.height) || patch.height < MIN_RESOURCE_HEIGHT)) return false;
+    if (patch.rotationDegrees !== undefined && !Number.isFinite(patch.rotationDegrees)) return false;
+    if (patch.capacity !== undefined && (!Number.isInteger(patch.capacity) || patch.capacity < 1)) return false;
+    if (patch.layoutId !== undefined && !patch.layoutId.trim()) return false;
     return true;
   }
 

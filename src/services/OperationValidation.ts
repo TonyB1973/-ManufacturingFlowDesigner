@@ -1,4 +1,7 @@
 import type { OperationInstance } from '../models/operations/OperationInstance';
+import type { ResourceInstance } from '../models/resources/ResourceInstance';
+import { DEFAULT_FACTORY_LAYOUT_ID } from '../models/workspace/Workspace';
+import { isValidPhysicalResourceId } from './ResourceValidation';
 
 export type ValidationSeverity = 'error' | 'warning';
 
@@ -18,7 +21,8 @@ export interface OperationValidationSummary {
 
 export function validateOperations(
   operations: readonly OperationInstance[],
-  resourceExists: (resourceId: string) => boolean,
+  getResource: (resourceId: string) => ResourceInstance | undefined,
+  isTemplateId: (resourceId: string) => boolean = () => false,
 ): OperationValidationSummary {
   const issues: OperationValidationIssue[] = [];
   const sequenceCounts = new Map<number, number>();
@@ -28,7 +32,8 @@ export function validateOperations(
     if (!Number.isInteger(operation.sequence) || operation.sequence <= 0) issues.push(issue(operation.id, 'error', 'invalid-sequence', 'Sequence must be a positive integer.'));
     if (!Number.isFinite(operation.cycleTimeSeconds) || operation.cycleTimeSeconds <= 0) issues.push(issue(operation.id, 'error', 'invalid-cycle-time', 'Cycle time must be greater than zero.'));
     if (!operation.assignedResourceId) issues.push(issue(operation.id, 'warning', 'unassigned-resource', 'No resource is assigned.'));
-    else if (!resourceExists(operation.assignedResourceId)) issues.push(issue(operation.id, 'error', 'missing-resource', 'Assigned resource no longer exists.'));
+    else if (!isValidPhysicalResourceId(operation.assignedResourceId)) issues.push(issue(operation.id, 'error', isTemplateId(operation.assignedResourceId) ? 'template-assignment' : 'invalid-resource-id', isTemplateId(operation.assignedResourceId) ? 'A Resource Template cannot be assigned to an operation.' : 'Assigned physical resource ID is invalid.'));
+    else { const resource = getResource(operation.assignedResourceId); if (!resource) issues.push(issue(operation.id, 'error', 'missing-resource', 'Assigned physical resource no longer exists.')); else if (resource.layoutId !== DEFAULT_FACTORY_LAYOUT_ID) issues.push(issue(operation.id, 'error', 'resource-outside-layout', 'Assigned resource is outside Factory Layout.')); else if (!resource.active) issues.push(issue(operation.id, 'warning', 'inactive-resource', 'Assigned physical resource is inactive.')); }
     if (!operation.visible) issues.push(issue(operation.id, 'warning', 'hidden-operation', 'Operation is hidden from the canvas.'));
   }
   for (const operation of operations) {

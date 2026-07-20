@@ -11,7 +11,8 @@
     "test:coordinates": "node scripts/verify-coordinate-transform.mjs",
     "test:resources": "node scripts/verify-resource-system.mjs",
     "test:operations": "node scripts/verify-operation-system.mjs",
-    "test:connections": "node scripts/verify-connection-system.mjs"
+    "test:connections": "node scripts/verify-connection-system.mjs",
+    "test:workspaces": "node scripts/verify-workspace-system.mjs"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

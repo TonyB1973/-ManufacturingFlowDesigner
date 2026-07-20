@@ -1,11 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import ts from 'typescript';
-
-async function loadTypeScriptModule(relativePath) {
-  const source = await readFile(new URL(relativePath, import.meta.url), 'utf8');
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
-}
+import { loadTypeScriptModule as loadModule } from './load-typescript-module.mjs';
+const loadTypeScriptModule = (path) => loadModule(path, import.meta.url);
 function assert(condition, message) { if (!condition) throw new Error(message); }
 
 const { OperationIdGenerator } = await loadTypeScriptModule('../src/utilities/OperationIdGenerator.ts');
@@ -39,13 +33,13 @@ assert(!operations.updateOperation(first.id, { sequence: 1.5 }), 'Non-integer se
 assert(first.cycleTimeSeconds === 77.5 && first.sequence === 10, 'Rejected updates do not corrupt state');
 
 operations.updateOperation(second.id, { sequence: 10 });
-let validation = validateOperations(operations.getOperations(), (id) => Boolean(resources.getResource(id)));
+let validation = validateOperations(operations.getOperations(), (id) => resources.getResource(id));
 assert(validation.warnings === 3 && validation.errors === 0, 'Validation reports duplicate sequences and one unassigned resource deterministically');
 operations.normalizeSequences(); assert(first.sequence === 10 && second.sequence === 20, 'Normalization restores intervals of ten');
-validation = validateOperations(operations.getOperations(), (id) => Boolean(resources.getResource(id)));
+validation = validateOperations(operations.getOperations(), (id) => resources.getResource(id));
 assert(validation.warnings === 1 && validation.errors === 0, 'Normalization clears duplicate warnings');
 
-const invalidValidation = validateOperations([{ ...first, name: '', sequence: 0, cycleTimeSeconds: 0, assignedResourceId: 'missing-resource', visible: false }], () => false);
+const invalidValidation = validateOperations([{ ...first, name: '', sequence: 0, cycleTimeSeconds: 0, assignedResourceId: 'RES-9999', visible: false }], () => undefined);
 assert(invalidValidation.errors === 4, 'Invalid operation fields and broken assignments are deterministic errors');
 assert(invalidValidation.warnings === 1, 'Hidden operations are reported as a deterministic warning');
 
