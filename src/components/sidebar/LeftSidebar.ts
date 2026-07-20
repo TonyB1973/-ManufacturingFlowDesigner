@@ -1,4 +1,5 @@
 import type { OperationStore } from '../../services/OperationStore';
+import type { ConnectionStore } from '../../services/ConnectionStore';
 import type { ResourceStore } from '../../services/ResourceStore';
 import { actionButton, element } from '../../ui/dom';
 import { createOperationLibrary } from './OperationLibrary';
@@ -7,9 +8,9 @@ import { createResourceLibrary } from './ResourceLibrary';
 
 export interface LeftSidebarController { readonly element: HTMLElement; dispose(): void; }
 
-export function createLeftSidebar(resourceStore: ResourceStore, operationStore: OperationStore): LeftSidebarController {
+export function createLeftSidebar(resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore): LeftSidebarController {
   const sidebar = element('aside', 'sidebar sidebar--left'); sidebar.setAttribute('aria-label', 'Project and object libraries');
-  const explorer = createProjectExplorer(operationStore);
+  const explorer = createProjectExplorer(operationStore, connectionStore);
   const switcher = element('div', 'library-switcher'); switcher.setAttribute('role', 'tablist'); switcher.setAttribute('aria-label', 'Object library');
   const resourcesTab = actionButton('Resources', 'library-switcher__tab'); resourcesTab.setAttribute('role', 'tab');
   const operationsTab = actionButton('Operations', 'library-switcher__tab'); operationsTab.setAttribute('role', 'tab');

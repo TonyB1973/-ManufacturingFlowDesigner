@@ -15,7 +15,7 @@ export class OperationInteractionController {
   public dispose(): void { this.cancelActiveDrag(); this.viewport.removeEventListener('pointerdown', this.pointerDown); this.viewport.removeEventListener('pointermove', this.pointerMove); this.viewport.removeEventListener('pointerup', this.pointerUp); this.viewport.removeEventListener('pointercancel', this.pointerCancel); this.viewport.removeEventListener('lostpointercapture', this.lostCapture); document.removeEventListener('keydown', this.keyDown); }
   private local(event: PointerEvent): Point { const bounds = this.viewport.getBoundingClientRect(); return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }; }
   private readonly pointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) return; const target = event.target instanceof Element ? event.target.closest<SVGGElement>('[data-operation-id]') : null; const id = target?.dataset.operationId; if (!id) return;
+    if (event.button !== 0 || this.state.tool !== 'select') return; const target = event.target instanceof Element ? event.target.closest<SVGGElement>('[data-operation-id]') : null; const id = target?.dataset.operationId; if (!id) return;
     event.preventDefault(); event.stopImmediatePropagation(); this.viewport.focus({ preventScroll: true }); this.store.selectOperation(id); const operation = this.store.getOperation(id); if (!operation) return;
     if (operation.locked) { this.onStatus('Operation is locked'); return; } const world = screenToWorld(this.local(event), this.state);
     this.active = { pointerId: event.pointerId, operationId: id, offset: { x: world.x - operation.worldX, y: world.y - operation.worldY }, original: { x: operation.worldX, y: operation.worldY }, pending: null, frame: 0 };

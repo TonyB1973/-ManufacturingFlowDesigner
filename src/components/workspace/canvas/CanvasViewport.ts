@@ -3,6 +3,7 @@ import { createCanvasState } from '../../../models/canvas/CanvasState';
 import type { ResourceStore } from '../../../services/ResourceStore';
 import type { OperationStore } from '../../../services/OperationStore';
 import type { SelectionController } from '../../../models/selection/Selection';
+import type { ConnectionStore } from '../../../services/ConnectionStore';
 import { SnapService } from '../../../services/SnapService';
 import { element } from '../../../ui/dom';
 import {
@@ -16,6 +17,11 @@ import { ResourceInteractionController } from '../resources/ResourceInteractionC
 import { ResourceRenderer } from '../resources/ResourceRenderer';
 import { OperationRenderer } from '../operations/OperationRenderer';
 import { OperationInteractionController } from '../operations/OperationInteractionController';
+import { ConnectionRenderer } from '../connections/ConnectionRenderer';
+import { ConnectionInteractionController } from '../connections/ConnectionInteractionController';
+import { anchorDirection, anchorWorldPosition, operationBounds } from '../../../services/ConnectionAnchors';
+import { routeOrthogonal } from '../../../services/OrthogonalRouter';
+import { CONNECTION_REVEAL_EVENT } from '../../../core/events/connectionEvents';
 import {
   OPERATION_DRAG_ENDED_EVENT, OPERATION_DRAG_MOVED_EVENT, OPERATION_DRAG_STARTED_EVENT,
   OPERATION_KEYBOARD_PLACE_EVENT, OPERATION_REVEAL_EVENT, type OperationDragDetail,
@@ -32,6 +38,7 @@ export interface CanvasViewportCallbacks {
   readonly onFocusModeChange: (active: boolean) => void;
   readonly onStatusChange: (message: string) => void;
   readonly onSnapChange: (enabled: boolean) => void;
+  readonly onToolChange: (tool: string) => void;
 }
 
 export interface CanvasViewportController {
@@ -39,7 +46,7 @@ export interface CanvasViewportController {
   dispose(): void;
 }
 
-export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, selectionStore: SelectionController, callbacks: CanvasViewportCallbacks): CanvasViewportController {
+export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, selectionStore: SelectionController, callbacks: CanvasViewportCallbacks): CanvasViewportController {
   const state = createCanvasState();
   const snap = new SnapService();
   const workspace = element('main', 'workspace');
@@ -68,10 +75,12 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       toolbar.setOriginVisible(state.originVisible);
       toolbar.setSnapEnabled(snap.enabled);
       toolbar.setFocusMode(focusMode);
+      connectionInteraction?.viewportChanged();
       viewport.classList.toggle('canvas-viewport--pan-tool', state.tool === 'pan' || temporaryPan);
       callbacks.onZoomChange(state.zoom);
       callbacks.onGridVisibilityChange(state.gridVisible);
       callbacks.onSnapChange(snap.enabled);
+      callbacks.onToolChange(state.tool === 'delete-link' ? 'Delete Link' : `${state.tool.charAt(0).toUpperCase()}${state.tool.slice(1)}`);
     });
   };
 
@@ -91,6 +100,13 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         state.tool = state.tool === 'pan' ? 'select' : 'pan';
         callbacks.onStatusChange(state.tool === 'pan' ? 'Pan tool active' : 'Select tool active');
         break;
+      case 'connect':
+        state.tool = state.tool === 'connect' ? 'select' : 'connect';
+        break;
+      case 'delete-link':
+        state.tool = state.tool === 'delete-link' ? 'select' : 'delete-link';
+        callbacks.onStatusChange(state.tool === 'delete-link' ? 'Delete Link mode active' : 'Select tool active');
+        break;
       case 'zoom-in':
         zoomBy(1.2);
         return;
@@ -102,8 +118,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         callbacks.onStatusChange('Canvas reset to 100%');
         break;
       case 'fit':
-        centreOrigin(state, size, 1);
-        callbacks.onStatusChange('Drawing origin fitted to viewport');
+        fitVisibleObjects();
+        callbacks.onStatusChange('Visible project fitted to viewport');
         break;
       case 'grid':
         state.gridVisible = !state.gridVisible;
@@ -117,8 +133,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         callbacks.onStatusChange(`Snap ${snap.toggle() ? 'enabled' : 'disabled'}`);
         break;
       case 'delete-selection':
-        if (selectionStore.getSelection().kind === 'operation') operationInteraction?.deleteSelection();
-        else resourceInteraction?.deleteSelection();
+        if (selectionStore.getSelection().kind === 'connection') connectionInteraction?.deleteSelection();
+        else if (selectionStore.getSelection().kind === 'operation') operationInteraction?.deleteSelection(); else resourceInteraction?.deleteSelection();
         break;
       case 'clear-selection':
         selectionStore.clear();
@@ -134,6 +150,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         callbacks.onStatusChange(`Canvas Focus ${focusMode ? 'enabled' : 'disabled'}`);
         break;
     }
+    if (command === 'select' || command === 'pan' || command === 'connect' || command === 'delete-link') { resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.toolChanged(); }
     requestRender();
   };
 
@@ -142,6 +159,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
 
   const resourceRenderer = new ResourceRenderer(grid.getObjectLayer(), resourceStore);
   const operationRenderer = new OperationRenderer(grid.getOperationLayer(), operationStore, resourceStore);
+  const connectionRenderer = new ConnectionRenderer(grid.getConnectionLayer(), connectionStore, operationStore);
   let resourceInteraction: ResourceInteractionController | null = new ResourceInteractionController(
     viewport,
     application,
@@ -151,6 +169,12 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     callbacks.onStatusChange,
   );
   let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange);
+  const previewRoute = (sourceId: string, targetId: string, sourceAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor, targetAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor) => {
+    const source = operationStore.getOperation(sourceId); const target = operationStore.getOperation(targetId); if (!source || !target) return { points: [], status: 'fallback' as const };
+    const obstacles = [...operationStore.getOperations().filter((operation) => operation.visible && operation.id !== sourceId && operation.id !== targetId).map(operationBounds), ...resourceStore.getPlacedResources().filter((resource) => resource.visible).map(operationBounds)];
+    const route = routeOrthogonal({ source: anchorWorldPosition(source, sourceAnchor), sourceDirection: anchorDirection(sourceAnchor), target: anchorWorldPosition(target, targetAnchor), targetDirection: anchorDirection(targetAnchor), obstacles, clearance: 16 }); return { points: route.points, status: route.fallback ? 'fallback' as const : 'clear' as const };
+  };
+  let connectionInteraction: ConnectionInteractionController | null = new ConnectionInteractionController(viewport, application, state, operationStore, connectionStore, grid.getInteractionLayer(), { setTool: (tool) => { if (state.tool !== tool) runCommand(tool); }, onStatus: callbacks.onStatusChange, routePreview: previewRoute });
 
   const interaction = new CanvasInteractionController(viewport, application, {
     getZoom: () => state.zoom,
@@ -171,6 +195,15 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     },
     onKeyboardCommand: runCommand,
   });
+
+  function fitVisibleObjects(): void {
+    const points: Point[] = [];
+    resourceStore.getPlacedResources().filter((resource) => resource.visible).forEach((resource) => { points.push({ x: resource.worldX - resource.width / 2, y: resource.worldY - resource.height / 2 }, { x: resource.worldX + resource.width / 2, y: resource.worldY + resource.height / 2 }); });
+    operationStore.getOperations().filter((operation) => operation.visible).forEach((operation) => { points.push({ x: operation.worldX - operation.width / 2, y: operation.worldY - operation.height / 2 }, { x: operation.worldX + operation.width / 2, y: operation.worldY + operation.height / 2 }); });
+    connectionStore.getConnections().filter((connection) => connection.visible).forEach((connection) => points.push(...connection.routePoints));
+    if (!points.length) { centreOrigin(state, size, 1); return; } const minX = Math.min(...points.map((point) => point.x)); const maxX = Math.max(...points.map((point) => point.x)); const minY = Math.min(...points.map((point) => point.y)); const maxY = Math.max(...points.map((point) => point.y)); const padding = 70;
+    state.zoom = Math.min(state.maxZoom, Math.max(state.minZoom, Math.min((size.width - padding * 2) / Math.max(1, maxX - minX), (size.height - padding * 2) / Math.max(1, maxY - minY)))); state.panX = size.width / 2 - ((minX + maxX) / 2) * state.zoom; state.panY = size.height / 2 - ((minY + maxY) / 2) * state.zoom;
+  }
 
   const isInsideViewport = (clientX: number, clientY: number): boolean => {
     const bounds = viewport.getBoundingClientRect();
@@ -222,11 +255,13 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   };
   document.addEventListener(OPERATION_DRAG_STARTED_EVENT, handleOperationDrag); document.addEventListener(OPERATION_DRAG_MOVED_EVENT, handleOperationDrag); document.addEventListener(OPERATION_DRAG_ENDED_EVENT, handleOperationDrag);
   document.addEventListener(OPERATION_KEYBOARD_PLACE_EVENT, handleOperationKeyboardPlacement); document.addEventListener(OPERATION_REVEAL_EVENT, handleOperationReveal);
+  const handleConnectionReveal = (event: Event): void => { const connection = connectionStore.getConnection((event as CustomEvent<string>).detail); if (!connection?.routePoints.length) return; const minX = Math.min(...connection.routePoints.map((point) => point.x)); const maxX = Math.max(...connection.routePoints.map((point) => point.x)); const minY = Math.min(...connection.routePoints.map((point) => point.y)); const maxY = Math.max(...connection.routePoints.map((point) => point.y)); state.panX = size.width / 2 - ((minX + maxX) / 2) * state.zoom; state.panY = size.height / 2 - ((minY + maxY) / 2) * state.zoom; requestRender(); callbacks.onStatusChange(`Revealed ${connection.id}`); };
+  document.addEventListener(CONNECTION_REVEAL_EVENT, handleConnectionReveal);
 
   const handleBackgroundSelection = (event: PointerEvent): void => {
     if (event.button !== 0 || state.tool !== 'select') return;
     const target = event.target instanceof Element ? event.target : null;
-    if (!target?.closest('[data-resource-id], [data-operation-id]')) selectionStore.clear();
+    if (!target?.closest('[data-resource-id], [data-operation-id], [data-connection-id]')) selectionStore.clear();
   };
   viewport.addEventListener('pointerdown', handleBackgroundSelection);
   const isTyping = (target: EventTarget | null): boolean => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable);
@@ -262,6 +297,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       resourceInteraction = null;
       resourceRenderer.dispose();
       operationInteraction?.dispose(); operationInteraction = null; operationRenderer.dispose();
+      connectionInteraction?.dispose(); connectionInteraction = null; connectionRenderer.dispose();
       resizeObserver.disconnect();
       document.removeEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);
       document.removeEventListener(RESOURCE_DRAG_STARTED_EVENT, handleResourceDrag);
@@ -270,6 +306,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       document.removeEventListener(RESOURCE_KEYBOARD_PLACE_EVENT, handleKeyboardPlacement);
       document.removeEventListener(OPERATION_DRAG_STARTED_EVENT, handleOperationDrag); document.removeEventListener(OPERATION_DRAG_MOVED_EVENT, handleOperationDrag); document.removeEventListener(OPERATION_DRAG_ENDED_EVENT, handleOperationDrag);
       document.removeEventListener(OPERATION_KEYBOARD_PLACE_EVENT, handleOperationKeyboardPlacement); document.removeEventListener(OPERATION_REVEAL_EVENT, handleOperationReveal);
+      document.removeEventListener(CONNECTION_REVEAL_EVENT, handleConnectionReveal);
       viewport.removeEventListener('pointerdown', handleBackgroundSelection); document.removeEventListener('keydown', handleObjectKeyDown);
       if (renderFrame !== 0) cancelAnimationFrame(renderFrame);
     },

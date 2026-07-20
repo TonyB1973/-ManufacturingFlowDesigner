@@ -13,6 +13,11 @@ import { OperationStore } from '../services/OperationStore';
 import { OperationIdGenerator } from '../utilities/OperationIdGenerator';
 import { SelectionStore } from '../services/SelectionStore';
 import { validateOperations } from '../services/OperationValidation';
+import { ConnectionStore } from '../services/ConnectionStore';
+import { ConnectionIdGenerator } from '../utilities/ConnectionIdGenerator';
+import { anchorDirection, anchorWorldPosition, operationBounds } from '../services/ConnectionAnchors';
+import { routeOrthogonal } from '../services/OrthogonalRouter';
+import { validateProcessConnections } from '../services/ConnectionValidation';
 
 export interface AppShellResult {
   readonly element: HTMLElement;
@@ -26,8 +31,18 @@ export function createAppShell(): AppShellResult {
   const selectionStore = new SelectionStore();
   const resourceStore = new ResourceStore(RESOURCE_TEMPLATES, new ResourceIdGenerator(), selectionStore);
   const operationStore = new OperationStore(OPERATION_TEMPLATES, new OperationIdGenerator(), selectionStore);
-  const left = createLeftSidebar(resourceStore, operationStore);
-  const right = createRightSidebar(resourceStore, operationStore, selectionStore);
+  const connectionStore = new ConnectionStore(new ConnectionIdGenerator(), (id) => operationStore.getOperation(id), (connection) => {
+    const source = operationStore.getOperation(connection.sourceOperationId); const target = operationStore.getOperation(connection.targetOperationId);
+    if (!source || !target) return { points: [], status: 'fallback' };
+    const obstacles = [
+      ...operationStore.getOperations().filter((operation) => operation.visible && operation.id !== source.id && operation.id !== target.id).map(operationBounds),
+      ...resourceStore.getPlacedResources().filter((resource) => resource.visible).map(operationBounds),
+    ];
+    const route = routeOrthogonal({ source: anchorWorldPosition(source, connection.sourceAnchor), sourceDirection: anchorDirection(connection.sourceAnchor), target: anchorWorldPosition(target, connection.targetAnchor), targetDirection: anchorDirection(connection.targetAnchor), obstacles, clearance: 16 });
+    return { points: route.points, status: route.fallback ? 'fallback' : 'clear' };
+  }, selectionStore);
+  const left = createLeftSidebar(resourceStore, operationStore, connectionStore);
+  const right = createRightSidebar(resourceStore, operationStore, connectionStore, selectionStore);
   const statusBar = createStatusBar();
   const titleBar = createTitleBar();
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
@@ -50,6 +65,7 @@ export function createAppShell(): AppShellResult {
     statusBar,
     resourceStore,
     operationStore,
+    connectionStore,
     selectionStore,
     onFocusModeChange: (active) => shell.classList.toggle('app-shell--canvas-focus', active),
   });
@@ -57,27 +73,31 @@ export function createAppShell(): AppShellResult {
   shell.append(titleBar.element, createRibbon(), body, statusBar.element);
   const updateStatus = (): void => {
     const selected = selectionStore.getSelection();
-    const label = selected.kind === 'resource' ? `Resource ${resourceStore.getResource(selected.id)?.name ?? selected.id}` : selected.kind === 'operation' ? `Operation OP ${operationStore.getOperation(selected.id)?.sequence ?? selected.id}` : '0';
+    const label = selected.kind === 'resource' ? `Resource ${resourceStore.getResource(selected.id)?.name ?? selected.id}` : selected.kind === 'operation' ? `Operation OP ${operationStore.getOperation(selected.id)?.sequence ?? selected.id}` : selected.kind === 'connection' ? `Connection ${selected.id}` : '0';
     statusBar.setSelectionLabel(label);
     statusBar.setResourceCount(resourceStore.getResourceCount());
     statusBar.setOperationCount(operationStore.getOperationCount());
-    const health = validateOperations(operationStore.getOperations(), (id) => Boolean(resourceStore.getResource(id)));
-    statusBar.setHealth(health.errors, health.warnings); titleBar.setHealth(health.errors, health.warnings);
+    statusBar.setConnectionCount(connectionStore.getConnectionCount());
+    const operationHealth = validateOperations(operationStore.getOperations(), (id) => Boolean(resourceStore.getResource(id)));
+    const connectionHealth = validateProcessConnections(operationStore.getOperations(), connectionStore.getConnections());
+    statusBar.setHealth(operationHealth.errors + connectionHealth.errors, operationHealth.warnings + connectionHealth.warnings); titleBar.setHealth(operationHealth.errors + connectionHealth.errors, operationHealth.warnings + connectionHealth.warnings);
   };
   const unsubscribeResourceStatus = resourceStore.subscribe((change) => {
     if (change.kind === 'updated' || change.kind === 'deleted') operationStore.handleResourceChange(change.kind === 'deleted' ? change.resourceId : change.resource.id, change.kind === 'deleted');
+    if (change.kind === 'created' || change.kind === 'updated' || change.kind === 'deleted') connectionStore.recalculateAll();
     updateStatus();
   });
-  const unsubscribeOperationStatus = operationStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(updateStatus); updateStatus();
+  const unsubscribeOperationStatus = operationStore.subscribe((change) => { if (change.kind === 'deleted') { connectionStore.deleteForOperation(change.operationId); connectionStore.recalculateAll(); } else if (change.kind === 'created' || change.kind === 'updated') connectionStore.recalculateAll(); updateStatus(); });
+  const unsubscribeConnectionStatus = connectionStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(updateStatus); updateStatus();
   return {
     element: shell,
     statusBar,
     dispose: () => {
-      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeSelectionStatus();
+      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeSelectionStatus();
       left.dispose();
       right.dispose();
       workspace.dispose();
-      operationStore.dispose(); resourceStore.dispose();
+      connectionStore.dispose(); operationStore.dispose(); resourceStore.dispose();
     },
   };
 }
