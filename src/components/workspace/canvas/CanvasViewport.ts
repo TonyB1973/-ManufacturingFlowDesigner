@@ -1,6 +1,8 @@
 import { CANVAS_COMMAND_EVENT, type CanvasCommand } from '../../../core/events/uiEvents';
 import { createCanvasState } from '../../../models/canvas/CanvasState';
 import type { ResourceStore } from '../../../services/ResourceStore';
+import type { OperationStore } from '../../../services/OperationStore';
+import type { SelectionController } from '../../../models/selection/Selection';
 import { SnapService } from '../../../services/SnapService';
 import { element } from '../../../ui/dom';
 import {
@@ -12,6 +14,12 @@ import {
 } from '../../../core/events/resourceEvents';
 import { ResourceInteractionController } from '../resources/ResourceInteractionController';
 import { ResourceRenderer } from '../resources/ResourceRenderer';
+import { OperationRenderer } from '../operations/OperationRenderer';
+import { OperationInteractionController } from '../operations/OperationInteractionController';
+import {
+  OPERATION_DRAG_ENDED_EVENT, OPERATION_DRAG_MOVED_EVENT, OPERATION_DRAG_STARTED_EVENT,
+  OPERATION_KEYBOARD_PLACE_EVENT, OPERATION_REVEAL_EVENT, type OperationDragDetail,
+} from '../../../core/events/operationEvents';
 import { CanvasInteractionController } from './CanvasInteractionController';
 import { createCanvasToolbar, type CanvasToolbarCommand } from './CanvasToolbar';
 import { EngineeringGrid } from './EngineeringGrid';
@@ -31,7 +39,7 @@ export interface CanvasViewportController {
   dispose(): void;
 }
 
-export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, callbacks: CanvasViewportCallbacks): CanvasViewportController {
+export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, selectionStore: SelectionController, callbacks: CanvasViewportCallbacks): CanvasViewportController {
   const state = createCanvasState();
   const snap = new SnapService();
   const workspace = element('main', 'workspace');
@@ -109,11 +117,16 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         callbacks.onStatusChange(`Snap ${snap.toggle() ? 'enabled' : 'disabled'}`);
         break;
       case 'delete-selection':
-        resourceInteraction?.deleteSelection();
+        if (selectionStore.getSelection().kind === 'operation') operationInteraction?.deleteSelection();
+        else resourceInteraction?.deleteSelection();
         break;
       case 'clear-selection':
-        resourceStore.clearSelection();
+        selectionStore.clear();
         callbacks.onStatusChange('Selection cleared');
+        break;
+      case 'add-operation':
+        placeOperation(operationStore.getTemplates()[0]?.id ?? '', { x: size.width / 2, y: size.height / 2 }, false);
+        viewport.focus({ preventScroll: true });
         break;
       case 'focus':
         focusMode = !focusMode;
@@ -128,6 +141,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   workspace.append(toolbar.element, viewport);
 
   const resourceRenderer = new ResourceRenderer(grid.getObjectLayer(), resourceStore);
+  const operationRenderer = new OperationRenderer(grid.getOperationLayer(), operationStore, resourceStore);
   let resourceInteraction: ResourceInteractionController | null = new ResourceInteractionController(
     viewport,
     application,
@@ -136,6 +150,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     snap,
     callbacks.onStatusChange,
   );
+  let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange);
 
   const interaction = new CanvasInteractionController(viewport, application, {
     getZoom: () => state.zoom,
@@ -167,6 +182,11 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     const resource = resourceStore.addResource(templateId, worldPoint.x, worldPoint.y);
     if (resource) callbacks.onStatusChange(`Resource placed: ${resource.name}`);
   };
+  function placeOperation(templateId: string, viewportPoint: Point, bypassSnap: boolean): void {
+    const worldPoint = snap.snapPoint(screenToWorld(viewportPoint, state), bypassSnap);
+    const operation = operationStore.addOperation(templateId, worldPoint.x, worldPoint.y);
+    if (operation) callbacks.onStatusChange(`Operation placed: OP ${operation.sequence} ${operation.name}`);
+  }
 
   const handleResourceDrag = (event: Event): void => {
     const detail = (event as CustomEvent<ResourceDragDetail>).detail;
@@ -187,6 +207,34 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   document.addEventListener(RESOURCE_DRAG_MOVED_EVENT, handleResourceDrag);
   document.addEventListener(RESOURCE_DRAG_ENDED_EVENT, handleResourceDrag);
   document.addEventListener(RESOURCE_KEYBOARD_PLACE_EVENT, handleKeyboardPlacement);
+  const handleOperationDrag = (event: Event): void => {
+    const detail = (event as CustomEvent<OperationDragDetail>).detail;
+    const inside = !detail.cancelled && isInsideViewport(detail.clientX, detail.clientY);
+    viewport.classList.toggle('canvas-viewport--drop-target', inside);
+    if (event.type !== OPERATION_DRAG_ENDED_EVENT) return;
+    viewport.classList.remove('canvas-viewport--drop-target'); if (!inside) return;
+    const bounds = viewport.getBoundingClientRect(); placeOperation(detail.templateId, { x: detail.clientX - bounds.left, y: detail.clientY - bounds.top }, detail.altKey);
+  };
+  const handleOperationKeyboardPlacement = (event: Event): void => { placeOperation((event as CustomEvent<string>).detail, { x: size.width / 2, y: size.height / 2 }, false); viewport.focus({ preventScroll: true }); };
+  const handleOperationReveal = (event: Event): void => {
+    const operation = operationStore.getOperation((event as CustomEvent<string>).detail); if (!operation) return;
+    state.panX = size.width / 2 - operation.worldX * state.zoom; state.panY = size.height / 2 - operation.worldY * state.zoom; requestRender(); callbacks.onStatusChange(`Revealed OP ${operation.sequence}`);
+  };
+  document.addEventListener(OPERATION_DRAG_STARTED_EVENT, handleOperationDrag); document.addEventListener(OPERATION_DRAG_MOVED_EVENT, handleOperationDrag); document.addEventListener(OPERATION_DRAG_ENDED_EVENT, handleOperationDrag);
+  document.addEventListener(OPERATION_KEYBOARD_PLACE_EVENT, handleOperationKeyboardPlacement); document.addEventListener(OPERATION_REVEAL_EVENT, handleOperationReveal);
+
+  const handleBackgroundSelection = (event: PointerEvent): void => {
+    if (event.button !== 0 || state.tool !== 'select') return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.closest('[data-resource-id], [data-operation-id]')) selectionStore.clear();
+  };
+  viewport.addEventListener('pointerdown', handleBackgroundSelection);
+  const isTyping = (target: EventTarget | null): boolean => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable);
+  const handleObjectKeyDown = (event: KeyboardEvent): void => {
+    if (isTyping(event.target) || !application.contains(document.activeElement)) return;
+    if (event.key === 'Delete' || event.key === 'Backspace') { if (selectionStore.getSelection().kind !== 'none') event.preventDefault(); runCommand('delete-selection'); }
+  };
+  document.addEventListener('keydown', handleObjectKeyDown);
 
   const resizeObserver = new ResizeObserver((entries) => {
     const bounds = entries[0]?.contentRect;
@@ -213,12 +261,16 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       resourceInteraction?.dispose();
       resourceInteraction = null;
       resourceRenderer.dispose();
+      operationInteraction?.dispose(); operationInteraction = null; operationRenderer.dispose();
       resizeObserver.disconnect();
       document.removeEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);
       document.removeEventListener(RESOURCE_DRAG_STARTED_EVENT, handleResourceDrag);
       document.removeEventListener(RESOURCE_DRAG_MOVED_EVENT, handleResourceDrag);
       document.removeEventListener(RESOURCE_DRAG_ENDED_EVENT, handleResourceDrag);
       document.removeEventListener(RESOURCE_KEYBOARD_PLACE_EVENT, handleKeyboardPlacement);
+      document.removeEventListener(OPERATION_DRAG_STARTED_EVENT, handleOperationDrag); document.removeEventListener(OPERATION_DRAG_MOVED_EVENT, handleOperationDrag); document.removeEventListener(OPERATION_DRAG_ENDED_EVENT, handleOperationDrag);
+      document.removeEventListener(OPERATION_KEYBOARD_PLACE_EVENT, handleOperationKeyboardPlacement); document.removeEventListener(OPERATION_REVEAL_EVENT, handleOperationReveal);
+      viewport.removeEventListener('pointerdown', handleBackgroundSelection); document.removeEventListener('keydown', handleObjectKeyDown);
       if (renderFrame !== 0) cancelAnimationFrame(renderFrame);
     },
   };

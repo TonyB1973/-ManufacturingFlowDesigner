@@ -25,7 +25,7 @@ export class ResourceInteractionController {
 
   public constructor(
     private readonly viewport: HTMLElement,
-    private readonly application: HTMLElement,
+    _application: HTMLElement,
     private readonly state: CanvasState,
     private readonly store: ResourceStore,
     private readonly snap: SnapService,
@@ -46,6 +46,8 @@ export class ResourceInteractionController {
     else this.onStatus('No resource selected');
   }
 
+  public cancelActiveDrag(): void { this.cancelDrag(); }
+
   public dispose(): void {
     this.cancelDrag();
     this.viewport.removeEventListener('pointerdown', this.handlePointerDown);
@@ -65,10 +67,7 @@ export class ResourceInteractionController {
     if (event.button !== 0) return;
     const target = event.target instanceof Element ? event.target.closest<SVGGElement>('[data-resource-id]') : null;
     const resourceId = target?.dataset.resourceId;
-    if (!resourceId) {
-      if (this.state.tool === 'select') this.store.clearSelection();
-      return;
-    }
+    if (!resourceId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     this.viewport.focus({ preventScroll: true });
@@ -122,12 +121,7 @@ export class ResourceInteractionController {
       this.finishDrag(false);
       return;
     }
-    if (isTypingTarget(event.target) || !this.application.contains(document.activeElement)) return;
-    if (event.key === 'Delete' || event.key === 'Backspace') {
-      if (this.store.getSelectedResourceId()) event.preventDefault();
-      this.deleteSelection();
-      return;
-    }
+    if (isTypingTarget(event.target)) return;
     if ((event.key === 'Enter' || event.key === ' ') && event.target instanceof Element) {
       const resourceId = event.target.closest<SVGGElement>('[data-resource-id]')?.dataset.resourceId;
       if (resourceId) {

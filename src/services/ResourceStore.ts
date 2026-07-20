@@ -1,6 +1,7 @@
 import type { PlacedResource, PlacedResourcePatch } from '../models/resources/PlacedResource';
 import type { ResourceTemplate } from '../models/resources/ResourceTemplate';
 import type { ResourceIdProvider } from '../utilities/ResourceIdGenerator';
+import type { SelectionController } from '../models/selection/Selection';
 
 export const MIN_RESOURCE_WIDTH = 100;
 export const MIN_RESOURCE_HEIGHT = 60;
@@ -15,14 +16,27 @@ export type ResourceStoreChange =
 export type ResourceStoreListener = (change: ResourceStoreChange) => void;
 export type DeleteResult = 'deleted' | 'locked' | 'none';
 
+class LocalSelectionController implements SelectionController {
+  private selection: ReturnType<SelectionController['getSelection']> = { kind: 'none' };
+  private readonly listeners = new Set<Parameters<SelectionController['subscribe']>[0]>();
+  public getSelection(): ReturnType<SelectionController['getSelection']> { return this.selection; }
+  public select(selection: Parameters<SelectionController['select']>[0]): void { this.selection = selection; this.notify(); }
+  public clear(): void { this.selection = { kind: 'none' }; this.notify(); }
+  public subscribe(listener: Parameters<SelectionController['subscribe']>[0]): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  private notify(): void { for (const listener of this.listeners) listener(this.selection); }
+}
+
 export class ResourceStore {
   private readonly templateMap: Map<string, ResourceTemplate>;
   private readonly resources = new Map<string, PlacedResource>();
   private readonly listeners = new Set<ResourceStoreListener>();
-  private selectedResourceId: string | null = null;
+  private readonly selection: SelectionController;
+  private readonly unsubscribeSelection: () => void;
 
-  public constructor(templates: readonly ResourceTemplate[], private readonly idProvider: ResourceIdProvider) {
+  public constructor(templates: readonly ResourceTemplate[], private readonly idProvider: ResourceIdProvider, selection?: SelectionController) {
     this.templateMap = new Map(templates.map((template) => [template.id, { ...template, tags: [...template.tags] }]));
+    this.selection = selection ?? new LocalSelectionController();
+    this.unsubscribeSelection = this.selection.subscribe(() => this.syncSelection());
   }
 
   public getTemplates(): readonly ResourceTemplate[] {
@@ -38,11 +52,13 @@ export class ResourceStore {
   }
 
   public getSelectedResource(): PlacedResource | null {
-    return this.selectedResourceId ? this.resources.get(this.selectedResourceId) ?? null : null;
+    const selected = this.selection.getSelection();
+    return selected.kind === 'resource' ? this.resources.get(selected.id) ?? null : null;
   }
 
   public getSelectedResourceId(): string | null {
-    return this.selectedResourceId;
+    const selected = this.selection.getSelection();
+    return selected.kind === 'resource' ? selected.id : null;
   }
 
   public getResourceCount(): number {
@@ -52,7 +68,6 @@ export class ResourceStore {
   public addResource(templateId: string, worldX: number, worldY: number): PlacedResource | null {
     const template = this.templateMap.get(templateId);
     if (!template || !Number.isFinite(worldX) || !Number.isFinite(worldY)) return null;
-    this.clearSelection(false);
     const resource: PlacedResource = {
       id: this.idProvider.next(),
       templateId: template.id,
@@ -62,33 +77,26 @@ export class ResourceStore {
       worldY,
       width: template.defaultWidth,
       height: template.defaultHeight,
-      selected: true,
+      selected: false,
       locked: false,
       visible: true,
     };
     this.resources.set(resource.id, resource);
-    this.selectedResourceId = resource.id;
     this.notify({ kind: 'created', resource });
+    this.selection.select({ kind: 'resource', id: resource.id });
     return resource;
   }
 
   public selectResource(resourceId: string): boolean {
     const resource = this.resources.get(resourceId);
     if (!resource) return false;
-    if (this.selectedResourceId === resourceId) return true;
-    this.clearSelection(false);
-    resource.selected = true;
-    this.selectedResourceId = resourceId;
-    this.notify({ kind: 'selection', resourceId });
+    if (resource.selected) return true;
+    this.selection.select({ kind: 'resource', id: resourceId });
     return true;
   }
 
-  public clearSelection(notify = true): void {
-    if (!this.selectedResourceId) return;
-    const selected = this.resources.get(this.selectedResourceId);
-    if (selected) selected.selected = false;
-    this.selectedResourceId = null;
-    if (notify) this.notify({ kind: 'selection', resourceId: null });
+  public clearSelection(_notify = true): void {
+    if (this.selection.getSelection().kind === 'resource') this.selection.clear();
   }
 
   public moveResource(resourceId: string, worldX: number, worldY: number): boolean {
@@ -110,16 +118,12 @@ export class ResourceStore {
   }
 
   public deleteSelected(): DeleteResult {
-    if (!this.selectedResourceId) return 'none';
-    const resource = this.resources.get(this.selectedResourceId);
-    if (!resource) {
-      this.selectedResourceId = null;
-      return 'none';
-    }
+    const resource = this.getSelectedResource();
+    if (!resource) return 'none';
     if (resource.locked) return 'locked';
     const resourceId = resource.id;
     this.resources.delete(resourceId);
-    this.selectedResourceId = null;
+    this.selection.clear();
     this.notify({ kind: 'deleted', resourceId });
     return 'deleted';
   }
@@ -135,6 +139,14 @@ export class ResourceStore {
   public subscribe(listener: ResourceStoreListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  public dispose(): void { this.unsubscribeSelection(); }
+
+  private syncSelection(): void {
+    const selected = this.selection.getSelection();
+    for (const resource of this.resources.values()) resource.selected = selected.kind === 'resource' && selected.id === resource.id;
+    this.notify({ kind: 'selection', resourceId: selected.kind === 'resource' ? selected.id : null });
   }
 
   private isValidPatch(patch: PlacedResourcePatch): boolean {

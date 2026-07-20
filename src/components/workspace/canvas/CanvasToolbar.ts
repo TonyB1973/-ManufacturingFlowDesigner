@@ -21,7 +21,7 @@ interface CommandDefinition {
 }
 
 const COMMANDS: readonly CommandDefinition[] = [
-  { command: 'select', label: 'Select', title: 'Select (placeholder)', toggle: true },
+  { command: 'select', label: 'Select', title: 'Select objects', toggle: true },
   { command: 'pan', label: 'Pan', title: 'Pan tool', toggle: true },
   { command: 'zoom-in', label: '+', title: 'Zoom in (+)' },
   { command: 'zoom-out', label: '−', title: 'Zoom out (-)' },
@@ -30,8 +30,8 @@ const COMMANDS: readonly CommandDefinition[] = [
   { command: 'grid', label: 'Grid', title: 'Toggle engineering grid', toggle: true },
   { command: 'origin', label: 'Origin', title: 'Toggle origin and axes', toggle: true },
   { command: 'snap', label: 'Snap', title: 'Toggle Snap to Grid', toggle: true },
-  { command: 'delete-selection', label: 'Delete', title: 'Delete selected resource' },
-  { command: 'clear-selection', label: 'Clear', title: 'Clear resource selection' },
+  { command: 'delete-selection', label: 'Delete', title: 'Delete selected object' },
+  { command: 'clear-selection', label: 'Clear', title: 'Clear object selection' },
   { command: 'focus', label: 'Canvas Focus', title: 'Toggle Canvas Focus mode', toggle: true },
 ];
 
