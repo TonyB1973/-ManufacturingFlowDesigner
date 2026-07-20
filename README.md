@@ -1,17 +1,18 @@
 # Manufacturing Flow Designer
 
-Manufacturing Flow Designer is a professional engineering application for modelling manufacturing processes, factory layouts, standard work, resource allocation, and future simulation workflows.
+Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
-## Sprint 1.5 scope
+## Sprint 2.1 scope
 
-Sprint 1.5 adds directed process connections between manufacturing operations on top of the workspace-separation architecture. Process Flow contains operations and connections; Factory Layout contains independently identified physical resource instances. Connections are typed domain objects with explicit operation anchors, deterministic orthogonal routing, validation, selection, editing, and lifecycle handling. Each workspace preserves its own viewport state.
+Sprint 2.1 introduces safe local project persistence with the versioned, human-readable `.mflow` format. New, Open, Save, and Save As are available from the File ribbon. The UI reports the project name and dirty state in the title bar and Project Explorer, and selecting the project root exposes editable project properties.
 
 ## Technology
 
-- Vite and strict TypeScript
-- Native semantic HTML, CSS, SVG, and Pointer Events
+- Vite 6 and strict TypeScript
+- Native semantic HTML, CSS, SVG, Pointer Events, and accessible `<dialog>` controls
 - Framework-free observable state services
-- No UI framework, state library, icon package, or canvas library
+- File System Access and File Handling APIs where supported, with portable file-input/download fallbacks
+- No UI framework, state library, icon package, canvas library, or persistence dependency
 
 ## Setup
 
@@ -24,95 +25,83 @@ npm run dev
 
 Open the local address shown by Vite. In PowerShell environments that block `npm.ps1`, use `npm.cmd`.
 
-## Workspaces
+## Project files
 
-- **Process Flow** is for operations, sequencing, assignment, validation, and directed process connections. Physical resource cards cannot be placed or rendered there.
-- **Factory Layout** is for machines, workstations, inspection equipment, operators, buffers, and other physical resources. Operations cannot be placed or rendered there.
-- Use the accessible tabs above the canvas or Project Explorer to switch without reloading. Pan, zoom, grid, origin, and snap settings remain independent.
+Manufacturing Flow Designer project files use:
 
-## Resource Templates and physical instances
+- extension: `.mflow`
+- media type: `application/vnd.manufacturing-flow-designer+json`
+- format identifier: `ManufacturingFlowDesigner`
+- current schema: `1.0.0`
+- current application version: `0.2.0`
 
-Resource Templates provide reusable defaults. Dropping a template into Factory Layout creates a physical Resource Instance with a stable `RES-` ID, layout position, dimensions, active state, and capacity. Templates are never directly assignable.
+The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, Process Flow operations and connections, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
 
-Duplicate Resource creates a separately identified instance at an offset position. Editing the duplicate does not edit the original or its template. For ordinary machinery, add another physical instance instead of treating capacity 2 as two machines.
+Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 30 nested levels, and 200,000 inspected JSON values. They are defensive limits rather than expected working sizes.
 
-## Operation workflow
+Selection, active gestures, tool state, validation output, browser file handles, connection route points, and route status are deliberately excluded. Connection geometry is derived and recalculated once after a complete project has loaded.
 
-- Search or filter the 12 starter operations across manufacturing, quality, material-flow, finishing, logistics, support, storage, and planning categories.
-- Drag an operation card to the canvas, focus it and press `Enter`/`Space`, or use ribbon **Add Operation**.
-- Click or keyboard-focus a placed operation to select it; drag to move it in world coordinates.
-- Assign only active physical Factory Layout resources. Hidden and locked resources remain assignable; inactive and deleted resources do not.
-- Multiple sequential operations may use the same resource. Simultaneous capacity validation is deferred until timing and simulation exist.
-- **Locate in Factory Layout** switches workspaces and reveals the assigned physical resource.
-- Use Process Flow in Project Explorer to inspect sequence order and reveal an operation on the canvas.
-- Use **Normalize Sequence** and confirm to renumber operations at intervals of 10.
+Open parses, migrates, and validates a complete candidate before changing the current project. It checks format/schema compatibility, bounded file and collection sizes, finite geometry, unique IDs, template references, physical-resource assignments, connection endpoints, anchors, duplicate Standard links, workspace state, and unsafe object structure. An invalid file shows an actionable error and leaves the active project untouched. Unknown and newer incompatible schemas are rejected; future older formats require registered migration steps.
 
-Operation cards show sequence, cycle time, type, timing classification, resource assignment, lock state, and a validation marker. Full names remain available through the SVG tooltip and accessible label when visible text is fitted.
+New and Open display an accessible Cancel/Discard prompt when unsaved changes exist. Closing or navigating away also invokes the browser safeguard. Save updates `modifiedUtc` and clears dirty state only after a successful write or download. Browsers with the File System Access API can reuse a selected file handle; other browsers download a new `.mflow` file and use a standard file picker for Open. Installed supporting PWAs can be registered as `.mflow` file handlers.
 
-## Connection workflow
+There is no autosave or recovery file in Sprint 2.1. Save intentionally remains an explicit engineering action.
 
-- Choose **Connect** on the canvas toolbar, ribbon, or press `C`.
-- Click or drag from an operation. Ports appear on all four card edges; clicking near an edge uses that port, while clicking the card centre automatically chooses suitable facing ports.
-- Finish on a different operation to create a directed connection. Self-connections and duplicate Standard connections are rejected.
-- The router creates deterministic horizontal and vertical segments, avoids inflated operation bounds when possible, and marks a safe fallback route when no clear candidate is available. Factory Layout resources do not affect Process Flow routing.
-- Click the line or its larger invisible hit target to select it. Edit type, label, lock, and visibility in Properties, or use **Reverse Direction**.
-- Choose **Delete Link** and click a connection, press `Delete`/`Backspace` while it is selected, or use the right-click context menu.
-- The connection context menu also selects the source or target operation. `Escape` cancels a connection preview, closes the context menu, or returns to Select.
+## Workspaces and domain model
 
-Selected connections show their route, endpoints, anchors, route length, bend count, and validation state. The Process Flow explorer lists connections in deterministic ID order and reveals them on the canvas.
+- **Process Flow** contains operations and directed process connections. Only operations expose connection ports.
+- **Factory Layout** contains independently identified physical Resource Instances. It never renders process links or exposes connection tools.
+- Resource Templates are reusable definitions and are never directly assignable.
+- Operations reference only stable physical resource IDs. Deleting a resource clears affected assignments without changing process connections.
+- Deleting an operation removes its attached process connections.
+- Process Flow and Factory Layout retain independent pan, zoom, grid, origin, and snap state, including across save/open.
 
-## Selection and safety
+Connection routes are deterministic horizontal/vertical paths around visible operations. Physical Factory Layout resources never participate in Process Flow routing. Locked, hidden, inactive, assignment, capacity, timing, notes, positions, dimensions, rotations, visibility, connection types, labels, anchors, and stable IDs all round-trip through `.mflow`.
 
-Selection is explicitly one resource, one operation, one connection, or none. Selecting any object type clears the others. `Delete`/`Backspace` and the toolbar Delete command act only on that typed selection. Locked objects remain selectable but cannot move, be deleted, or be reversed; `Escape` cancels active movement or connection creation. Middle-button drag and Space-drag continue to pan the canvas, and `Alt` bypasses snapping during placement or movement.
+## Typical persistence test
 
-Deleting an assigned physical resource requires an accessible confirmation stating how many operations will become Unassigned. Locked resources cannot be deleted.
-
-## Validation and health
-
-Deterministic validation reports:
-
-- invalid operation fields, template assignments, missing or invalid physical IDs, invalid layouts, resource template references, dimensions, capacity, connection endpoints, anchors, self-connections, duplicate Standard connections, and invalid routes as errors;
-- unassigned operations, inactive assignments, duplicate sequences, hidden operations, fallback routes, backward sequence flow, isolated operations, multiple starts or ends, disconnected process groups, and directed cycles as warnings.
-
-The title bar, right Validation Summary, operation cards, and status bar reflect current project health. Notes are optional and never generate noise.
-
-## Architecture
-
-- `models/operations` defines reusable operation templates and placed operation instances.
-- `OperationStore` owns operation instances, validated mutations, deterministic sequence ordering, and normalization.
-- `SelectionStore` is the single typed selection authority shared by resource and operation stores.
-- `WorkspaceStore` owns active-workspace identity and independent viewport state.
-- `ResourceTemplate` defines reusable defaults; `ResourceInstance` defines physical Factory Layout identity.
-- `OperationValidation` is a pure deterministic validation service.
-- `ConnectionStore` owns connection instances, route recalculation, validated mutations, and operation-deletion cleanup.
-- `ConnectionAnchors` converts normalized card-edge anchors to world coordinates.
-- `OrthogonalRouter` produces deterministic obstacle-aware routes and explicit fallbacks.
-- `ConnectionValidation` performs connection and whole-process topology checks.
-- `OperationLibrary` and `ProjectExplorer` provide placement and ordered process navigation.
-- `OperationRenderer` owns persistent SVG nodes in the dedicated `canvas-operations` layer.
-- `ConnectionRenderer` owns persistent SVG paths, arrowheads, hit targets, labels, warnings, and selected anchors in the connection layer.
-- `ConnectionInteractionController` owns connect previews, dynamic ports, line selection, Delete Link, keyboard commands, and the context menu.
-- `OperationInteractionController` owns pointer movement and cancellation without coupling domain state to SVG.
-- `RightSidebar` binds properties for resources, operations, and connections.
+1. Place and edit operations in Process Flow, including an operation with no physical assignment.
+2. Create one or more directed connections and edit their type or label.
+3. Place and edit physical resources in Factory Layout, then assign an active physical resource to an operation.
+4. Change each workspace viewport independently and edit Project Properties from the Explorer root.
+5. Use **File → Save As** and choose or download a `.mflow` file.
+6. Make another persistent edit and confirm the dirty marker appears; ordinary selection must not create it.
+7. Use **File → New**, test both Cancel and Discard in the unsaved-changes dialog, then open the saved file.
+8. Confirm metadata, IDs, references, geometry, visibility/lock state, both viewports, active workspace, and connections are restored. Routes may be geometrically rebuilt because they are derived.
+9. Try opening malformed JSON or a file with a missing reference and confirm the current project remains unchanged.
 
 ## Development commands
 
 ```shell
 npm run typecheck
+npm test
 npm run test:coordinates
 npm run test:resources
 npm run test:operations
 npm run test:connections
 npm run test:workspaces
+npm run test:persistence
 npm run build
+git diff --check
 ```
 
-## Current limitations
+## Architecture
 
-Sprint 1.5 uses a deterministic candidate-based router rather than a general maze solver. Overlapping reverse-direction connections can share the same route. Connections attach only to operation card edges and cannot be edited by dragging individual bends. There is one default Factory Layout and no walls, dimensions, resource groups, concurrency allocation, simulation, persistence, undo/redo, scenario comparison, multi-selection, custom-template editor, image uploads, or offline service worker. Resource rotation is stored and editable numerically but has no direct manipulation tool.
+- `models/project/ProjectDocument.ts` is the typed schema contract and format constants.
+- `ProjectSchemaValidator` applies structural, safety, and referential-integrity checks.
+- `ProjectMigrationService` owns explicit ordered schema migrations.
+- `ProjectSerializer` produces deterministic plain JSON and excludes transient/derived state.
+- `ProjectSessionService` owns metadata, settings, dirty state, coordinated replacement, and stable-ID continuation.
+- `ProjectFileService` isolates browser file capabilities and fallbacks.
+- `ProjectFileController` coordinates user commands, unsaved guards, save completion, launch files, and error reporting.
+- Domain stores remain the runtime authorities for resources, operations, connections, selection, and workspace viewports.
 
-## Planned Sprint 2.1
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation and [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions.
 
-Sprint 2.1 will introduce project persistence and the versioned `.mflow` file format, including safe serialization of resources, operations, connections, canvas state, and project metadata.
+## Current limitations and next sprint
 
-Development for this sprint is performed on `feature/sprint-1.5-process-connections`.
+The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no autosave/recovery, cloud sync, scenario comparison, custom-template editor, walls/dimensions, multi-selection, concurrency simulation, or WPF implementation yet. Browser download fallback cannot overwrite an existing file silently.
+
+Sprint 2.2 is planned to add undo and redo as a separate command-history architecture, including clear policy for project replacement and dirty-state interaction.
+
+Development for this sprint is performed on `feature/sprint-2.1-project-persistence`.

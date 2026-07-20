@@ -22,7 +22,8 @@ export class ConnectionRenderer {
     const arrow = svg('path'); arrow.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z'); arrow.classList.add('process-arrowhead'); marker.append(arrow); definitions.append(marker); this.layer.append(definitions);
   }
   private readonly change = (change: ConnectionStoreChange): void => {
-    if (change.kind === 'created') this.add(change.connection);
+    if (change.kind === 'reset') { this.layer.replaceChildren(); this.nodes.clear(); this.installMarker(); this.store.getConnections().forEach((connection) => this.add(connection)); }
+    else if (change.kind === 'created') this.add(change.connection);
     else if (change.kind === 'updated') this.render(change.connection);
     else if (change.kind === 'deleted') { this.nodes.get(change.connectionId)?.group.remove(); this.nodes.delete(change.connectionId); }
     else this.store.getConnections().forEach((connection) => this.render(connection));

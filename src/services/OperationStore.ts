@@ -13,7 +13,8 @@ export type OperationStoreChange =
   | { readonly kind: 'updated'; readonly operation: OperationInstance }
   | { readonly kind: 'deleted'; readonly operationId: string }
   | { readonly kind: 'selection'; readonly operationId: string | null }
-  | { readonly kind: 'validation' };
+  | { readonly kind: 'validation' }
+  | { readonly kind: 'reset' };
 
 export type OperationStoreListener = (change: OperationStoreChange) => void;
 export type OperationDeleteResult = 'deleted' | 'locked' | 'none';
@@ -139,6 +140,16 @@ export class OperationStore {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+
+  public replaceAll(templates: readonly OperationTemplate[], operations: readonly OperationInstance[], notify = true): void {
+    this.templates.clear();
+    templates.forEach((template) => this.templates.set(template.id, { ...template, tags: [...template.tags] }));
+    this.operations.clear();
+    operations.forEach((operation) => this.operations.set(operation.id, { ...operation, selected: false }));
+    if (notify) this.publishReset();
+  }
+
+  public publishReset(): void { this.notify({ kind: 'reset' }); }
 
   public dispose(): void { this.unsubscribeSelection(); }
 

@@ -7,4 +7,12 @@ export class OperationIdGenerator implements OperationIdProvider {
     this.sequence += 1;
     return `operation-${String(this.sequence).padStart(4, '0')}`;
   }
+
+  public ensureAfter(ids: readonly string[]): void {
+    const maximum = ids.reduce((current, id) => {
+      const match = /^operation-(\d+)$/.exec(id);
+      return match ? Math.max(current, Number(match[1])) : current;
+    }, 0);
+    this.sequence = Math.max(this.sequence, maximum);
+  }
 }

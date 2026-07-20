@@ -13,6 +13,7 @@ import { routeBendCount, routeLength } from '../../services/OrthogonalRouter';
 import { MIN_RESOURCE_HEIGHT, MIN_RESOURCE_WIDTH, type ResourceStore } from '../../services/ResourceStore';
 import { validateResources } from '../../services/ResourceValidation';
 import type { WorkspaceStore } from '../../services/WorkspaceStore';
+import type { ProjectSessionService } from '../../services/project/ProjectSessionService';
 import { actionButton, element } from '../../ui/dom';
 
 export interface RightSidebarController { readonly element: HTMLElement; dispose(): void; }
@@ -26,7 +27,7 @@ function checkbox(label: string): HTMLInputElement { const node = element('input
 function toggle(labelText: string, control: HTMLInputElement): HTMLLabelElement { const label = element('label', 'property-toggle'); label.append(control, element('span', '', labelText)); return label; }
 function summaryRow(container: HTMLElement, label: string, value: string): void { container.append(element('span', '', label), element('strong', '', value)); }
 
-export function createRightSidebar(resources: ResourceStore, operations: OperationStore, connections: ConnectionStore, workspaces: WorkspaceStore, selection: SelectionController, requestDelete: (resourceId: string) => void): RightSidebarController {
+export function createRightSidebar(resources: ResourceStore, operations: OperationStore, connections: ConnectionStore, workspaces: WorkspaceStore, selection: SelectionController, requestDelete: (resourceId: string) => void, project: ProjectSessionService): RightSidebarController {
   const sidebar = element('aside', 'sidebar sidebar--right'); sidebar.setAttribute('aria-label', 'Inspector panels');
   const properties = element('div', 'properties-content'); const summary = element('div', 'summary-grid'); const validation = element('div', 'validation-summary');
   sidebar.append(section('Properties', properties), section('Selection Summary', summary), section('Validation Summary', validation));
@@ -71,11 +72,21 @@ export function createRightSidebar(resources: ResourceStore, operations: Operati
     form.append(field('Connection ID', output(connection.id)), field('Source operation', output(sourceOperation ? `OP ${sourceOperation.sequence} — ${sourceOperation.name}` : connection.sourceOperationId)), field('Target operation', output(targetOperation ? `OP ${targetOperation.sequence} — ${targetOperation.name}` : connection.targetOperationId)), field('Connection type', type), field('Label', label), field('Source anchor', output(`${connection.sourceAnchor.side} @ ${connection.sourceAnchor.offset.toFixed(3)}`)), field('Target anchor', output(`${connection.targetAnchor.side} @ ${connection.targetAnchor.offset.toFixed(3)}`)), field('Route status', output(connection.routeStatus === 'clear' ? 'Clear route' : 'Fallback routing warning')), field('Route length', output(`${routeLength(connection.routePoints).toFixed(1)} units`)), field('Bend count', output(String(routeBendCount(connection.routePoints)))), toggles, actions); properties.replaceChildren(form);
   };
 
+  const renderProject = (): void => {
+    const state = project.getState(); const metadata = state.metadata; const form = element('form', 'properties-form project-properties'); form.addEventListener('submit', (event) => event.preventDefault());
+    const name = input('text'); name.value = metadata.name; bindText(name, (value) => { if (!value) return false; project.updateMetadata({ name: value }); return true; });
+    const description = element('textarea', 'property-input property-textarea'); description.rows = 4; description.value = metadata.description; description.addEventListener('change', () => project.updateMetadata({ description: description.value.trim() }));
+    const author = input('text'); author.value = metadata.author; bindText(author, (value) => { project.updateMetadata({ author: value }); return true; });
+    const company = input('text'); company.value = metadata.company; bindText(company, (value) => { project.updateMetadata({ company: value }); return true; });
+    form.append(field('Project name', name), field('Description', description), field('Author', author), field('Company', company), field('Project ID', output(metadata.id)), field('Created UTC', output(metadata.createdUtc)), field('Modified UTC', output(metadata.modifiedUtc)), field('Schema version', output('1.0.0')), field('File', output(state.fileName ?? 'Not saved'))); properties.replaceChildren(form);
+  };
+
   const render = (): void => {
     const selected = selection.getSelection(); const workspace = workspaces.getActive(); const resource = resources.getSelectedResource(); const operation = operations.getSelectedOperation(); const connection = connections.getSelectedConnection();
-    if (workspace === 'factoryLayout' && selected.kind === 'resource' && resource) renderResource(); else if (workspace === 'processFlow' && selected.kind === 'operation' && operation) renderOperation(); else if (workspace === 'processFlow' && selected.kind === 'connection' && connection) renderConnection(connection); else properties.replaceChildren(element('div', 'empty-inspector', `No ${workspace === 'processFlow' ? 'operation or connection' : 'physical resource'} selected`));
+    if (selected.kind === 'project') renderProject(); else if (workspace === 'factoryLayout' && selected.kind === 'resource' && resource) renderResource(); else if (workspace === 'processFlow' && selected.kind === 'operation' && operation) renderOperation(); else if (workspace === 'processFlow' && selected.kind === 'connection' && connection) renderConnection(connection); else properties.replaceChildren(element('div', 'empty-inspector', `No ${workspace === 'processFlow' ? 'operation or connection' : 'physical resource'} selected`));
     summary.replaceChildren();
-    if (workspace === 'factoryLayout' && resource) { summaryRow(summary, 'Object type', 'Physical Resource'); summaryRow(summary, 'ID', resource.id); summaryRow(summary, 'Active', resource.active ? 'Yes' : 'No'); summaryRow(summary, 'Assignments', String(operations.getAssignmentCount(resource.id))); }
+    if (selected.kind === 'project') { const state = project.getState(); summaryRow(summary, 'Object type', 'Project'); summaryRow(summary, 'ID', state.metadata.id); summaryRow(summary, 'Status', state.dirty ? 'Unsaved changes' : 'Saved'); summaryRow(summary, 'Operations', String(operations.getOperationCount())); summaryRow(summary, 'Connections', String(connections.getConnectionCount())); summaryRow(summary, 'Resources', String(resources.getResourceCount())); }
+    else if (workspace === 'factoryLayout' && resource) { summaryRow(summary, 'Object type', 'Physical Resource'); summaryRow(summary, 'ID', resource.id); summaryRow(summary, 'Active', resource.active ? 'Yes' : 'No'); summaryRow(summary, 'Assignments', String(operations.getAssignmentCount(resource.id))); }
     else if (workspace === 'processFlow' && operation) { summaryRow(summary, 'Object type', 'Operation'); summaryRow(summary, 'ID', operation.id); summaryRow(summary, 'Sequence', `OP ${operation.sequence}`); summaryRow(summary, 'Resource', operation.assignedResourceId ?? 'Unassigned'); }
     else if (workspace === 'processFlow' && connection) { const source = operations.getOperation(connection.sourceOperationId); const target = operations.getOperation(connection.targetOperationId); summaryRow(summary, 'Object type', 'Connection'); summaryRow(summary, 'ID', connection.id); summaryRow(summary, 'Type', connection.connectionType); summaryRow(summary, 'Source', `${source?.id ?? connection.sourceOperationId} — ${source?.name ?? 'Missing'}`); summaryRow(summary, 'Target', `${target?.id ?? connection.targetOperationId} — ${target?.name ?? 'Missing'}`); summaryRow(summary, 'Route length', routeLength(connection.routePoints).toFixed(1)); summaryRow(summary, 'Bends', String(routeBendCount(connection.routePoints))); }
     else summaryRow(summary, 'Selected items', '0');
@@ -84,6 +95,6 @@ export function createRightSidebar(resources: ResourceStore, operations: Operati
     const issues = workspace === 'processFlow' && operation ? operationHealth.issues.filter((entry) => entry.operationId === operation.id) : workspace === 'processFlow' && connection ? connectionHealth.issues.filter((entry) => entry.connectionId === connection.id) : workspace === 'factoryLayout' && resource ? resourceHealth.issues.filter((entry) => entry.resourceId === resource.id) : [];
     if (issues.length) { const list = element('ul', 'validation-issues'); issues.forEach((entry) => list.append(element('li', `validation-issue validation-issue--${entry.severity}`, entry.message))); validation.append(list); }
   };
-  const unsubscribers = [resources.subscribe(render), operations.subscribe(render), connections.subscribe(render), workspaces.subscribe(render), selection.subscribe(render)]; render();
+  const unsubscribers = [resources.subscribe(render), operations.subscribe(render), connections.subscribe(render), workspaces.subscribe(render), selection.subscribe(render), project.subscribe(render)]; render();
   return { element: sidebar, dispose: () => unsubscribers.forEach((unsubscribe) => unsubscribe()) };
 }

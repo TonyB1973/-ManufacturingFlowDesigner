@@ -25,4 +25,8 @@
 23. Multiple sequential operations may share one physical resource; concurrency validation is deferred until timing or simulation exists.
 24. Increase ordinary machinery capacity by adding physical Resource Instances rather than treating a numeric capacity as multiple machines.
 25. Keep Process Flow and Factory Layout rendering, placement, selection, and viewport state separated.
+26. Treat `.mflow` files as untrusted input: migrate and fully validate a candidate before replacing active project state.
+27. Keep schema versions explicit; add documented migrations instead of silently changing an existing schema.
+28. Persist authored domain data and both workspace viewports, but exclude transient selection, gestures, file handles, and derived route caches.
+29. Mark a project clean only after a successful open, save, or Save As result; selection and validation updates do not make a project dirty.
 

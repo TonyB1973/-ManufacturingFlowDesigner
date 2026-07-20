@@ -6,6 +6,12 @@
   "display": "standalone",
   "background_color": "#15181c",
   "theme_color": "#15181c",
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": { "application/vnd.manufacturing-flow-designer+json": [".mflow"] }
+    }
+  ],
   "icons": [
     { "src": "/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "/icons/app-icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }

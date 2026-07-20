@@ -80,6 +80,13 @@ export class ResourceRenderer {
         break;
       case 'template':
         break;
+      case 'reset':
+        this.layer.replaceChildren();
+        this.nodes.clear();
+        this.templates.clear();
+        this.store.getTemplates().forEach((template) => this.templates.set(template.id, template));
+        this.store.getPlacedResources().forEach((resource) => this.addResource(resource));
+        break;
     }
   };
 

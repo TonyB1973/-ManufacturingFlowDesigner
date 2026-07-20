@@ -2,9 +2,11 @@ import { revealConnection } from '../../core/events/connectionEvents';
 import { revealOperation } from '../../core/events/operationEvents';
 import { revealResource } from '../../core/events/resourceEvents';
 import { reportStatus } from '../../core/events/uiEvents';
+import type { SelectionController } from '../../models/selection/Selection';
 import type { ConnectionStore } from '../../services/ConnectionStore';
 import { validateProcessConnections } from '../../services/ConnectionValidation';
 import type { OperationStore } from '../../services/OperationStore';
+import type { ProjectSessionService } from '../../services/project/ProjectSessionService';
 import type { ResourceStore } from '../../services/ResourceStore';
 import { validateResources } from '../../services/ResourceValidation';
 import type { WorkspaceStore } from '../../services/WorkspaceStore';
@@ -12,10 +14,10 @@ import { actionButton, element } from '../../ui/dom';
 
 export interface ProjectExplorerController { readonly element: HTMLElement; dispose(): void; }
 
-export function createProjectExplorer(operationsStore: OperationStore, connectionsStore: ConnectionStore, resourcesStore: ResourceStore, workspaceStore: WorkspaceStore): ProjectExplorerController {
+export function createProjectExplorer(operationsStore: OperationStore, connectionsStore: ConnectionStore, resourcesStore: ResourceStore, workspaceStore: WorkspaceStore, project: ProjectSessionService, selection: SelectionController): ProjectExplorerController {
   const explorer = element('section', 'panel-section project-explorer'); explorer.append(element('h2', 'panel-heading', 'Project Explorer'));
   const tree = element('nav', 'project-tree'); tree.setAttribute('aria-label', 'Project explorer');
-  const list = element('ul'); const root = element('li', 'project-tree__root'); root.append(element('span', 'tree-item tree-item--label', '▾ Project'));
+  const list = element('ul'); const root = element('li', 'project-tree__root'); const rootButton = actionButton('Project', 'tree-item tree-item--label project-root-button'); rootButton.addEventListener('click', () => selection.select({ kind: 'project', id: project.getMetadata().id })); root.append(rootButton);
   const process = element('li'); const processDetails = element('details', 'process-tree'); processDetails.open = true; const processSummary = element('summary');
   const operationHeading = element('h3', 'process-group-heading', 'Operations (0)'); const operations = element('ol', 'process-operation-list');
   const connectionHeading = element('h3', 'process-group-heading', 'Connections (0)'); const connections = element('ul', 'process-connection-list');
@@ -25,6 +27,7 @@ export function createProjectExplorer(operationsStore: OperationStore, connectio
   normalize.addEventListener('click', () => { operationsStore.normalizeSequences(); reportStatus('Operation sequence normalized'); });
 
   const render = (): void => {
+    const projectState = project.getState(); rootButton.textContent = `▾ ${projectState.metadata.name}${projectState.dirty ? ' *' : ''} (${projectState.metadata.id}) — ${operationsStore.getOperationCount()} ops, ${connectionsStore.getConnectionCount()} links, ${resourcesStore.getResourceCount()} resources`; rootButton.classList.toggle('project-root-button--selected', selection.getSelection().kind === 'project');
     const sortedOperations = operationsStore.sortedOperations(); const sortedConnections = connectionsStore.sortedConnections(); const processHealth = validateProcessConnections(sortedOperations, sortedConnections); const processMarker = processHealth.errors ? ' ⛔' : processHealth.warnings ? ' ⚠' : '';
     processSummary.textContent = `Process Flow — ${sortedOperations.length} operations, ${sortedConnections.length} connections${processMarker}`; operationHeading.textContent = `Operations (${sortedOperations.length})`; connectionHeading.textContent = `Connections (${sortedConnections.length})`; operations.replaceChildren(); connections.replaceChildren();
     for (const operation of sortedOperations) { const entry = element('li'); const button = actionButton(`OP ${operation.sequence} ${operation.name}`, 'process-operation'); button.classList.toggle('process-operation--selected', operation.selected); button.addEventListener('click', () => { workspaceStore.activate('processFlow'); operationsStore.selectOperation(operation.id); revealOperation(operation.id); }); entry.append(button); operations.append(entry); }
@@ -35,6 +38,6 @@ export function createProjectExplorer(operationsStore: OperationStore, connectio
     for (const resource of instances) { const count = operationsStore.getAssignmentCount(resource.id); const hasIssue = resourceHealth.issues.some((issue) => issue.resourceId === resource.id); const entry = element('li'); const button = actionButton(`${resource.id} — ${resource.name} — ${resource.resourceType} — ${resource.active ? 'Active' : 'Inactive'} — ${count} assigned${hasIssue ? ' — Validation warning' : ''}`, 'process-operation resource-instance-entry'); button.classList.toggle('process-operation--selected', resource.selected); button.addEventListener('click', () => { workspaceStore.activate('factoryLayout'); resourcesStore.selectResource(resource.id); revealResource(resource.id); }); entry.append(button); resources.append(entry); }
     if (!instances.length) resources.append(element('li', 'process-operation-list__empty', 'No physical resources placed'));
   };
-  const unsubscribers = [operationsStore.subscribe(render), connectionsStore.subscribe(render), resourcesStore.subscribe(render), workspaceStore.subscribe(render)]; render();
+  const unsubscribers = [operationsStore.subscribe(render), connectionsStore.subscribe(render), resourcesStore.subscribe(render), workspaceStore.subscribe(render), project.subscribe(render), selection.subscribe(render)]; render();
   return { element: explorer, dispose: () => unsubscribers.forEach((unsubscribe) => unsubscribe()) };
 }

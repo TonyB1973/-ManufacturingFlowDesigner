@@ -8,7 +8,8 @@ export type ConnectionStoreChange =
   | { readonly kind: 'updated'; readonly connection: ProcessConnection }
   | { readonly kind: 'deleted'; readonly connectionId: string }
   | { readonly kind: 'selection'; readonly connectionId: string | null }
-  | { readonly kind: 'validation' };
+  | { readonly kind: 'validation' }
+  | { readonly kind: 'reset' };
 export type ConnectionStoreListener = (change: ConnectionStoreChange) => void;
 export type ConnectionMutationResult = 'created' | 'updated' | 'deleted' | 'duplicate' | 'self' | 'locked' | 'missing' | 'none';
 export interface ConnectionRoute { readonly points: readonly WorldPoint[]; readonly status: RouteStatus; }
@@ -71,6 +72,16 @@ export class ConnectionStore {
       || (this.getOperation(left.targetOperationId)?.sequence ?? Infinity) - (this.getOperation(right.targetOperationId)?.sequence ?? Infinity) || left.id.localeCompare(right.id));
   }
   public subscribe(listener: ConnectionStoreListener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  public replaceAll(connections: readonly ProcessConnection[], notify = true): void {
+    this.connections.clear();
+    connections.forEach((connection) => {
+      const copy: ProcessConnection = { ...connection, sourceAnchor: { ...connection.sourceAnchor }, targetAnchor: { ...connection.targetAnchor }, routePoints: [], selected: false, routeStatus: 'clear' };
+      this.connections.set(copy.id, copy);
+      this.recalculate(copy);
+    });
+    if (notify) this.publishReset();
+  }
+  public publishReset(): void { this.notify({ kind: 'reset' }); }
   public dispose(): void { this.unsubscribeSelection(); }
   private recalculate(connection: ProcessConnection): void { const route = this.routeProvider(connection); connection.routePoints = [...route.points]; connection.routeStatus = route.status; }
   private isDuplicate(source: string, target: string, type: ConnectionType, ignoreId?: string): boolean { return type === 'Standard' && [...this.connections.values()].some((connection) => connection.id !== ignoreId && connection.connectionType === 'Standard' && connection.sourceOperationId === source && connection.targetOperationId === target); }
