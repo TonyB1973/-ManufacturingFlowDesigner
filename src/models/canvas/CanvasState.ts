@@ -1,4 +1,4 @@
-export type CanvasTool = 'select' | 'pan';
+export type CanvasTool = 'select' | 'pan' | 'connect' | 'delete-link';
 
 export interface CanvasState {
   panX: number;

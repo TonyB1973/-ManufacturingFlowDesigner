@@ -1,7 +1,7 @@
 import type { CanvasTool } from '../../../models/canvas/CanvasState';
 import { actionButton, element } from '../../../ui/dom';
 
-export type CanvasToolbarCommand = 'select' | 'pan' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'grid' | 'origin' | 'snap' | 'delete-selection' | 'clear-selection' | 'focus';
+export type CanvasToolbarCommand = 'select' | 'pan' | 'connect' | 'delete-link' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'grid' | 'origin' | 'snap' | 'delete-selection' | 'clear-selection' | 'focus';
 
 export interface CanvasToolbarController {
   readonly element: HTMLElement;
@@ -11,6 +11,7 @@ export interface CanvasToolbarController {
   setOriginVisible(visible: boolean): void;
   setSnapEnabled(enabled: boolean): void;
   setFocusMode(active: boolean): void;
+  setConnectionToolsEnabled(enabled: boolean): void;
 }
 
 interface CommandDefinition {
@@ -23,6 +24,8 @@ interface CommandDefinition {
 const COMMANDS: readonly CommandDefinition[] = [
   { command: 'select', label: 'Select', title: 'Select objects', toggle: true },
   { command: 'pan', label: 'Pan', title: 'Pan tool', toggle: true },
+  { command: 'connect', label: 'Connect', title: 'Connect operations (C)', toggle: true },
+  { command: 'delete-link', label: 'Delete Link', title: 'Delete process connections', toggle: true },
   { command: 'zoom-in', label: '+', title: 'Zoom in (+)' },
   { command: 'zoom-out', label: '−', title: 'Zoom out (-)' },
   { command: 'actual-size', label: '100%', title: 'Reset zoom to 100% (0)' },
@@ -68,10 +71,18 @@ export function createCanvasToolbar(onCommand: (command: CanvasToolbarCommand) =
     setTool: (tool) => {
       setPressed('select', tool === 'select');
       setPressed('pan', tool === 'pan');
+      setPressed('connect', tool === 'connect');
+      setPressed('delete-link', tool === 'delete-link');
     },
     setGridVisible: (visible) => setPressed('grid', visible),
     setOriginVisible: (visible) => setPressed('origin', visible),
     setSnapEnabled: (enabled) => setPressed('snap', enabled),
+    setConnectionToolsEnabled: (enabled) => {
+      for (const command of ['connect', 'delete-link'] as const) {
+        const button = buttons.get(command);
+        if (button) button.disabled = !enabled;
+      }
+    },
     setFocusMode: (active) => {
       setPressed('focus', active);
       const button = buttons.get('focus');

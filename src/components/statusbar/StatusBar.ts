@@ -10,6 +10,8 @@ export interface StatusBarController {
   setSelectionCount(count: number): void;
   setResourceCount(count: number): void;
   setOperationCount(count: number): void;
+  setConnectionCount(count: number): void;
+  setActiveTool(tool: string): void;
   setSelectionLabel(label: string): void;
   setHealth(errors: number, warnings: number): void;
   setWorkspace(workspace: string): void;
@@ -31,8 +33,10 @@ export function createStatusBar(): StatusBarController {
   const selection = element('span', 'statusbar__selection', 'Selected: 0');
   const resources = element('span', 'statusbar__resources', 'Resources: 0');
   const operations = element('span', 'statusbar__operations', 'Operations: 0');
+  const connections = element('span', 'statusbar__connections', 'Connections: 0');
+  const activeTool = element('span', 'statusbar__tool', 'Tool: Select');
   const health = element('span', 'statusbar__health', 'Health: Healthy');
-  bar.append(project, workspace, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, health, element('span', '', 'Workspace Foundation'));
+  bar.append(project, workspace, activeTool, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, connections, health, element('span', '', 'Workspace + Connection Foundation'));
   return {
     element: bar,
     setMessage: (text) => { message.textContent = text; },
@@ -43,6 +47,8 @@ export function createStatusBar(): StatusBarController {
     setSelectionCount: (value) => { selection.textContent = `Selected: ${value}`; },
     setResourceCount: (value) => { resources.textContent = `Resources: ${value}`; },
     setOperationCount: (value) => { operations.textContent = `Operations: ${value}`; },
+    setConnectionCount: (value) => { connections.textContent = `Connections: ${value}`; },
+    setActiveTool: (value) => { activeTool.textContent = `Tool: ${value}`; },
     setSelectionLabel: (value) => { selection.textContent = `Selected: ${value}`; },
     setHealth: (errors, warnings) => { health.textContent = errors ? `Health: ${errors} error${errors === 1 ? '' : 's'}` : warnings ? `Health: ${warnings} warning${warnings === 1 ? '' : 's'}` : 'Health: Healthy'; },
     setCoordinates: (point) => {

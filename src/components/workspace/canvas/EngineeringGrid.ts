@@ -32,6 +32,8 @@ export class EngineeringGrid {
   private readonly futureWorldLayer = svgElement('g');
   private readonly resourceLayer = svgElement('g');
   private readonly operationLayer = svgElement('g');
+  private readonly connectionLayer = svgElement('g');
+  private readonly interactionLayer = svgElement('g');
 
   public constructor() {
     this.svg.classList.add('engineering-canvas');
@@ -84,14 +86,12 @@ export class EngineeringGrid {
     this.origin.append(ring, horizontal, vertical);
     this.axesLayer.append(this.xAxis, this.yAxis, this.origin);
 
-    const connectionLayer = svgElement('g');
-    connectionLayer.id = 'canvas-connections';
+    this.connectionLayer.id = 'canvas-connections';
     this.resourceLayer.id = 'canvas-resources';
     this.operationLayer.id = 'canvas-operations';
-    const interactionLayer = svgElement('g');
-    interactionLayer.id = 'canvas-interactions';
+    this.interactionLayer.id = 'canvas-interactions';
     this.futureWorldLayer.id = 'canvas-world-layers';
-    this.futureWorldLayer.append(connectionLayer, this.resourceLayer, this.operationLayer, interactionLayer);
+    this.futureWorldLayer.append(this.connectionLayer, this.resourceLayer, this.operationLayer, this.interactionLayer);
     this.svg.append(definitions, background, this.gridLayer, this.axesLayer, this.futureWorldLayer);
   }
 
@@ -100,7 +100,15 @@ export class EngineeringGrid {
   }
 
   public getOperationLayer(): SVGGElement { return this.operationLayer; }
-  public setWorkspace(workspace: WorkspaceId): void { this.resourceLayer.setAttribute('display', workspace === 'factoryLayout' ? 'inline' : 'none'); this.operationLayer.setAttribute('display', workspace === 'processFlow' ? 'inline' : 'none'); }
+  public getConnectionLayer(): SVGGElement { return this.connectionLayer; }
+  public getInteractionLayer(): SVGGElement { return this.interactionLayer; }
+  public setWorkspace(workspace: WorkspaceId): void {
+    const processFlow = workspace === 'processFlow';
+    this.resourceLayer.setAttribute('display', processFlow ? 'none' : 'inline');
+    this.operationLayer.setAttribute('display', processFlow ? 'inline' : 'none');
+    this.connectionLayer.setAttribute('display', processFlow ? 'inline' : 'none');
+    this.interactionLayer.setAttribute('display', processFlow ? 'inline' : 'none');
+  }
 
   public render(state: CanvasState, size: ViewportSize): void {
     this.svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);

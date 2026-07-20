@@ -35,7 +35,7 @@ export function createRibbon(workspaceStore?: WorkspaceStore): HTMLElement {
     updateWorkspaceCommands();
   };
 
-  const updateWorkspaceCommands = (): void => { const workspace = workspaceStore?.getActive() ?? 'processFlow'; content.querySelectorAll<HTMLButtonElement>('[data-command-name]').forEach((button) => { const command = button.dataset.commandName; button.disabled = (command === 'Add Operation' && workspace !== 'processFlow') || (command === 'Add Resource' && workspace !== 'factoryLayout'); }); };
+  const updateWorkspaceCommands = (): void => { const workspace = workspaceStore?.getActive() ?? 'processFlow'; content.querySelectorAll<HTMLButtonElement>('[data-command-name]').forEach((button) => { const command = button.dataset.commandName; button.disabled = ((command === 'Add Operation' || command === 'Connect' || command === 'Delete Link') && workspace !== 'processFlow') || (command === 'Add Resource' && workspace !== 'factoryLayout'); }); };
 
   RIBBON_TABS.forEach((tab, index) => {
     const button = actionButton(tab.name, 'ribbon-tab');
@@ -57,6 +57,7 @@ const canvasCommands = new Map<string, CanvasCommand>([
   ['Canvas Focus', 'focus'],
   ['Delete', 'delete-selection'],
   ['Add Operation', 'add-operation'],
+  ['Connect', 'connect'],
   ['Add Resource', 'add-resource'],
 ]);
 

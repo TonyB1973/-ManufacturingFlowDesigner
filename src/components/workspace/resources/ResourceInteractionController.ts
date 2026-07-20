@@ -69,7 +69,7 @@ export class ResourceInteractionController {
   };
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || this.state.tool !== 'select') return;
     const target = event.target instanceof Element ? event.target.closest<SVGGElement>('[data-resource-id]') : null;
     const resourceId = target?.dataset.resourceId;
     if (!resourceId) return;
