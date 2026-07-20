@@ -1,5 +1,5 @@
 import type { PlacedResource, PlacedResourcePatch } from '../../models/resources/PlacedResource';
-import { MIN_RESOURCE_SIZE, type ResourceStore } from '../../services/ResourceStore';
+import { MIN_RESOURCE_HEIGHT, MIN_RESOURCE_WIDTH, type ResourceStore } from '../../services/ResourceStore';
 import { reportStatus } from '../../core/events/uiEvents';
 import { element } from '../../ui/dom';
 
@@ -82,7 +82,9 @@ export function createRightSidebar(store: ResourceStore): RightSidebarController
   const bindNumber = (input: HTMLInputElement, property: 'worldX' | 'worldY' | 'width' | 'height', label: string): void => {
     input.addEventListener('input', () => {
       const value = Number(input.value);
-      const minimumValid = (property === 'width' || property === 'height') ? value >= MIN_RESOURCE_SIZE : true;
+      const minimumValid = property === 'width'
+        ? value >= MIN_RESOURCE_WIDTH
+        : property === 'height' ? value >= MIN_RESOURCE_HEIGHT : true;
       const valid = Number.isFinite(value) && minimumValid;
       input.setAttribute('aria-invalid', String(!valid));
       if (valid) update({ [property]: value }, label);
@@ -97,8 +99,8 @@ export function createRightSidebar(store: ResourceStore): RightSidebarController
     const type = element('output', 'property-output');
     const worldX = numberInput();
     const worldY = numberInput();
-    const width = numberInput(MIN_RESOURCE_SIZE);
-    const height = numberInput(MIN_RESOURCE_SIZE);
+    const width = numberInput(MIN_RESOURCE_WIDTH);
+    const height = numberInput(MIN_RESOURCE_HEIGHT);
     const locked = checkboxInput('Locked');
     const visible = checkboxInput('Visible');
     name.addEventListener('input', () => update({ name: name.value.trim() }, 'Resource name'));

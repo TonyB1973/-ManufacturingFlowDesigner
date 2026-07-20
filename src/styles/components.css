@@ -108,7 +108,7 @@
 .placed-resource__body { fill: #252b31; stroke: #67717b; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .placed-resource__accent { fill: var(--accent); }
 .placed-resource__icon { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
-.placed-resource__name { fill: #e0e4e8; font: 600 12px "Segoe UI", sans-serif; pointer-events: none; }
+.placed-resource__name { fill: #e0e4e8; font: 600 11px "Segoe UI", sans-serif; pointer-events: none; }
 .placed-resource__type { fill: #9ba5ae; font: 9px "Segoe UI", sans-serif; letter-spacing: .35px; pointer-events: none; }
 .placed-resource__selection { display: none; fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .placed-resource__selection-label { display: none; fill: var(--accent); font: 700 8px "Segoe UI", sans-serif; letter-spacing: .7px; pointer-events: none; }

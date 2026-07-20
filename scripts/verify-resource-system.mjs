@@ -14,6 +14,8 @@ const { ResourceStore } = await loadTypeScriptModule('../src/services/ResourceSt
 const { SnapService } = await loadTypeScriptModule('../src/services/SnapService.ts');
 const { positionFromPointer } = await loadTypeScriptModule('../src/services/ResourcePlacement.ts');
 const { screenToWorld, worldToScreen } = await loadTypeScriptModule('../src/components/workspace/canvas/ViewportTransform.ts');
+const { estimateSvgTextWidth, fitSvgText } = await loadTypeScriptModule('../src/utilities/SvgTextFit.ts');
+const { RESOURCE_TEMPLATES } = await loadTypeScriptModule('../src/core/constants/resourceTemplates.ts');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -30,11 +32,15 @@ const template = {
   category: 'Machines',
   resourceType: 'CNC Machine',
   icon: 'cnc',
-  defaultWidth: 120,
+  defaultWidth: 180,
   defaultHeight: 80,
   tags: ['test'],
   isFavourite: false,
 };
+
+assert(RESOURCE_TEMPLATES.length === 13, 'Starter resource library remains complete');
+assert(RESOURCE_TEMPLATES.every((item) => item.defaultWidth === 180), 'Every starter resource has a usable default width');
+assert(RESOURCE_TEMPLATES.every((item) => item.defaultHeight === 80), 'Every starter resource has a usable default height');
 
 const ids = new ResourceIdGenerator();
 assert(ids.next() === 'RES-0001', 'First resource ID is stable');
@@ -54,8 +60,18 @@ assert(store.getSelectedResourceId() === placed.id, 'Locked delete preserves sel
 
 assert(store.updateResource(placed.id, { locked: false }), 'Resource can be unlocked');
 assert(!store.updateResource(placed.id, { width: 2 }), 'Invalid size is rejected');
-assert(placed.width === 120, 'Invalid property input does not corrupt the model');
+assert(placed.width === 180, 'Invalid property input does not corrupt the model');
+assert(!store.updateResource(placed.id, { width: 99 }), 'Widths below the engineering minimum are rejected');
+assert(!store.updateResource(placed.id, { height: 59 }), 'Heights below the engineering minimum are rejected');
 assert(!store.updateResource(placed.id, { worldX: Number.NaN }), 'Non-finite positions are rejected');
+
+const longName = 'Incoming Material Inspection and Verification';
+const availableTextWidth = 122;
+const fittedName = fitSvgText(longName, availableTextWidth, 11);
+assert(fittedName.endsWith('…'), 'Long SVG labels receive an ellipsis');
+assert(estimateSvgTextWidth(fittedName, 11) <= availableTextWidth, 'Fitted SVG labels stay inside the available width');
+assert(fitSvgText('Operator', availableTextWidth, 11) === 'Operator', 'Complete SVG labels are preserved when they fit');
+assert(fitSvgText(longName, 4, 11) === '', 'Very narrow SVG text regions fail safely');
 
 const transform = { panX: 250, panY: 140, zoom: 2, minZoom: 0.1, maxZoom: 4 };
 const dropViewport = { x: 650, y: 440 };
