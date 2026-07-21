@@ -1,7 +1,7 @@
 import type { CanvasTool } from '../../../models/canvas/CanvasState';
 import { actionButton, element } from '../../../ui/dom';
 
-export type CanvasToolbarCommand = 'select' | 'pan' | 'connect' | 'delete-link' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'grid' | 'origin' | 'snap' | 'delete-selection' | 'clear-selection' | 'focus';
+export type CanvasToolbarCommand = 'select' | 'pan' | 'connect' | 'delete-link' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'grid' | 'origin' | 'snap' | 'copy' | 'paste' | 'duplicate' | 'delete-selection' | 'clear-selection' | 'focus';
 
 export interface CanvasToolbarController {
   readonly element: HTMLElement;
@@ -33,7 +33,10 @@ const COMMANDS: readonly CommandDefinition[] = [
   { command: 'grid', label: 'Grid', title: 'Toggle engineering grid', toggle: true },
   { command: 'origin', label: 'Origin', title: 'Toggle origin and axes', toggle: true },
   { command: 'snap', label: 'Snap', title: 'Toggle Snap to Grid', toggle: true },
-  { command: 'delete-selection', label: 'Delete', title: 'Delete selected object' },
+  { command: 'copy', label: 'Copy', title: 'Copy selected objects (Ctrl+C)' },
+  { command: 'paste', label: 'Paste', title: 'Paste application clipboard (Ctrl+V)' },
+  { command: 'duplicate', label: 'Duplicate', title: 'Duplicate selected objects (Ctrl+D)' },
+  { command: 'delete-selection', label: 'Delete', title: 'Delete selected objects' },
   { command: 'clear-selection', label: 'Clear', title: 'Clear object selection' },
   { command: 'focus', label: 'Canvas Focus', title: 'Toggle Canvas Focus mode', toggle: true },
 ];

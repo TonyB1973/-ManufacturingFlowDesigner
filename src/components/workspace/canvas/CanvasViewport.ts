@@ -34,6 +34,8 @@ import { createCanvasToolbar, type CanvasToolbarCommand } from './CanvasToolbar'
 import { EngineeringGrid } from './EngineeringGrid';
 import { centreOrigin, screenToWorld, zoomAroundPoint, type Point, type ViewportSize } from './ViewportTransform';
 import type { CommandFactory } from '../../../services/history/CommandFactory';
+import type { ApplicationClipboardService } from '../../../services/editing/ApplicationClipboardService';
+import { normalizeRectangle, polylineIntersectsRectangle, rectanglesIntersect } from '../../../services/selection/MarqueeGeometry';
 
 export interface CanvasViewportCallbacks {
   readonly onZoomChange: (zoom: number) => void;
@@ -53,7 +55,7 @@ export interface CanvasViewportController {
   dispose(): void;
 }
 
-export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, workspaceStore: WorkspaceStore, selectionStore: SelectionController, commands: CommandFactory, callbacks: CanvasViewportCallbacks): CanvasViewportController {
+export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, workspaceStore: WorkspaceStore, selectionStore: SelectionController, commands: CommandFactory, editing: ApplicationClipboardService, callbacks: CanvasViewportCallbacks): CanvasViewportController {
   const state = createCanvasState();
   const snap = new SnapService();
   const workspace = element('main', 'workspace');
@@ -65,7 +67,9 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   viewport.setAttribute('aria-label', 'Manufacturing engineering canvas. Use the mouse wheel to zoom and middle mouse or Space plus drag to pan.');
   const grid = new EngineeringGrid();
   const scaleReference = element('output', 'canvas-scale', 'World origin centred');
-  viewport.append(grid.svg, scaleReference);
+  const marquee = element('div', 'canvas-marquee'); marquee.hidden = true;
+  const editingMenu = element('div', 'resource-context-menu'); editingMenu.setAttribute('role', 'menu'); editingMenu.hidden = true;
+  viewport.append(grid.svg, marquee, scaleReference, editingMenu);
 
   let size: ViewportSize = { width: 1, height: 1 };
   let initialised = false;
@@ -149,10 +153,13 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         callbacks.onStatusChange(`Snap ${snap.toggle() ? 'enabled' : 'disabled'}`);
         break;
       case 'delete-selection':
-        if (activeWorkspace === 'processFlow' && selectionStore.getSelection().kind === 'connection') connectionInteraction?.deleteSelection();
-        else if (activeWorkspace === 'processFlow' && selectionStore.getSelection().kind === 'operation') operationInteraction?.deleteSelection();
-        else if (activeWorkspace === 'factoryLayout' && selectionStore.getSelection().kind === 'resource') { const selected = resourceStore.getSelectedResource(); if (selected) callbacks.requestResourceDeletion(selected.id); }
+        { const result = editing.deleteSelection((message) => window.confirm(message)); callbacks.onStatusChange(result.message); }
         break;
+      case 'copy': { const result = editing.copy(); callbacks.onStatusChange(result.message); break; }
+      case 'cut': { const result = editing.cut((message) => window.confirm(message)); callbacks.onStatusChange(result.message); break; }
+      case 'paste': { const result = editing.paste(); callbacks.onStatusChange(result.message); break; }
+      case 'duplicate': { const result = editing.duplicate(); callbacks.onStatusChange(result.message); break; }
+      case 'select-all': { const result = editing.selectAll(); callbacks.onStatusChange(result.message); break; }
       case 'clear-selection':
         selectionStore.clear();
         callbacks.onStatusChange('Selection cleared');
@@ -188,16 +195,17 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     resourceStore,
     snap,
     callbacks.onStatusChange,
-    callbacks.requestResourceDeletion,
     commands,
+    selectionStore,
+    editing,
   );
-  let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange, commands);
+  let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange, commands, selectionStore);
   const previewRoute = (sourceId: string, targetId: string, sourceAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor, targetAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor) => {
     const source = operationStore.getOperation(sourceId); const target = operationStore.getOperation(targetId); if (!source || !target) return { points: [], status: 'fallback' as const };
     const obstacles = operationStore.getOperations().filter((operation) => operation.visible && operation.id !== sourceId && operation.id !== targetId).map(operationBounds);
     const route = routeOrthogonal({ source: anchorWorldPosition(source, sourceAnchor), sourceDirection: anchorDirection(sourceAnchor), target: anchorWorldPosition(target, targetAnchor), targetDirection: anchorDirection(targetAnchor), obstacles, clearance: 16 }); return { points: route.points, status: route.fallback ? 'fallback' as const : 'clear' as const };
   };
-  let connectionInteraction: ConnectionInteractionController | null = new ConnectionInteractionController(viewport, application, state, operationStore, connectionStore, commands, grid.getInteractionLayer(), { setTool: (tool) => { if (state.tool !== tool) runCommand(tool); }, onStatus: callbacks.onStatusChange, routePreview: previewRoute });
+  let connectionInteraction: ConnectionInteractionController | null = new ConnectionInteractionController(viewport, application, state, operationStore, connectionStore, commands, selectionStore, editing, grid.getInteractionLayer(), { setTool: (tool) => { if (state.tool !== tool) runCommand(tool); }, onStatus: callbacks.onStatusChange, routePreview: previewRoute });
 
   const interaction = new CanvasInteractionController(viewport, application, {
     getZoom: () => state.zoom,
@@ -284,18 +292,41 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   const handleResourceReveal = (event: Event): void => { const resource = resourceStore.getResource((event as CustomEvent<string>).detail); if (!resource) return; state.panX = size.width / 2 - resource.worldX * state.zoom; state.panY = size.height / 2 - resource.worldY * state.zoom; requestRender(); callbacks.onStatusChange(`Revealed ${resource.id}`); };
   document.addEventListener(RESOURCE_REVEAL_EVENT, handleResourceReveal);
 
+  let marqueeState: { readonly pointerId: number; readonly start: Point; readonly additive: boolean; readonly subtractive: boolean; moved: boolean } | null = null;
+  const viewportPoint = (event: PointerEvent): Point => { const bounds = viewport.getBoundingClientRect(); return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }; };
   const handleBackgroundSelection = (event: PointerEvent): void => {
-    if (event.button !== 0 || state.tool !== 'select') return;
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target?.closest('[data-resource-id], [data-operation-id], [data-connection-id]')) selectionStore.clear();
+    if (event.button !== 0 || state.tool !== 'select') return; const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('[data-resource-id], [data-operation-id], [data-connection-id], button, input, textarea, select')) return;
+    marqueeState = { pointerId: event.pointerId, start: viewportPoint(event), additive: event.ctrlKey || event.metaKey || event.shiftKey, subtractive: event.altKey, moved: false }; viewport.setPointerCapture(event.pointerId); event.preventDefault();
   };
-  viewport.addEventListener('pointerdown', handleBackgroundSelection);
+  const handleMarqueeMove = (event: PointerEvent): void => { if (!marqueeState || event.pointerId !== marqueeState.pointerId) return; const point = viewportPoint(event); if (Math.hypot(point.x - marqueeState.start.x, point.y - marqueeState.start.y) < 3) return; marqueeState.moved = true; marquee.hidden = false; marquee.style.left = `${Math.min(point.x, marqueeState.start.x)}px`; marquee.style.top = `${Math.min(point.y, marqueeState.start.y)}px`; marquee.style.width = `${Math.abs(point.x - marqueeState.start.x)}px`; marquee.style.height = `${Math.abs(point.y - marqueeState.start.y)}px`; };
+  const cancelMarquee = (): void => { const active = marqueeState; marqueeState = null; marquee.hidden = true; if (active && viewport.hasPointerCapture(active.pointerId)) viewport.releasePointerCapture(active.pointerId); };
+  const finishMarquee = (event: PointerEvent): void => {
+    const active = marqueeState; if (!active || event.pointerId !== active.pointerId) return; marqueeState = null; marquee.hidden = true; if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+    if (!active.moved) { if (!active.additive && !active.subtractive) selectionStore.clear(); return; }
+    const rectangle = normalizeRectangle(screenToWorld(active.start, state), screenToWorld(viewportPoint(event), state));
+    const hits = activeWorkspace === 'factoryLayout'
+      ? resourceStore.getPlacedResources().filter((item) => item.visible && rectanglesIntersect(rectangle, { minX: item.worldX - item.width / 2, minY: item.worldY - item.height / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.height / 2 })).map((item) => ({ kind: 'resource' as const, id: item.id }))
+      : [...operationStore.getOperations().filter((item) => item.visible && rectanglesIntersect(rectangle, { minX: item.worldX - item.width / 2, minY: item.worldY - item.height / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.height / 2 })).map((item) => ({ kind: 'operation' as const, id: item.id })), ...connectionStore.getConnections().filter((item) => item.visible && polylineIntersectsRectangle(item.routePoints, rectangle)).map((item) => ({ kind: 'connection' as const, id: item.id }))];
+    if (active.subtractive) hits.forEach((item) => selectionStore.remove(item)); else if (active.additive) hits.forEach((item) => selectionStore.add(item)); else selectionStore.set(hits, hits.at(-1)); callbacks.onStatusChange(`Selected ${selectionStore.getState().items.length} items`);
+  };
+  const handleMarqueeCancel = (event: PointerEvent): void => { if (marqueeState?.pointerId === event.pointerId) cancelMarquee(); };
+  viewport.addEventListener('pointerdown', handleBackgroundSelection); viewport.addEventListener('pointermove', handleMarqueeMove); viewport.addEventListener('pointerup', finishMarquee); viewport.addEventListener('pointercancel', handleMarqueeCancel);
   const isTyping = (target: EventTarget | null): boolean => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable);
   const handleObjectKeyDown = (event: KeyboardEvent): void => {
     if (isTyping(event.target) || !application.contains(document.activeElement)) return;
-    if (event.key === 'Delete' || event.key === 'Backspace') { if (selectionStore.getSelection().kind !== 'none') event.preventDefault(); runCommand('delete-selection'); }
+    const commandKey = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
+    if (commandKey && ['c', 'x', 'v', 'd', 'a'].includes(key)) { event.preventDefault(); const result = key === 'c' ? editing.copy() : key === 'x' ? editing.cut((message) => window.confirm(message)) : key === 'v' ? editing.paste() : key === 'd' ? editing.duplicate() : editing.selectAll(); callbacks.onStatusChange(result.message); return; }
+    if (event.key === 'Delete' || event.key === 'Backspace') { if (selectionStore.getState().items.length) event.preventDefault(); runCommand('delete-selection'); return; }
+    if (event.key === 'Escape' && marqueeState) { cancelMarquee(); callbacks.onStatusChange('Marquee selection cancelled'); return; }
+    if (event.key === 'Escape' && selectionStore.getState().items.length) { selectionStore.clear(); callbacks.onStatusChange('Selection cleared'); }
   };
   document.addEventListener('keydown', handleObjectKeyDown);
+  const closeEditingMenu = (): void => { editingMenu.hidden = true; editingMenu.replaceChildren(); };
+  const handleEditingContextMenu = (event: MouseEvent): void => { const target = event.target instanceof Element ? event.target : null; if (target?.closest('[data-resource-id], [data-connection-id]')) return; const operationId = target?.closest<SVGGElement>('[data-operation-id]')?.dataset.operationId; if (operationId) { const ref = { kind: 'operation' as const, id: operationId }; if (!selectionStore.contains(ref)) selectionStore.select(ref); } else if (target?.closest('button, input, textarea, select')) return; event.preventDefault(); closeEditingMenu(); const add = (label: string, action: () => { readonly message: string }): void => { const button = element('button', 'resource-context-menu__item', label); button.type = 'button'; button.setAttribute('role', 'menuitem'); button.addEventListener('click', () => { callbacks.onStatusChange(action().message); closeEditingMenu(); viewport.focus({ preventScroll: true }); }); editingMenu.append(button); }; if (operationId) { add('Cut', () => editing.cut((message) => window.confirm(message))); add('Copy', () => editing.copy()); } add('Paste', () => editing.paste()); if (operationId) { add('Duplicate', () => editing.duplicate()); add('Delete', () => editing.deleteSelection((message) => window.confirm(message))); } const bounds = viewport.getBoundingClientRect(); editingMenu.style.left = `${Math.min(event.clientX - bounds.left, Math.max(0, viewport.clientWidth - 190))}px`; editingMenu.style.top = `${Math.min(event.clientY - bounds.top, Math.max(0, viewport.clientHeight - 190))}px`; editingMenu.hidden = false; editingMenu.querySelector<HTMLButtonElement>('button')?.focus(); };
+  const handleEditingMenuOutside = (event: PointerEvent): void => { if (!editingMenu.hidden && event.target instanceof Node && !editingMenu.contains(event.target)) closeEditingMenu(); };
+  const handleEditingMenuEscape = (event: KeyboardEvent): void => { if (event.key === 'Escape' && !editingMenu.hidden) { event.preventDefault(); closeEditingMenu(); viewport.focus({ preventScroll: true }); } };
+  viewport.addEventListener('contextmenu', handleEditingContextMenu); document.addEventListener('pointerdown', handleEditingMenuOutside, true); document.addEventListener('keydown', handleEditingMenuEscape);
 
   const resizeObserver = new ResizeObserver((entries) => {
     const bounds = entries[0]?.contentRect;
@@ -315,10 +346,10 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   document.addEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);
   const activateWorkspace = (workspaceId: WorkspaceId): void => workspaceStore.activate(workspaceId);
   processTab.addEventListener('click', () => activateWorkspace('processFlow')); layoutTab.addEventListener('click', () => activateWorkspace('factoryLayout'));
-  const cancelActiveInteractions = (): void => { resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool === 'connect' || state.tool === 'delete-link') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
+  const cancelActiveInteractions = (): void => { cancelMarquee(); resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool === 'connect' || state.tool === 'delete-link') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
   const renderWorkspace = (workspaceId: WorkspaceId): void => {
     if (workspaceId !== activeWorkspace) cancelActiveInteractions();
-    saveViewport(); activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.clear(); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
+    saveViewport(); activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.setWorkspace(workspaceId); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
     const processActive = workspaceId === 'processFlow'; toolbar.setConnectionToolsEnabled(processActive); processTab.setAttribute('aria-selected', String(processActive)); layoutTab.setAttribute('aria-selected', String(!processActive)); processTab.tabIndex = processActive ? 0 : -1; layoutTab.tabIndex = processActive ? -1 : 0; canvasTitle.textContent = processActive ? 'Process Flow — Operations' : 'Factory Layout — Physical Resources'; viewport.setAttribute('aria-label', `${processActive ? 'Process Flow' : 'Factory Layout'} engineering canvas. Use the mouse wheel to zoom and middle mouse or Space plus drag to pan.`); callbacks.onWorkspaceChange(workspaceId); callbacks.onStatusChange(`Workspace: ${processActive ? 'Process Flow' : 'Factory Layout'}`); requestRender();
   };
   const unsubscribeWorkspace = workspaceStore.subscribe(renderWorkspace); grid.setWorkspace(activeWorkspace); renderWorkspace(activeWorkspace);
@@ -345,7 +376,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       document.removeEventListener(OPERATION_KEYBOARD_PLACE_EVENT, handleOperationKeyboardPlacement); document.removeEventListener(OPERATION_REVEAL_EVENT, handleOperationReveal);
       document.removeEventListener(CONNECTION_REVEAL_EVENT, handleConnectionReveal);
       document.removeEventListener(RESOURCE_REVEAL_EVENT, handleResourceReveal);
-      viewport.removeEventListener('pointerdown', handleBackgroundSelection); document.removeEventListener('keydown', handleObjectKeyDown);
+      viewport.removeEventListener('pointerdown', handleBackgroundSelection); viewport.removeEventListener('pointermove', handleMarqueeMove); viewport.removeEventListener('pointerup', finishMarquee); viewport.removeEventListener('pointercancel', handleMarqueeCancel); document.removeEventListener('keydown', handleObjectKeyDown);
+      viewport.removeEventListener('contextmenu', handleEditingContextMenu); document.removeEventListener('pointerdown', handleEditingMenuOutside, true); document.removeEventListener('keydown', handleEditingMenuEscape); editingMenu.remove();
       if (renderFrame !== 0) cancelAnimationFrame(renderFrame);
     },
   };

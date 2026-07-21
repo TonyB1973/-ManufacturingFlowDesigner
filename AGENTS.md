@@ -33,4 +33,8 @@
 31. Keep command history transient and out of `.mflow` files. Validation, derived routes, selection, workspace switching, pan, zoom, and temporary view state are not history entries.
 32. New and Open clear history and establish a clean checkpoint. Successful Save and Save As move the saved-history checkpoint without clearing history.
 33. Commit a completed resource or operation drag as at most one Move command; cancellation restores the original state and creates no entry.
+34. Keep multi-selection typed, workspace-specific, transient, and separate from persisted domain objects; one item is the primary selection for detailed editing.
+35. Keep the application clipboard in memory and store only plain model snapshots. Copying Process Flow operations includes only connections whose two endpoints are copied.
+36. Paste and Duplicate must allocate fresh stable IDs, remap copied connection endpoints, select inserted items, and execute as one reversible command with stable IDs on Redo.
+37. Group moves and multi-delete are compound history actions. Locked items are not moved or deleted, and resource deletion continues to clear only affected assignments.
 

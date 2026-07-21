@@ -166,6 +166,7 @@ export class ResourceRenderer {
     node.group.setAttribute('aria-label', `${resource.id}, ${resource.name}, ${resource.resourceType}, ${resource.active ? 'active' : 'inactive'}${resource.locked ? ', locked' : ''}${resource.selected ? ', selected' : ''}`);
     node.title.textContent = resource.name;
     node.group.classList.toggle('placed-resource--selected', resource.selected);
+    node.group.classList.toggle('placed-resource--primary', this.store.getSelectedResourceId() === resource.id);
     node.group.classList.toggle('placed-resource--locked', resource.locked);
     node.group.classList.toggle('placed-resource--inactive', !resource.active);
     for (const rectangle of [node.body, node.selection]) {

@@ -39,7 +39,7 @@ export class OperationRenderer {
   private render(operation: OperationInstance): void {
     const node = this.nodes.get(operation.id); if (!node) return; const x = -operation.width / 2; const y = -operation.height / 2; const headerHeight = 26;
     node.group.setAttribute('transform', `translate(${operation.worldX} ${operation.worldY})`); node.group.setAttribute('display', operation.visible ? 'inline' : 'none');
-    node.group.classList.toggle('placed-operation--selected', operation.selected); node.group.classList.toggle('placed-operation--locked', operation.locked);
+    node.group.classList.toggle('placed-operation--selected', operation.selected); node.group.classList.toggle('placed-operation--primary', this.store.getSelectedOperation()?.id === operation.id); node.group.classList.toggle('placed-operation--locked', operation.locked);
     node.group.setAttribute('aria-label', `Operation ${operation.sequence}, ${operation.name}, ${operation.operationType}${operation.selected ? ', selected' : ''}${operation.locked ? ', locked' : ''}`); node.title.textContent = `${operation.name} — OP ${operation.sequence}`;
     for (const rectangle of [node.body, node.selection]) { rectangle.setAttribute('x', String(x)); rectangle.setAttribute('y', String(y)); rectangle.setAttribute('width', String(operation.width)); rectangle.setAttribute('height', String(operation.height)); rectangle.setAttribute('rx', '5'); }
     node.header.setAttribute('x', String(x)); node.header.setAttribute('y', String(y)); node.header.setAttribute('width', String(operation.width)); node.header.setAttribute('height', String(headerHeight)); node.header.setAttribute('rx', '5');

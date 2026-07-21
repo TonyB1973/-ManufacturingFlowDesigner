@@ -10,7 +10,7 @@ export interface RibbonTab {
 
 export const RIBBON_TABS: readonly RibbonTab[] = [
   { name: 'File', groups: [{ name: 'Project', commands: ['New', 'Open', 'Save', 'Save As'] }] },
-  { name: 'Edit', groups: [{ name: 'History', commands: ['Undo', 'Redo'] }, { name: 'Modify', commands: ['Delete'] }] },
+  { name: 'Edit', groups: [{ name: 'History', commands: ['Undo', 'Redo'] }, { name: 'Clipboard', commands: ['Cut', 'Copy', 'Paste', 'Duplicate'] }, { name: 'Selection', commands: ['Select All', 'Delete'] }] },
   { name: 'View', groups: [{ name: 'Viewport', commands: ['Zoom In', 'Zoom Out', 'Fit View'] }, { name: 'Display', commands: ['Grid', 'Canvas Focus'] }] },
   { name: 'Process', groups: [{ name: 'Flow', commands: ['Add Operation', 'Select', 'Connect'] }] },
   { name: 'Resources', groups: [{ name: 'Library', commands: ['Resource Library', 'Add Resource', 'Manage Library'] }] },

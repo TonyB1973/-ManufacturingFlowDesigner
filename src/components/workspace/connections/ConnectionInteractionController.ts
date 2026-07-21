@@ -6,6 +6,8 @@ import type { OperationStore } from '../../../services/OperationStore';
 import { screenToWorld } from '../canvas/ViewportTransform';
 import { createConnectionContextMenu, type ConnectionContextMenuController } from './ConnectionContextMenu';
 import type { CommandFactory } from '../../../services/history/CommandFactory';
+import type { SelectionController } from '../../../models/selection/Selection';
+import type { ApplicationClipboardService } from '../../../services/editing/ApplicationClipboardService';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 function svg<K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] { return document.createElementNS(SVG_NAMESPACE, tag); }
@@ -19,7 +21,7 @@ export interface ConnectionInteractionCallbacks {
 export class ConnectionInteractionController {
   private readonly portGroup = svg('g'); private readonly portHit = svg('circle'); private readonly portVisible = svg('circle'); private readonly preview = svg('path');
   private source: { operationId: string; anchor: OperationAnchor; explicit: boolean } | null = null; private hovered: { operationId: string; anchor: OperationAnchor; explicit: boolean } | null = null; private activePointer: number | null = null; private frame = 0; private pendingPoint: WorldPoint | null = null; private readonly menu: ConnectionContextMenuController; private longPressTimer = 0;
-  public constructor(private readonly viewport: HTMLElement, private readonly application: HTMLElement, private readonly state: CanvasState, private readonly operations: OperationStore, private readonly connections: ConnectionStore, private readonly commands: CommandFactory, overlay: SVGGElement, private readonly callbacks: ConnectionInteractionCallbacks) {
+  public constructor(private readonly viewport: HTMLElement, private readonly application: HTMLElement, private readonly state: CanvasState, private readonly operations: OperationStore, private readonly connections: ConnectionStore, private readonly commands: CommandFactory, private readonly selection: SelectionController, private readonly editing: ApplicationClipboardService, overlay: SVGGElement, private readonly callbacks: ConnectionInteractionCallbacks) {
     this.portGroup.classList.add('dynamic-operation-port'); this.portHit.classList.add('dynamic-operation-port__hit'); this.portVisible.classList.add('dynamic-operation-port__visible'); this.portGroup.append(this.portHit, this.portVisible); this.portGroup.setAttribute('display', 'none');
     this.preview.classList.add('connection-preview'); this.preview.setAttribute('display', 'none'); this.preview.setAttribute('marker-end', 'url(#process-arrowhead)'); overlay.append(this.preview, this.portGroup);
     this.menu = createConnectionContextMenu(viewport);
@@ -43,7 +45,7 @@ export class ConnectionInteractionController {
   private readonly pointerDown = (event: PointerEvent): void => {
     const connectionId = this.connectionId(event.target); if (connectionId && event.button === 0) {
       if (this.state.tool === 'delete-link') { event.preventDefault(); event.stopImmediatePropagation(); this.statusForDelete(this.commands.deleteConnection(connectionId)); return; }
-      if (this.state.tool === 'select') { event.preventDefault(); event.stopImmediatePropagation(); this.connections.selectConnection(connectionId); this.callbacks.onStatus(`Connection selected: ${connectionId}`); if (event.pointerType === 'touch') this.scheduleLongPress(event, connectionId); return; }
+      if (this.state.tool === 'select') { event.preventDefault(); event.stopImmediatePropagation(); const ref = { kind: 'connection' as const, id: connectionId }; if (event.ctrlKey || event.metaKey) this.selection.toggle(ref); else if (event.shiftKey) this.selection.add(ref); else this.selection.select(ref); this.callbacks.onStatus(`Connection selected: ${connectionId}`); if (event.pointerType === 'touch') this.scheduleLongPress(event, connectionId); return; }
     }
     if (this.state.tool !== 'connect' || event.button !== 0) return;
     const target = this.operationNear(event); if (!target) { this.callbacks.onStatus(this.source ? 'Connect: select target operation' : 'Connect: select source operation'); return; }
@@ -73,8 +75,8 @@ export class ConnectionInteractionController {
   };
   private readonly keyDown = (event: KeyboardEvent): void => {
     if (typing(event.target) || !this.application.contains(document.activeElement)) return; const key = event.key.toLowerCase();
-    if (key === 'c') { event.preventDefault(); this.callbacks.setTool('connect'); }
-    else if (key === 'v') { event.preventDefault(); this.callbacks.setTool('select'); }
+    if (!event.ctrlKey && !event.metaKey && key === 'c') { event.preventDefault(); this.callbacks.setTool('connect'); }
+    else if (!event.ctrlKey && !event.metaKey && key === 'v') { event.preventDefault(); this.callbacks.setTool('select'); }
     else if (event.key === 'Escape') { if (this.state.tool === 'connect' || this.state.tool === 'delete-link') { event.preventDefault(); this.callbacks.setTool('select'); } else this.menu.close(); }
     else if (key === 'r' && this.connections.getSelectedConnection()) { event.preventDefault(); this.reverseSelection(); }
   };
@@ -106,7 +108,7 @@ export class ConnectionInteractionController {
   private world(event: PointerEvent): WorldPoint { const bounds = this.viewport.getBoundingClientRect(); return screenToWorld({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, this.state); }
   private connectionId(target: EventTarget | null): string | undefined { return target instanceof Element ? target.closest<SVGElement>('[data-connection-id]')?.dataset.connectionId : undefined; }
   private statusForDelete(result: ConnectionMutationResult): void { this.callbacks.onStatus(result === 'deleted' ? 'Connection deleted' : result === 'locked' ? 'Connection is locked' : 'No connection selected'); }
-  private openMenu(clientX: number, clientY: number, id: string): void { const connection = this.connections.getConnection(id); if (!connection) return; this.connections.selectConnection(id); const bounds = this.viewport.getBoundingClientRect(); this.menu.open(clientX - bounds.left, clientY - bounds.top, id, { onDelete: () => this.statusForDelete(this.commands.deleteConnection(id)), onReverse: () => { const result = this.commands.reverseConnection(id); this.callbacks.onStatus(result === 'updated' ? 'Connection reversed' : result === 'duplicate' ? 'Cannot reverse: duplicate connection' : 'Connection is locked'); }, onSelectSource: () => this.operations.selectOperation(connection.sourceOperationId), onSelectTarget: () => this.operations.selectOperation(connection.targetOperationId) }); }
+  private openMenu(clientX: number, clientY: number, id: string): void { const connection = this.connections.getConnection(id); if (!connection) return; const ref = { kind: 'connection' as const, id }; if (!this.selection.contains(ref)) this.selection.select(ref); const bounds = this.viewport.getBoundingClientRect(); const report = (result: { readonly message: string }): void => this.callbacks.onStatus(result.message); this.menu.open(clientX - bounds.left, clientY - bounds.top, id, { onCut: () => report(this.editing.cut((message) => window.confirm(message))), onCopy: () => report(this.editing.copy()), onPaste: () => report(this.editing.paste()), onDuplicate: () => report(this.editing.duplicate()), onDelete: () => this.statusForDelete(this.commands.deleteConnection(id)), onReverse: () => { const result = this.commands.reverseConnection(id); this.callbacks.onStatus(result === 'updated' ? 'Connection reversed' : result === 'duplicate' ? 'Cannot reverse: duplicate connection' : 'Connection is locked'); }, onSelectSource: () => this.operations.selectOperation(connection.sourceOperationId), onSelectTarget: () => this.operations.selectOperation(connection.targetOperationId) }); }
   private scheduleLongPress(event: PointerEvent, id: string): void { this.clearLongPress(); const x = event.clientX; const y = event.clientY; this.longPressTimer = window.setTimeout(() => this.openMenu(x, y, id), 600); }
   private clearLongPress(): void { if (this.longPressTimer) window.clearTimeout(this.longPressTimer); this.longPressTimer = 0; }
 }

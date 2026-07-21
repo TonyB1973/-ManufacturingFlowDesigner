@@ -1,6 +1,7 @@
 import type { OperationInstance, OperationInstancePatch } from '../models/operations/OperationInstance';
 import type { OperationTemplate } from '../models/operations/OperationTemplate';
 import type { SelectionController } from '../models/selection/Selection';
+import { SelectionStore } from './SelectionStore';
 import type { OperationIdProvider } from '../utilities/OperationIdGenerator';
 
 export const DEFAULT_OPERATION_WIDTH = 210;
@@ -19,16 +20,6 @@ export type OperationStoreChange =
 export type OperationStoreListener = (change: OperationStoreChange) => void;
 export type OperationDeleteResult = 'deleted' | 'locked' | 'none';
 
-class LocalSelectionController implements SelectionController {
-  private selection: ReturnType<SelectionController['getSelection']> = { kind: 'none' };
-  private readonly listeners = new Set<Parameters<SelectionController['subscribe']>[0]>();
-  public getSelection(): ReturnType<SelectionController['getSelection']> { return this.selection; }
-  public select(selection: Parameters<SelectionController['select']>[0]): void { this.selection = selection; this.notify(); }
-  public clear(): void { this.selection = { kind: 'none' }; this.notify(); }
-  public subscribe(listener: Parameters<SelectionController['subscribe']>[0]): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  private notify(): void { for (const listener of this.listeners) listener(this.selection); }
-}
-
 export class OperationStore {
   private readonly templates: Map<string, OperationTemplate>;
   private readonly operations = new Map<string, OperationInstance>();
@@ -42,7 +33,7 @@ export class OperationStore {
     selection?: SelectionController,
   ) {
     this.templates = new Map(templates.map((template) => [template.id, { ...template, tags: [...template.tags] }]));
-    this.selection = selection ?? new LocalSelectionController();
+    this.selection = selection ?? new SelectionStore();
     this.unsubscribeSelection = this.selection.subscribe(() => this.syncSelection());
   }
 
@@ -114,7 +105,7 @@ export class OperationStore {
 
   public deleteOperation(operationId: string): OperationDeleteResult {
     const operation = this.operations.get(operationId); if (!operation) return 'none'; if (operation.locked) return 'locked';
-    this.operations.delete(operationId); const selected = this.selection.getSelection(); if (selected.kind === 'operation' && selected.id === operationId) this.selection.clear();
+    this.operations.delete(operationId); this.selection.remove({ kind: 'operation', id: operationId });
     this.notify({ kind: 'deleted', operationId }); this.notify({ kind: 'validation' }); return 'deleted';
   }
 
@@ -167,7 +158,7 @@ export class OperationStore {
 
   private syncSelection(): void {
     const selected = this.selection.getSelection();
-    for (const operation of this.operations.values()) operation.selected = selected.kind === 'operation' && selected.id === operation.id;
+    for (const operation of this.operations.values()) operation.selected = this.selection.contains({ kind: 'operation', id: operation.id });
     this.notify({ kind: 'selection', operationId: selected.kind === 'operation' ? selected.id : null });
   }
 
