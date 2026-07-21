@@ -1,6 +1,7 @@
 import type { OperationInstance } from '../models/operations/OperationInstance';
 import type { ConnectionType, OperationAnchor, ProcessConnection, ProcessConnectionPatch, RouteStatus, WorldPoint } from '../models/connections/ProcessConnection';
 import type { SelectionController } from '../models/selection/Selection';
+import { SelectionStore } from './SelectionStore';
 import type { ConnectionIdProvider } from '../utilities/ConnectionIdGenerator';
 
 export type ConnectionStoreChange =
@@ -15,21 +16,11 @@ export type ConnectionMutationResult = 'created' | 'updated' | 'deleted' | 'dupl
 export interface ConnectionRoute { readonly points: readonly WorldPoint[]; readonly status: RouteStatus; }
 export type ConnectionRouteProvider = (connection: ProcessConnection) => ConnectionRoute;
 
-class LocalSelectionController implements SelectionController {
-  private selection: ReturnType<SelectionController['getSelection']> = { kind: 'none' };
-  private readonly listeners = new Set<Parameters<SelectionController['subscribe']>[0]>();
-  public getSelection(): ReturnType<SelectionController['getSelection']> { return this.selection; }
-  public select(selection: Parameters<SelectionController['select']>[0]): void { this.selection = selection; this.notify(); }
-  public clear(): void { this.selection = { kind: 'none' }; this.notify(); }
-  public subscribe(listener: Parameters<SelectionController['subscribe']>[0]): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  private notify(): void { for (const listener of this.listeners) listener(this.selection); }
-}
-
 export class ConnectionStore {
   private readonly connections = new Map<string, ProcessConnection>(); private readonly listeners = new Set<ConnectionStoreListener>();
   private readonly selection: SelectionController; private readonly unsubscribeSelection: () => void;
   public constructor(private readonly idProvider: ConnectionIdProvider, private readonly getOperation: (id: string) => OperationInstance | undefined, private readonly routeProvider: ConnectionRouteProvider, selection?: SelectionController) {
-    this.selection = selection ?? new LocalSelectionController(); this.unsubscribeSelection = this.selection.subscribe(() => this.syncSelection());
+    this.selection = selection ?? new SelectionStore(); this.unsubscribeSelection = this.selection.subscribe(() => this.syncSelection());
   }
   public getConnections(): readonly ProcessConnection[] { return [...this.connections.values()]; }
   public getConnection(id: string): ProcessConnection | undefined { return this.connections.get(id); }
@@ -58,7 +49,7 @@ export class ConnectionStore {
   public deleteSelected(): ConnectionMutationResult { const selected = this.getSelectedConnection(); return selected ? this.deleteConnection(selected.id) : 'none'; }
   public deleteConnection(id: string): ConnectionMutationResult {
     const connection = this.connections.get(id); if (!connection) return 'none'; if (connection.locked) return 'locked'; this.connections.delete(id);
-    const selected = this.selection.getSelection(); if (selected.kind === 'connection' && selected.id === id) this.selection.clear(); this.notify({ kind: 'deleted', connectionId: id }); this.notify({ kind: 'validation' }); return 'deleted';
+    this.selection.remove({ kind: 'connection', id }); this.notify({ kind: 'deleted', connectionId: id }); this.notify({ kind: 'validation' }); return 'deleted';
   }
   public reverseConnection(id: string): ConnectionMutationResult {
     const connection = this.connections.get(id); if (!connection) return 'none'; if (connection.locked) return 'locked';
@@ -69,7 +60,7 @@ export class ConnectionStore {
   public deleteForOperation(operationId: string): void {
     const ids = [...this.connections.values()].filter((connection) => connection.sourceOperationId === operationId || connection.targetOperationId === operationId).map((connection) => connection.id);
     ids.forEach((id) => { this.connections.delete(id); this.notify({ kind: 'deleted', connectionId: id }); });
-    const selected = this.selection.getSelection(); if (selected.kind === 'connection' && ids.includes(selected.id)) this.selection.clear(); if (ids.length) this.notify({ kind: 'validation' });
+    ids.forEach((id) => this.selection.remove({ kind: 'connection', id })); if (ids.length) this.notify({ kind: 'validation' });
   }
   public recalculateAll(): void { for (const connection of this.connections.values()) { this.recalculate(connection); this.notify({ kind: 'updated', connection }); } this.notify({ kind: 'validation' }); }
   public sortedConnections(): readonly ProcessConnection[] {
@@ -91,6 +82,6 @@ export class ConnectionStore {
   private recalculate(connection: ProcessConnection): void { const route = this.routeProvider(connection); connection.routePoints = [...route.points]; connection.routeStatus = route.status; }
   private isDuplicate(source: string, target: string, type: ConnectionType, ignoreId?: string): boolean { return type === 'Standard' && [...this.connections.values()].some((connection) => connection.id !== ignoreId && connection.connectionType === 'Standard' && connection.sourceOperationId === source && connection.targetOperationId === target); }
   private validPatch(patch: ProcessConnectionPatch): boolean { return patch.label === undefined || patch.label.length <= 120; }
-  private syncSelection(): void { const selected = this.selection.getSelection(); for (const connection of this.connections.values()) connection.selected = selected.kind === 'connection' && selected.id === connection.id; this.notify({ kind: 'selection', connectionId: selected.kind === 'connection' ? selected.id : null }); }
+  private syncSelection(): void { const selected = this.selection.getSelection(); for (const connection of this.connections.values()) connection.selected = this.selection.contains({ kind: 'connection', id: connection.id }); this.notify({ kind: 'selection', connectionId: selected.kind === 'connection' ? selected.id : null }); }
   private notify(change: ConnectionStoreChange): void { for (const listener of this.listeners) listener(change); }
 }

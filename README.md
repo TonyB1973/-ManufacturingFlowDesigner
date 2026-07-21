@@ -2,9 +2,19 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
-## Sprint 2.2 scope
+## Sprint 2.3 scope
 
-Sprint 2.2 adds bounded multi-step Undo and Redo through explicit reversible application commands. The Edit ribbon exposes live Undo/Redo availability and descriptions, the status bar reports history counts, and keyboard shortcuts work whenever the application—not a text-editing control—has focus. Sprint 2.1 project persistence, dirty-state safeguards, and workspace separation remain intact.
+Sprint 2.3 adds workspace-aware multi-selection, marquee selection, group movement, and an internal application clipboard for Copy, Cut, Paste, and Duplicate. These actions integrate with Sprint 2.2 command history and preserve the Process Flow / Factory Layout separation introduced earlier.
+
+## Multi-selection and clipboard
+
+Click selects one item. `Ctrl`/`Meta`+click toggles an item and `Shift`+click adds it. Drag empty canvas with Select active to marquee-select visible objects; hold a modifier to add or `Alt` to subtract. Factory Layout selection contains only physical resources. Process Flow selection contains operations and process connections. Switching workspace clears the transient selection.
+
+Dragging any selected unlocked resource or operation moves the unlocked selected group. The item under the pointer is the snap reference, `Alt` temporarily bypasses snap, and the entire move is one Undo step. Locked items remain selectable and copyable but do not move or delete.
+
+The Edit ribbon, multi-selection inspector, and keyboard provide `Ctrl`/`Meta`+`C`, `X`, `V`, `D`, and `A`. The application clipboard is internal to the current session. Resource paste creates new stable IDs and distinguishable names. Process Flow paste gives operations new IDs and appended sequences, preserves valid physical-resource assignments, and remaps only internal copied connections to the new operation IDs. Paste is rejected in the other workspace. Repeated paste uses cumulative offsets; Duplicate uses the same rules without replacing clipboard contents.
+
+Cut, Paste, Duplicate, group move, and multi-delete are atomic reversible commands. Redo restores the same IDs allocated by the original action. Multi-resource deletion asks once and reports affected assignments; deleting resources clears those assignments without changing process links. Deleting operations still removes attached links. Clipboard and selection are not written to `.mflow`, so schema `1.0.0` is unchanged.
 
 ## Undo, Redo, and command history
 
@@ -96,6 +106,7 @@ npm run test:connections
 npm run test:workspaces
 npm run test:persistence
 npm run test:history
+npm run test:editing
 npm run build
 git diff --check
 ```
@@ -114,12 +125,14 @@ git diff --check
 - `HistoryController` coordinates ribbon/keyboard actions, interaction cancellation, and status feedback.
 - Domain stores remain the runtime authorities for resources, operations, connections, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, and [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, and [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules.
 
-## Current limitations and planned Sprint 2.3
+## Current limitations
 
 The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no persistent/collaborative history, autosave/recovery, cloud sync, scenario comparison, custom-template editor, walls/dimensions, concurrency simulation, or WPF history implementation yet. Browser download fallback cannot overwrite an existing file silently.
 
-Sprint 2.3 is planned to add copy, paste, duplication, and multi-selection foundations.
+Clipboard contents are session-only and cannot be exchanged with external applications. Multi-selection supports the current single Factory Layout and does not yet provide alignment, distribution, grouping, or cross-workspace conversion tools.
 
-Development for this sprint is performed on `feature/sprint-2.2-undo-redo`.
+Sprint 2.4 is planned to add alignment, distribution, sizing, and advanced canvas editing tools.
+
+Development for this sprint is performed on `feature/sprint-2.3-multiselect-clipboard`.

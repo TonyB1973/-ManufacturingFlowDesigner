@@ -6,6 +6,7 @@ import type { ConnectionStore } from '../../services/ConnectionStore';
 import { createCanvasViewport, type CanvasViewportController } from './canvas/CanvasViewport';
 import type { WorkspaceStore } from '../../services/WorkspaceStore';
 import type { CommandFactory } from '../../services/history/CommandFactory';
+import type { ApplicationClipboardService } from '../../services/editing/ApplicationClipboardService';
 
 export interface WorkspaceOptions {
   readonly application: HTMLElement;
@@ -18,10 +19,11 @@ export interface WorkspaceOptions {
   readonly requestResourceDeletion: (resourceId: string) => void;
   readonly onFocusModeChange: (active: boolean) => void;
   readonly commands: CommandFactory;
+  readonly editing: ApplicationClipboardService;
 }
 
 export function createWorkspace(options: WorkspaceOptions): CanvasViewportController {
-  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.workspaceStore, options.selectionStore, options.commands, {
+  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.workspaceStore, options.selectionStore, options.commands, options.editing, {
     onZoomChange: options.statusBar.setZoom,
     onGridVisibilityChange: options.statusBar.setGridVisible,
     onCoordinatesChange: options.statusBar.setCoordinates,

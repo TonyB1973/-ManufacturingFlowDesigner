@@ -195,6 +195,8 @@
 .placed-resource__selection { display: none; fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .placed-resource__selection-label { display: none; fill: var(--accent); font: 700 8px "Segoe UI", sans-serif; letter-spacing: .7px; pointer-events: none; }
 .placed-resource--selected .placed-resource__selection, .placed-resource--selected .placed-resource__selection-label { display: inline; }
+.placed-resource--selected:not(.placed-resource--primary) .placed-resource__selection { opacity: .58; stroke-width: 1.5; }
+.placed-resource--primary .placed-resource__selection { stroke-width: 3; stroke-dasharray: none; }
 .placed-resource__lock-label { fill: #efb85e; font: 700 8px "Segoe UI", sans-serif; text-anchor: end; letter-spacing: .5px; pointer-events: none; }
 .placed-operation { cursor: move; pointer-events: all; }
 .placed-operation--locked { cursor: not-allowed; }
@@ -213,6 +215,8 @@
 .placed-operation__lock { fill: #efb85e; font-size: 8px; font-weight: 700; text-anchor: end; }
 .placed-operation__selection { display: none; fill: none; stroke: #76d1e9; stroke-width: 2; stroke-dasharray: 7 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .placed-operation--selected .placed-operation__selection { display: inline; }
+.placed-operation--selected:not(.placed-operation--primary) .placed-operation__selection { opacity: .58; stroke-width: 1.5; }
+.placed-operation--primary .placed-operation__selection { stroke-width: 3; stroke-dasharray: none; }
 .process-connection { cursor: pointer; pointer-events: all; }
 .process-connection__route, .process-connection__selection, .connection-preview { fill: none; stroke-linecap: square; stroke-linejoin: miter; vector-effect: non-scaling-stroke; pointer-events: none; }
 .process-connection__route { stroke: var(--accent); stroke-width: 2; }
@@ -225,6 +229,8 @@
 .process-connection:hover .process-connection__route { stroke: #ffe16a; stroke-width: 3; }
 .process-connection--selected .process-connection__selection { display: inline; }
 .process-connection--selected .process-connection__route { stroke: #fff0a0; stroke-width: 2.5; stroke-dasharray: none; }
+.process-connection--selected:not(.process-connection--primary) .process-connection__selection { opacity: .32; }
+.process-connection--primary .process-connection__selection { opacity: .75; stroke-width: 7; }
 .process-connection--warning .process-connection__route { stroke-dasharray: 8 4; }
 .process-connection__label-background { fill: #11161be8; stroke: #5f5737; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .process-connection__label { fill: #f2dd91; font: 600 9px "Segoe UI", sans-serif; text-anchor: middle; pointer-events: none; }
@@ -247,3 +253,11 @@
 .statusbar__message { flex: 1; min-width: 120px; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
 .statusbar__zoom, .statusbar__coordinate { font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .titlebar { gap: 10px; } .health { display: none; } .window-actions { display: none; } .statusbar span:nth-last-child(-n+2) { display: none; } }
+.canvas-marquee {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  border: 1px solid var(--accent-strong, #2383e2);
+  background: color-mix(in srgb, var(--accent-strong, #2383e2) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, white 35%, transparent) inset;
+}

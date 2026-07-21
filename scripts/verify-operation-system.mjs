@@ -22,9 +22,9 @@ const operations = new OperationStore(OPERATION_TEMPLATES, new OperationIdGenera
 const first = operations.addOperation('op-cut', 100, 80); const second = operations.addOperation('op-inspect', 200, 80);
 assert(first?.sequence === 10 && second?.sequence === 20, 'New operations receive stable sequence intervals');
 assert(selection.getSelection().kind === 'operation' && selection.getSelection().id === second.id, 'Created operation becomes the exclusive typed selection');
-const resource = resources.addResource(resourceTemplate.id, 0, 0);
+selection.setWorkspace('factoryLayout'); const resource = resources.addResource(resourceTemplate.id, 0, 0);
 assert(selection.getSelection().kind === 'resource' && !second.selected && resource.selected, 'Selecting a resource clears operation selection');
-operations.selectOperation(first.id); assert(!resource.selected && first.selected, 'Selecting an operation clears resource selection');
+selection.setWorkspace('processFlow'); operations.selectOperation(first.id); assert(!resource.selected && first.selected, 'Selecting an operation clears resource selection');
 
 assert(operations.updateOperation(first.id, { cycleTimeSeconds: 77.5, assignedResourceId: resource.id }), 'Cycle time and resource assignment update');
 assert(first.cycleTimeSeconds === 77.5 && first.assignedResourceId === resource.id, 'Operation properties persist');
@@ -43,10 +43,10 @@ const invalidValidation = validateOperations([{ ...first, name: '', sequence: 0,
 assert(invalidValidation.errors === 4, 'Invalid operation fields and broken assignments are deterministic errors');
 assert(invalidValidation.warnings === 1, 'Hidden operations are reported as a deterministic warning');
 
-resources.selectResource(resource.id); assert(resources.deleteSelected() === 'deleted', 'Assigned resource can be deleted'); operations.handleResourceChange(resource.id, true);
+selection.setWorkspace('factoryLayout'); resources.selectResource(resource.id); assert(resources.deleteSelected() === 'deleted', 'Assigned resource can be deleted'); operations.handleResourceChange(resource.id, true);
 assert(first.assignedResourceId === null, 'Deleting a resource safely clears operation assignment');
 const moved = operationPositionFromPointer({ x: 150, y: 120 }, { x: 15, y: -5 }); assert(moved.x === 135 && moved.y === 125, 'Operation drag preserves pointer offset');
-operations.selectOperation(first.id); operations.updateOperation(first.id, { locked: true }); assert(!operations.moveOperation(first.id, 500, 500), 'Locked operation cannot move'); assert(operations.deleteSelected() === 'locked', 'Locked operation cannot be deleted');
+selection.setWorkspace('processFlow'); operations.selectOperation(first.id); operations.updateOperation(first.id, { locked: true }); assert(!operations.moveOperation(first.id, 500, 500), 'Locked operation cannot move'); assert(operations.deleteSelected() === 'locked', 'Locked operation cannot be deleted');
 operations.updateOperation(first.id, { locked: false }); assert(operations.deleteSelected() === 'deleted', 'Unlocked operation can be deleted');
 
 operations.dispose(); resources.dispose();

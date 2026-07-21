@@ -8,8 +8,10 @@ import type { CommandHistoryService } from './CommandHistoryService';
 import type { ConnectionMutationResult } from '../ConnectionStore';
 import type { DeleteResult } from '../ResourceStore';
 import type { OperationDeleteResult } from '../OperationStore';
+import type { SelectionItem } from '../../models/selection/Selection';
 
 type MetadataPatch = Partial<Pick<ProjectMetadata, 'name' | 'description' | 'author' | 'company'>>;
+export interface PositionChange { readonly id: string; readonly before: { readonly x: number; readonly y: number }; readonly after: { readonly x: number; readonly y: number }; }
 
 const cloneResource = (resource: PlacedResource): PlacedResource => ({ ...resource, selected: false });
 const cloneOperation = (operation: OperationInstance): OperationInstance => ({ ...operation, selected: false });
@@ -68,6 +70,12 @@ export class CommandFactory {
       ({ resources }) => { if (!resources.moveResource(resourceId, before.x, before.y)) throw new Error('Resource move could not be undone.'); }));
   }
 
+  public commitResourceGroupMove(changes: readonly PositionChange[]): boolean {
+    const moved = changes.filter((item) => item.before.x !== item.after.x || item.before.y !== item.after.y); if (!moved.length) return false;
+    const apply = (where: 'before' | 'after', resources: CommandExecutionContext['resources']): void => { for (const item of moved) { const point = item[where]; if (!resources.moveResource(item.id, point.x, point.y)) throw new Error(`Resource ${item.id} could not be moved.`); } };
+    return this.run(new ReversibleCommand(`Move ${moved.length} resources`, moved.map((item) => item.id), 'factoryLayout', ({ resources }) => apply('after', resources), ({ resources }) => apply('before', resources)));
+  }
+
   public addOperation(templateId: string, worldX: number, worldY: number): OperationInstance | null {
     let snapshot: OperationInstance | null = null;
     const command = new ReversibleCommand(() => `Add operation ${snapshot ? `OP-${String(snapshot.sequence).padStart(4, '0')}` : templateId}`, () => snapshot ? [snapshot.id] : [], 'processFlow',
@@ -98,6 +106,45 @@ export class CommandFactory {
     return this.run(new ReversibleCommand(`Move operation ${label}`, [operationId], 'processFlow',
       ({ operations }) => { if (!operations.moveOperation(operationId, after.x, after.y)) throw new Error('Operation move was rejected.'); },
       ({ operations }) => { if (!operations.moveOperation(operationId, before.x, before.y)) throw new Error('Operation move could not be undone.'); }));
+  }
+
+  public commitOperationGroupMove(changes: readonly PositionChange[]): boolean {
+    const moved = changes.filter((item) => item.before.x !== item.after.x || item.before.y !== item.after.y); if (!moved.length) return false;
+    const apply = (where: 'before' | 'after', operations: CommandExecutionContext['operations']): void => { for (const item of moved) { const point = item[where]; if (!operations.moveOperation(item.id, point.x, point.y)) throw new Error(`Operation ${item.id} could not be moved.`); } };
+    return this.run(new ReversibleCommand(`Move ${moved.length} operations`, moved.map((item) => item.id), 'processFlow', ({ operations }) => apply('after', operations), ({ operations }) => apply('before', operations)));
+  }
+
+  public insertResources(snapshots: readonly PlacedResource[], description = 'Paste resources'): boolean {
+    if (!snapshots.length) return false; const copies = snapshots.map(cloneResource); const refs: SelectionItem[] = copies.map((item) => ({ kind: 'resource', id: item.id }));
+    return this.run(new ReversibleCommand(description, copies.map((item) => item.id), 'factoryLayout',
+      ({ resources, selection }) => { for (const item of copies) if (!resources.restoreResource(item)) throw new Error(`Resource ${item.id} could not be inserted.`); selection.set(refs, refs.at(-1)); },
+      ({ resources, selection }) => { for (const item of [...copies].reverse()) if (resources.deleteResource(item.id) !== 'deleted') throw new Error(`Resource ${item.id} could not be removed.`); selection.clear(); }));
+  }
+
+  public insertProcess(snapshots: { readonly operations: readonly OperationInstance[]; readonly connections: readonly ProcessConnection[] }, description = 'Paste process selection'): boolean {
+    if (!snapshots.operations.length && !snapshots.connections.length) return false; const operations = snapshots.operations.map(cloneOperation); const connections = snapshots.connections.map(cloneConnection); const refs: SelectionItem[] = [...operations.map((item) => ({ kind: 'operation' as const, id: item.id })), ...connections.map((item) => ({ kind: 'connection' as const, id: item.id }))];
+    return this.run(new ReversibleCommand(description, refs.map((item) => item.id), 'processFlow',
+      (context) => { for (const item of operations) if (!context.operations.restoreOperation(item)) throw new Error(`Operation ${item.id} could not be inserted.`); for (const item of connections) if (!context.connections.restoreConnection(item)) throw new Error(`Connection ${item.id} could not be inserted.`); context.selection.set(refs, refs.at(-1)); context.connections.recalculateAll(); },
+      (context) => { for (const item of [...connections].reverse()) if (context.connections.deleteConnection(item.id) !== 'deleted') throw new Error(`Connection ${item.id} could not be removed.`); for (const item of [...operations].reverse()) if (context.operations.deleteOperation(item.id) !== 'deleted') throw new Error(`Operation ${item.id} could not be removed.`); context.selection.clear(); }));
+  }
+
+  public deleteResources(resourceIds: readonly string[], description = 'Delete resources'): DeleteResult {
+    const snapshots = resourceIds.map((id) => this.context.resources.getResource(id)).filter((item): item is PlacedResource => Boolean(item && !item.locked)).map(cloneResource); if (!snapshots.length) return 'locked';
+    const assignments = this.context.operations.getOperations().filter((operation) => snapshots.some((resource) => resource.id === operation.assignedResourceId)).map((operation) => ({ id: operation.id, resourceId: operation.assignedResourceId! }));
+    const command = new ReversibleCommand(description, [...snapshots.map((item) => item.id), ...assignments.map((item) => item.id)], 'factoryLayout',
+      ({ resources, operations }) => { for (const item of snapshots) { if (resources.deleteResource(item.id) !== 'deleted') throw new Error(`Resource ${item.id} could not be deleted.`); operations.unassignResource(item.id); } },
+      ({ resources, operations, selection }) => { for (const item of snapshots) if (!resources.restoreResource(item)) throw new Error(`Resource ${item.id} could not be restored.`); for (const item of assignments) if (!operations.updateOperation(item.id, { assignedResourceId: item.resourceId })) throw new Error(`Assignment ${item.id} could not be restored.`); const refs: SelectionItem[] = snapshots.map((item) => ({ kind: 'resource', id: item.id })); selection.set(refs, refs.at(-1)); });
+    return this.run(command) ? 'deleted' : 'none';
+  }
+
+  public deleteProcess(operationIds: readonly string[], connectionIds: readonly string[], description = 'Delete process selection'): OperationDeleteResult {
+    const operations = operationIds.map((id) => this.context.operations.getOperation(id)).filter((item): item is OperationInstance => Boolean(item && !item.locked)).map(cloneOperation);
+    const operationSet = new Set(operations.map((item) => item.id)); const requested = new Set(connectionIds); const connections = this.context.connections.getConnections().filter((item) => operationSet.has(item.sourceOperationId) || operationSet.has(item.targetOperationId) || (!item.locked && requested.has(item.id))).map(cloneConnection);
+    if (!operations.length && !connections.length) return 'locked';
+    const command = new ReversibleCommand(description, [...operations.map((item) => item.id), ...connections.map((item) => item.id)], 'processFlow',
+      (context) => { for (const item of connections.filter((connection) => !operationSet.has(connection.sourceOperationId) && !operationSet.has(connection.targetOperationId))) if (context.connections.getConnection(item.id) && context.connections.deleteConnection(item.id) !== 'deleted') throw new Error(`Connection ${item.id} could not be deleted.`); for (const item of operations) { if (context.operations.deleteOperation(item.id) !== 'deleted') throw new Error(`Operation ${item.id} could not be deleted.`); context.connections.deleteForOperation(item.id); } context.selection.clear(); },
+      (context) => { for (const item of operations) if (!context.operations.restoreOperation(item)) throw new Error(`Operation ${item.id} could not be restored.`); for (const item of connections) if (!context.connections.restoreConnection(item)) throw new Error(`Connection ${item.id} could not be restored.`); const refs: SelectionItem[] = [...operations.map((item) => ({ kind: 'operation' as const, id: item.id })), ...connections.map((item) => ({ kind: 'connection' as const, id: item.id }))]; context.selection.set(refs, refs.at(-1)); context.connections.recalculateAll(); });
+    return this.run(command) ? 'deleted' : 'none';
   }
 
   public normalizeOperationSequences(): boolean {

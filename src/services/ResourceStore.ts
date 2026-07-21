@@ -2,6 +2,7 @@ import type { PlacedResource, PlacedResourcePatch } from '../models/resources/Pl
 import type { ResourceTemplate } from '../models/resources/ResourceTemplate';
 import type { ResourceIdProvider } from '../utilities/ResourceIdGenerator';
 import type { SelectionController } from '../models/selection/Selection';
+import { SelectionStore } from './SelectionStore';
 import { DEFAULT_FACTORY_LAYOUT_ID } from '../models/workspace/Workspace';
 
 export const MIN_RESOURCE_WIDTH = 100;
@@ -18,16 +19,6 @@ export type ResourceStoreChange =
 export type ResourceStoreListener = (change: ResourceStoreChange) => void;
 export type DeleteResult = 'deleted' | 'locked' | 'none';
 
-class LocalSelectionController implements SelectionController {
-  private selection: ReturnType<SelectionController['getSelection']> = { kind: 'none' };
-  private readonly listeners = new Set<Parameters<SelectionController['subscribe']>[0]>();
-  public getSelection(): ReturnType<SelectionController['getSelection']> { return this.selection; }
-  public select(selection: Parameters<SelectionController['select']>[0]): void { this.selection = selection; this.notify(); }
-  public clear(): void { this.selection = { kind: 'none' }; this.notify(); }
-  public subscribe(listener: Parameters<SelectionController['subscribe']>[0]): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  private notify(): void { for (const listener of this.listeners) listener(this.selection); }
-}
-
 export class ResourceStore {
   private readonly templateMap: Map<string, ResourceTemplate>;
   private readonly resources = new Map<string, PlacedResource>();
@@ -37,7 +28,7 @@ export class ResourceStore {
 
   public constructor(templates: readonly ResourceTemplate[], private readonly idProvider: ResourceIdProvider, selection?: SelectionController) {
     this.templateMap = new Map(templates.map((template) => [template.id, { ...template, tags: [...template.tags] }]));
-    this.selection = selection ?? new LocalSelectionController();
+    this.selection = selection ?? new SelectionStore('factoryLayout');
     this.unsubscribeSelection = this.selection.subscribe(() => this.syncSelection());
   }
 
@@ -112,7 +103,6 @@ export class ResourceStore {
   public selectResource(resourceId: string): boolean {
     const resource = this.resources.get(resourceId);
     if (!resource) return false;
-    if (resource.selected) return true;
     this.selection.select({ kind: 'resource', id: resourceId });
     return true;
   }
@@ -145,7 +135,7 @@ export class ResourceStore {
     return this.deleteResource(resource.id);
   }
 
-  public deleteResource(resourceId: string): DeleteResult { const resource = this.resources.get(resourceId); if (!resource) return 'none'; if (resource.locked) return 'locked'; this.resources.delete(resourceId); if (this.getSelectedResourceId() === resourceId) this.selection.clear(); this.notify({ kind: 'deleted', resourceId }); return 'deleted'; }
+  public deleteResource(resourceId: string): DeleteResult { const resource = this.resources.get(resourceId); if (!resource) return 'none'; if (resource.locked) return 'locked'; this.resources.delete(resourceId); this.selection.remove({ kind: 'resource', id: resourceId }); this.notify({ kind: 'deleted', resourceId }); return 'deleted'; }
 
   public toggleFavourite(templateId: string): boolean | null {
     const template = this.templateMap.get(templateId);
@@ -174,7 +164,7 @@ export class ResourceStore {
 
   private syncSelection(): void {
     const selected = this.selection.getSelection();
-    for (const resource of this.resources.values()) resource.selected = selected.kind === 'resource' && selected.id === resource.id;
+    for (const resource of this.resources.values()) resource.selected = this.selection.contains({ kind: 'resource', id: resource.id });
     this.notify({ kind: 'selection', resourceId: selected.kind === 'resource' ? selected.id : null });
   }
 
