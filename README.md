@@ -2,6 +2,20 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 2.4 scope
+
+Sprint 2.4 adds professional canvas geometry editing to the workspace-aware multi-selection foundation. The Arrange ribbon and eligible multi-selection menus provide left, horizontal-centre, right, top, vertical-centre, and bottom alignment; horizontal and vertical centre distribution; equal horizontal and vertical gaps; and Match Width, Match Height, and Match Size.
+
+Alignment uses the eligible unlocked selection's aggregate edge or centre. Distribution keeps deterministic endpoint objects fixed. Equal-gap commands account for each object's dimensions and stop without changing the project when non-negative gaps cannot fit. Match commands use the primary eligible node as their dimension reference. Results remain mathematically exact and are not snapped to the grid afterward.
+
+Select mode shows aggregate bounds for two or more visible geometric nodes and eight resize handles for one unlocked node. Handles keep stable screen-space targets through pan and zoom. Side and corner resizing respects object minimums and snaps the moving edge; hold `Alt` to bypass snapping or `Shift` on a corner to preserve the original aspect ratio and opposite corner. Escape restores the original geometry without a history entry.
+
+Arrow keys nudge unlocked selected objects by one world unit, `Shift`+Arrow by ten, and `Ctrl`/`Command`+Arrow by the configured base grid interval. Visual up subtracts world Y. Editable fields retain native arrow-key behaviour.
+
+Dragging and resizing cache active-workspace guide candidates and show temporary left, centre, right, top, centre, and bottom alignment guides within a seven-screen-pixel tolerance. When Snap is enabled, guide snap has priority over grid snap; `Alt` disables both. Guides, handles, bounds, and gesture state are transient and are not saved.
+
+Process Flow geometry commands affect operations only; selected connections remain unchanged and reroute automatically when their operations move or resize. Factory Layout commands affect physical Resource Instances only. Hidden objects are excluded. Locked objects remain selectable and appear in aggregate bounds but are skipped with status feedback. Every successful arrange, size, nudge, or resize action is one reversible history command with exact Undo/Redo geometry; unavailable, unchanged, or cancelled actions do not dirty the project. The `.mflow` schema remains `1.0.0`.
+
 ## Sprint 2.3 scope
 
 Sprint 2.3 adds workspace-aware multi-selection, marquee selection, group movement, and an internal application clipboard for Copy, Cut, Paste, and Duplicate. These actions integrate with Sprint 2.2 command history and preserve the Process Flow / Factory Layout separation introduced earlier.
@@ -107,6 +121,7 @@ npm run test:workspaces
 npm run test:persistence
 npm run test:history
 npm run test:editing
+npm run test:canvas
 npm run build
 git diff --check
 ```
@@ -123,16 +138,20 @@ git diff --check
 - `CommandHistoryService` owns bounded linear history, transactions, Undo/Redo state, and saved checkpoints.
 - `CommandFactory` creates focused reversible commands for normal persistent model edits.
 - `HistoryController` coordinates ribbon/keyboard actions, interaction cancellation, and status feedback.
+- `GeometrySelectionService` filters the typed selection into active-workspace geometric nodes.
+- `ArrangementService`, `GeometryBounds`, and `ResizeGeometry` contain deterministic, testable geometry calculations.
+- `GeometryCommandFactory` commits complete multi-object geometry changes as one reversible action.
+- `AlignmentGuideService`, `AlignmentGuideController`, `SelectionOverlayRenderer`, and `ResizeInteractionController` isolate transient canvas guidance and pointer interaction from the domain model.
 - Domain stores remain the runtime authorities for resources, operations, connections, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, and [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, and [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions.
 
 ## Current limitations
 
 The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no persistent/collaborative history, autosave/recovery, cloud sync, scenario comparison, custom-template editor, walls/dimensions, concurrency simulation, or WPF history implementation yet. Browser download fallback cannot overwrite an existing file silently.
 
-Clipboard contents are session-only and cannot be exchanged with external applications. Multi-selection supports the current single Factory Layout and does not yet provide alignment, distribution, grouping, or cross-workspace conversion tools.
+Clipboard contents are session-only and cannot be exchanged with external applications. Multi-selection supports the current single Factory Layout. Nudge command coalescing, symmetric centre resize, keyboard resize, permanent grouping, rotation handles, rulers, dimensions, walls, manual waypoints, and cross-workspace conversion are not implemented.
 
-Sprint 2.4 is planned to add alignment, distribution, sizing, and advanced canvas editing tools.
+Sprint 2.5 is planned to add Factory Layout engineering tools, physical dimensions, rotation, and clearance zones.
 
-Development for this sprint is performed on `feature/sprint-2.3-multiselect-clipboard`.
+Development for this sprint is performed on `feature/sprint-2.4-canvas-editing-tools`.

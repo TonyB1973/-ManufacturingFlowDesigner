@@ -7,6 +7,9 @@ import { createCanvasViewport, type CanvasViewportController } from './canvas/Ca
 import type { WorkspaceStore } from '../../services/WorkspaceStore';
 import type { CommandFactory } from '../../services/history/CommandFactory';
 import type { ApplicationClipboardService } from '../../services/editing/ApplicationClipboardService';
+import type { GeometrySelectionService } from '../../services/geometry/GeometrySelectionService';
+import type { GeometryEditingService } from '../../services/geometry/GeometryEditingService';
+import type { GeometryCommandFactory } from '../../services/history/GeometryCommandFactory';
 
 export interface WorkspaceOptions {
   readonly application: HTMLElement;
@@ -20,10 +23,13 @@ export interface WorkspaceOptions {
   readonly onFocusModeChange: (active: boolean) => void;
   readonly commands: CommandFactory;
   readonly editing: ApplicationClipboardService;
+  readonly geometrySelection: GeometrySelectionService;
+  readonly geometryEditing: GeometryEditingService;
+  readonly geometryCommands: GeometryCommandFactory;
 }
 
 export function createWorkspace(options: WorkspaceOptions): CanvasViewportController {
-  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.workspaceStore, options.selectionStore, options.commands, options.editing, {
+  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.workspaceStore, options.selectionStore, options.commands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, {
     onZoomChange: options.statusBar.setZoom,
     onGridVisibilityChange: options.statusBar.setGridVisible,
     onCoordinatesChange: options.statusBar.setCoordinates,

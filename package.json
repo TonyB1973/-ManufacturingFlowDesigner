@@ -16,7 +16,8 @@
     "test:persistence": "node scripts/verify-project-persistence.mjs",
     "test:history": "node scripts/verify-history-system.mjs",
     "test:editing": "node scripts/verify-multiselect-clipboard.mjs",
-    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history && npm run test:editing"
+    "test:canvas": "node scripts/verify-canvas-editing.mjs",
+    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history && npm run test:editing && npm run test:canvas"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

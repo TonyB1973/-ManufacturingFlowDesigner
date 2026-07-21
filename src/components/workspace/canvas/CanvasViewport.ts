@@ -36,6 +36,15 @@ import { centreOrigin, screenToWorld, zoomAroundPoint, type Point, type Viewport
 import type { CommandFactory } from '../../../services/history/CommandFactory';
 import type { ApplicationClipboardService } from '../../../services/editing/ApplicationClipboardService';
 import { normalizeRectangle, polylineIntersectsRectangle, rectanglesIntersect } from '../../../services/selection/MarqueeGeometry';
+import type { GeometrySelectionService } from '../../../services/geometry/GeometrySelectionService';
+import type { GeometryEditingService, GeometryCommand } from '../../../services/geometry/GeometryEditingService';
+import type { GeometryCommandFactory } from '../../../services/history/GeometryCommandFactory';
+import { AlignmentGuideController } from './AlignmentGuideController';
+import { SelectionOverlayRenderer } from './SelectionOverlayRenderer';
+import { ResizeInteractionController } from './ResizeInteractionController';
+
+const arrangementCommands = new Set<CanvasCommand>(['align-left', 'align-centre-x', 'align-right', 'align-top', 'align-centre-y', 'align-bottom', 'distribute-x', 'distribute-y', 'equal-gaps-x', 'equal-gaps-y', 'match-width', 'match-height', 'match-size']);
+const isGeometryCommand = (command: CanvasToolbarCommand | CanvasCommand): command is GeometryCommand => arrangementCommands.has(command as CanvasCommand);
 
 export interface CanvasViewportCallbacks {
   readonly onZoomChange: (zoom: number) => void;
@@ -55,7 +64,7 @@ export interface CanvasViewportController {
   dispose(): void;
 }
 
-export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, workspaceStore: WorkspaceStore, selectionStore: SelectionController, commands: CommandFactory, editing: ApplicationClipboardService, callbacks: CanvasViewportCallbacks): CanvasViewportController {
+export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, workspaceStore: WorkspaceStore, selectionStore: SelectionController, commands: CommandFactory, editing: ApplicationClipboardService, geometrySelection: GeometrySelectionService, geometryEditing: GeometryEditingService, geometryCommands: GeometryCommandFactory, callbacks: CanvasViewportCallbacks): CanvasViewportController {
   const state = createCanvasState();
   const snap = new SnapService();
   const workspace = element('main', 'workspace');
@@ -77,6 +86,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   let focusMode = false;
   let temporaryPan = false;
   let activeWorkspace: WorkspaceId = workspaceStore.getActive();
+  let selectionOverlay: SelectionOverlayRenderer | null = null;
+  let resizeInteraction: ResizeInteractionController | null = null;
 
   const saveViewport = (): void => workspaceStore.updateViewport(activeWorkspace, { panX: state.panX, panY: state.panY, zoom: state.zoom, gridVisible: state.gridVisible, originVisible: state.originVisible, snapEnabled: snap.enabled });
   const loadViewport = (workspaceId: WorkspaceId): void => { const stored = workspaceStore.getViewport(workspaceId); Object.assign(state, { panX: stored.panX, panY: stored.panY, zoom: stored.zoom, gridVisible: stored.gridVisible, originVisible: stored.originVisible, tool: 'select' }); snap.enabled = stored.snapEnabled; };
@@ -93,6 +104,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       toolbar.setSnapEnabled(snap.enabled);
       toolbar.setFocusMode(focusMode);
       connectionInteraction?.viewportChanged();
+      selectionOverlay?.setTool(state.tool);
+      selectionOverlay?.viewportChanged();
       viewport.classList.toggle('canvas-viewport--pan-tool', state.tool === 'pan' || temporaryPan);
       callbacks.onZoomChange(state.zoom);
       callbacks.onGridVisibilityChange(state.gridVisible);
@@ -109,6 +122,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   };
 
   const runCommand = (command: CanvasToolbarCommand | CanvasCommand): void => {
+    if (isGeometryCommand(command)) { const result = geometryEditing.run(command); callbacks.onStatusChange(result.message); requestRender(); return; }
     switch (command) {
       case 'select':
         state.tool = 'select';
@@ -188,6 +202,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   const resourceRenderer = new ResourceRenderer(grid.getObjectLayer(), resourceStore);
   const operationRenderer = new OperationRenderer(grid.getOperationLayer(), operationStore, resourceStore);
   const connectionRenderer = new ConnectionRenderer(grid.getConnectionLayer(), connectionStore, operationStore);
+  const guides = new AlignmentGuideController(grid.getInteractionLayer(), state, operationStore, resourceStore);
   let resourceInteraction: ResourceInteractionController | null = new ResourceInteractionController(
     viewport,
     application,
@@ -198,14 +213,18 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     commands,
     selectionStore,
     editing,
+    guides,
+    geometryEditing,
   );
-  let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange, commands, selectionStore);
+  let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange, commands, selectionStore, guides);
   const previewRoute = (sourceId: string, targetId: string, sourceAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor, targetAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor) => {
     const source = operationStore.getOperation(sourceId); const target = operationStore.getOperation(targetId); if (!source || !target) return { points: [], status: 'fallback' as const };
     const obstacles = operationStore.getOperations().filter((operation) => operation.visible && operation.id !== sourceId && operation.id !== targetId).map(operationBounds);
     const route = routeOrthogonal({ source: anchorWorldPosition(source, sourceAnchor), sourceDirection: anchorDirection(sourceAnchor), target: anchorWorldPosition(target, targetAnchor), targetDirection: anchorDirection(targetAnchor), obstacles, clearance: 16 }); return { points: route.points, status: route.fallback ? 'fallback' as const : 'clear' as const };
   };
   let connectionInteraction: ConnectionInteractionController | null = new ConnectionInteractionController(viewport, application, state, operationStore, connectionStore, commands, selectionStore, editing, grid.getInteractionLayer(), { setTool: (tool) => { if (state.tool !== tool) runCommand(tool); }, onStatus: callbacks.onStatusChange, routePreview: previewRoute });
+  selectionOverlay = new SelectionOverlayRenderer(grid.getInteractionLayer(), state, geometrySelection, selectionStore, operationStore, resourceStore);
+  resizeInteraction = new ResizeInteractionController(viewport, state, geometrySelection, operationStore, resourceStore, snap, geometryCommands, guides, callbacks.onStatusChange);
 
   const interaction = new CanvasInteractionController(viewport, application, {
     getZoom: () => state.zoom,
@@ -317,13 +336,14 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     if (isTyping(event.target) || !application.contains(document.activeElement)) return;
     const commandKey = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
     if (commandKey && ['c', 'x', 'v', 'd', 'a'].includes(key)) { event.preventDefault(); const result = key === 'c' ? editing.copy() : key === 'x' ? editing.cut((message) => window.confirm(message)) : key === 'v' ? editing.paste() : key === 'd' ? editing.duplicate() : editing.selectAll(); callbacks.onStatusChange(result.message); return; }
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { const step = commandKey ? geometryEditing.gridInterval() : event.shiftKey ? 10 : 1; const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0; const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0; const result = geometryEditing.nudge(dx, dy); if (result.ok) event.preventDefault(); callbacks.onStatusChange(result.message); requestRender(); return; }
     if (event.key === 'Delete' || event.key === 'Backspace') { if (selectionStore.getState().items.length) event.preventDefault(); runCommand('delete-selection'); return; }
     if (event.key === 'Escape' && marqueeState) { cancelMarquee(); callbacks.onStatusChange('Marquee selection cancelled'); return; }
     if (event.key === 'Escape' && selectionStore.getState().items.length) { selectionStore.clear(); callbacks.onStatusChange('Selection cleared'); }
   };
   document.addEventListener('keydown', handleObjectKeyDown);
   const closeEditingMenu = (): void => { editingMenu.hidden = true; editingMenu.replaceChildren(); };
-  const handleEditingContextMenu = (event: MouseEvent): void => { const target = event.target instanceof Element ? event.target : null; if (target?.closest('[data-resource-id], [data-connection-id]')) return; const operationId = target?.closest<SVGGElement>('[data-operation-id]')?.dataset.operationId; if (operationId) { const ref = { kind: 'operation' as const, id: operationId }; if (!selectionStore.contains(ref)) selectionStore.select(ref); } else if (target?.closest('button, input, textarea, select')) return; event.preventDefault(); closeEditingMenu(); const add = (label: string, action: () => { readonly message: string }): void => { const button = element('button', 'resource-context-menu__item', label); button.type = 'button'; button.setAttribute('role', 'menuitem'); button.addEventListener('click', () => { callbacks.onStatusChange(action().message); closeEditingMenu(); viewport.focus({ preventScroll: true }); }); editingMenu.append(button); }; if (operationId) { add('Cut', () => editing.cut((message) => window.confirm(message))); add('Copy', () => editing.copy()); } add('Paste', () => editing.paste()); if (operationId) { add('Duplicate', () => editing.duplicate()); add('Delete', () => editing.deleteSelection((message) => window.confirm(message))); } const bounds = viewport.getBoundingClientRect(); editingMenu.style.left = `${Math.min(event.clientX - bounds.left, Math.max(0, viewport.clientWidth - 190))}px`; editingMenu.style.top = `${Math.min(event.clientY - bounds.top, Math.max(0, viewport.clientHeight - 190))}px`; editingMenu.hidden = false; editingMenu.querySelector<HTMLButtonElement>('button')?.focus(); };
+  const handleEditingContextMenu = (event: MouseEvent): void => { const target = event.target instanceof Element ? event.target : null; if (target?.closest('[data-resource-id], [data-connection-id]')) return; const operationId = target?.closest<SVGGElement>('[data-operation-id]')?.dataset.operationId; if (operationId) { const ref = { kind: 'operation' as const, id: operationId }; if (!selectionStore.contains(ref)) selectionStore.select(ref); } else if (target?.closest('button, input, textarea, select')) return; event.preventDefault(); closeEditingMenu(); const add = (label: string, action: () => { readonly message: string }, disabled = false): void => { const button = element('button', 'resource-context-menu__item', label); button.type = 'button'; button.disabled = disabled; button.setAttribute('role', 'menuitem'); button.addEventListener('click', () => { callbacks.onStatusChange(action().message); closeEditingMenu(); viewport.focus({ preventScroll: true }); }); editingMenu.append(button); }; if (operationId) { add('Cut', () => editing.cut((message) => window.confirm(message))); add('Copy', () => editing.copy()); } add('Paste', () => editing.paste()); if (operationId) { add('Duplicate', () => editing.duplicate()); add('Delete', () => editing.deleteSelection((message) => window.confirm(message))); add('Clear Selection', () => { selectionStore.clear(); return { message: 'Selection cleared' }; }); const arrangements: readonly [string, GeometryCommand][] = [['Align Left', 'align-left'], ['Align Right', 'align-right'], ['Align Top', 'align-top'], ['Align Bottom', 'align-bottom'], ['Distribute Horizontally', 'distribute-x'], ['Distribute Vertically', 'distribute-y'], ['Equal Horizontal Gaps', 'equal-gaps-x'], ['Equal Vertical Gaps', 'equal-gaps-y'], ['Match Width', 'match-width'], ['Match Height', 'match-height'], ['Match Size', 'match-size']]; for (const [label, command] of arrangements) add(label, () => geometryEditing.run(command), !geometryEditing.isAvailable(command)); } const bounds = viewport.getBoundingClientRect(); editingMenu.style.left = `${Math.min(event.clientX - bounds.left, Math.max(0, viewport.clientWidth - 190))}px`; editingMenu.style.top = `${Math.min(event.clientY - bounds.top, Math.max(0, viewport.clientHeight - 380))}px`; editingMenu.hidden = false; editingMenu.querySelector<HTMLButtonElement>('button')?.focus(); };
   const handleEditingMenuOutside = (event: PointerEvent): void => { if (!editingMenu.hidden && event.target instanceof Node && !editingMenu.contains(event.target)) closeEditingMenu(); };
   const handleEditingMenuEscape = (event: KeyboardEvent): void => { if (event.key === 'Escape' && !editingMenu.hidden) { event.preventDefault(); closeEditingMenu(); viewport.focus({ preventScroll: true }); } };
   viewport.addEventListener('contextmenu', handleEditingContextMenu); document.addEventListener('pointerdown', handleEditingMenuOutside, true); document.addEventListener('keydown', handleEditingMenuEscape);
@@ -346,7 +366,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   document.addEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);
   const activateWorkspace = (workspaceId: WorkspaceId): void => workspaceStore.activate(workspaceId);
   processTab.addEventListener('click', () => activateWorkspace('processFlow')); layoutTab.addEventListener('click', () => activateWorkspace('factoryLayout'));
-  const cancelActiveInteractions = (): void => { cancelMarquee(); resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool === 'connect' || state.tool === 'delete-link') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
+  const cancelActiveInteractions = (): void => { cancelMarquee(); resizeInteraction?.cancel(); guides.clear(); resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool === 'connect' || state.tool === 'delete-link') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
   const renderWorkspace = (workspaceId: WorkspaceId): void => {
     if (workspaceId !== activeWorkspace) cancelActiveInteractions();
     saveViewport(); activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.setWorkspace(workspaceId); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
@@ -365,6 +385,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       resourceRenderer.dispose();
       operationInteraction?.dispose(); operationInteraction = null; operationRenderer.dispose();
       connectionInteraction?.dispose(); connectionInteraction = null; connectionRenderer.dispose();
+      resizeInteraction?.dispose(); resizeInteraction = null; selectionOverlay?.dispose(); selectionOverlay = null; guides.dispose();
       resizeObserver.disconnect();
       unsubscribeWorkspace();
       document.removeEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);

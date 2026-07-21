@@ -37,4 +37,8 @@
 35. Keep the application clipboard in memory and store only plain model snapshots. Copying Process Flow operations includes only connections whose two endpoints are copied.
 36. Paste and Duplicate must allocate fresh stable IDs, remap copied connection endpoints, select inserted items, and execute as one reversible command with stable IDs on Redo.
 37. Group moves and multi-delete are compound history actions. Locked items are not moved or deleted, and resource deletion continues to clear only affected assignments.
+38. Canvas geometry commands operate only on visible geometric nodes in the active workspace: operations in Process Flow and physical Resource Instances in Factory Layout; process connections are never transformed directly.
+39. Keep geometry calculations, transient SVG overlays, pointer interactions, and reversible model commands separate. Selection bounds, resize handles, guide caches, and gesture state are never persisted or added to history.
+40. Explicit alignment, distribution, equal-gap, and sizing results are mathematically exact and must not receive a second grid-snap pass. During pointer gestures, alignment-guide snap has priority over grid snap, and Alt bypasses both.
+41. Locked selected objects may contribute to displayed selection bounds but are skipped by geometry mutations. Hidden and inactive-workspace objects are never eligible.
 

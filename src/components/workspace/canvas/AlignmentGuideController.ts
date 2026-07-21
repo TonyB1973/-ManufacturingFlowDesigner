@@ -1,0 +1,21 @@
+import type { CanvasState } from '../../../models/canvas/CanvasState';
+import type { OperationStore } from '../../../services/OperationStore';
+import type { ResourceStore } from '../../../services/ResourceStore';
+import { resolveAlignmentGuides, type AlignmentGuide } from '../../../services/geometry/AlignmentGuideService';
+import { aggregateBounds, boundsOf, translateBounds, type GeometryBounds } from '../../../services/geometry/GeometryBounds';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const line = (): SVGLineElement => { const node = document.createElementNS(SVG_NS, 'line'); node.classList.add('alignment-guide'); node.setAttribute('vector-effect', 'non-scaling-stroke'); node.setAttribute('aria-hidden', 'true'); return node; };
+
+export class AlignmentGuideController {
+  private readonly vertical = line(); private readonly horizontal = line(); private originalBounds: GeometryBounds | null = null; private candidates: GeometryBounds[] = [];
+  public constructor(layer: SVGGElement, private readonly state: CanvasState, private readonly operations: OperationStore, private readonly resources: ResourceStore) { this.clearLines(); layer.append(this.vertical, this.horizontal); }
+  public begin(kind: 'operation' | 'resource', selectedIds: readonly string[]): void { const selected = new Set(selectedIds); const source = kind === 'operation' ? this.operations.getOperations() : this.resources.getPlacedResources(); const moving = source.filter((node) => selected.has(node.id) && node.visible); this.originalBounds = aggregateBounds(moving.map((node) => ({ x: node.worldX, y: node.worldY, width: node.width, height: node.height }))); this.candidates = source.filter((node) => !selected.has(node.id) && node.visible).map((node) => boundsOf({ x: node.worldX, y: node.worldY, width: node.width, height: node.height })); this.clearLines(); }
+  public resolve(dx: number, dy: number, snapEnabled: boolean, bypass: boolean): { readonly dx: number; readonly dy: number; readonly matchedX: boolean; readonly matchedY: boolean } { if (!this.originalBounds || bypass) { this.clearLines(); return { dx, dy, matchedX: false, matchedY: false }; } const resolution = resolveAlignmentGuides(translateBounds(this.originalBounds, dx, dy), this.candidates, 7 / this.state.zoom); this.render(resolution.guides); return { dx: dx + (snapEnabled ? resolution.dx : 0), dy: dy + (snapEnabled ? resolution.dy : 0), matchedX: resolution.matchedX, matchedY: resolution.matchedY }; }
+  public resolveBounds(bounds: GeometryBounds, bypass: boolean): { readonly dx: number; readonly dy: number; readonly matchedX: boolean; readonly matchedY: boolean } { if (bypass) { this.clearLines(); return { dx: 0, dy: 0, matchedX: false, matchedY: false }; } const resolution = resolveAlignmentGuides(bounds, this.candidates, 7 / this.state.zoom); this.render(resolution.guides); return resolution; }
+  public clear(): void { this.originalBounds = null; this.candidates = []; this.clearLines(); }
+  public dispose(): void { this.vertical.remove(); this.horizontal.remove(); }
+  private render(guides: readonly AlignmentGuide[]): void { this.clearLines(); for (const guide of guides) { const target = guide.axis === 'x' ? this.vertical : this.horizontal; this.setLine(target, guide); target.setAttribute('display', 'inline'); target.dataset.alignment = guide.alignment; } }
+  private setLine(target: SVGLineElement, guide: AlignmentGuide): void { if (guide.axis === 'x') { target.setAttribute('x1', String(guide.position)); target.setAttribute('x2', String(guide.position)); target.setAttribute('y1', String(guide.from - 16 / this.state.zoom)); target.setAttribute('y2', String(guide.to + 16 / this.state.zoom)); } else { target.setAttribute('x1', String(guide.from - 16 / this.state.zoom)); target.setAttribute('x2', String(guide.to + 16 / this.state.zoom)); target.setAttribute('y1', String(guide.position)); target.setAttribute('y2', String(guide.position)); } }
+  private clearLines(): void { this.vertical.setAttribute('display', 'none'); this.horizontal.setAttribute('display', 'none'); delete this.vertical.dataset.alignment; delete this.horizontal.dataset.alignment; }
+}
