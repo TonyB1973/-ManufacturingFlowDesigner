@@ -6,6 +6,8 @@ import { screenToWorld, type Point } from '../canvas/ViewportTransform';
 import type { CommandFactory } from '../../../services/history/CommandFactory';
 import type { SelectionController } from '../../../models/selection/Selection';
 import type { ApplicationClipboardService } from '../../../services/editing/ApplicationClipboardService';
+import type { AlignmentGuideController } from '../canvas/AlignmentGuideController';
+import type { GeometryEditingService, GeometryCommand } from '../../../services/geometry/GeometryEditingService';
 
 interface ActiveResourceDrag {
   readonly pointerId: number;
@@ -38,6 +40,8 @@ export class ResourceInteractionController {
     private readonly commands: CommandFactory,
     private readonly selection: SelectionController,
     private readonly editing: ApplicationClipboardService,
+    private readonly guides: AlignmentGuideController,
+    private readonly geometryEditing: GeometryEditingService,
   ) {
     this.menu.className = 'resource-context-menu'; this.menu.setAttribute('role', 'menu'); this.menu.hidden = true; viewport.append(this.menu);
     viewport.addEventListener('pointerdown', this.handlePointerDown);
@@ -102,6 +106,7 @@ export class ResourceInteractionController {
       frame: 0,
     };
     this.viewport.setPointerCapture(event.pointerId);
+    this.guides.begin('resource', this.active.originals.map((item) => item.id));
     target.classList.add('placed-resource--moving');
     this.onStatus('Moving resource');
   };
@@ -110,8 +115,8 @@ export class ResourceInteractionController {
     if (!this.active || event.pointerId !== this.active.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    const pointerWorld = screenToWorld(this.localPoint(event), this.state);
-    this.active.pending = this.snap.snapPoint(positionFromPointer(pointerWorld, this.active.offset), event.altKey);
+    const pointerWorld = screenToWorld(this.localPoint(event), this.state); const raw = positionFromPointer(pointerWorld, this.active.offset); const guide = this.guides.resolve(raw.x - this.active.original.x, raw.y - this.active.original.y, this.snap.enabled, event.altKey); const dx = !event.altKey && this.snap.enabled && !guide.matchedX ? this.snap.snapValue(this.active.original.x + guide.dx) - this.active.original.x : guide.dx; const dy = !event.altKey && this.snap.enabled && !guide.matchedY ? this.snap.snapValue(this.active.original.y + guide.dy) - this.active.original.y : guide.dy;
+    this.active.pending = { x: this.active.original.x + dx, y: this.active.original.y + dy };
     if (this.active.frame === 0) this.active.frame = requestAnimationFrame(this.flushPendingMove);
   };
 
@@ -149,7 +154,7 @@ export class ResourceInteractionController {
 
   private readonly handleContextMenu = (event: MouseEvent): void => { const id = event.target instanceof Element ? event.target.closest<SVGGElement>('[data-resource-id]')?.dataset.resourceId : undefined; if (!id) return; event.preventDefault(); const bounds = this.viewport.getBoundingClientRect(); this.openMenu(id, event.clientX - bounds.left, event.clientY - bounds.top); };
   private readonly handleOutsideMenu = (event: PointerEvent): void => { if (!this.menu.hidden && event.target instanceof Node && !this.menu.contains(event.target)) this.closeMenu(); };
-  private openMenu(id: string, x: number, y: number): void { const ref = { kind: 'resource' as const, id }; if (!this.selection.contains(ref)) this.selection.select(ref); this.menu.replaceChildren(); const add = (label: string, action: () => void): void => { const button = document.createElement('button'); button.type = 'button'; button.className = 'resource-context-menu__item'; button.setAttribute('role', 'menuitem'); button.textContent = label; button.addEventListener('click', () => { action(); this.closeMenu(); }); this.menu.append(button); }; add('Cut', () => this.onStatus(this.editing.cut((message) => window.confirm(message)).message)); add('Copy', () => this.onStatus(this.editing.copy().message)); add('Paste', () => this.onStatus(this.editing.paste().message)); add('Duplicate', () => this.onStatus(this.editing.duplicate().message)); add('Delete', () => this.onStatus(this.editing.deleteSelection((message) => window.confirm(message)).message)); this.menu.hidden = false; this.menu.style.left = `${Math.min(Math.max(0, x), Math.max(0, this.viewport.clientWidth - 185))}px`; this.menu.style.top = `${Math.min(Math.max(0, y), Math.max(0, this.viewport.clientHeight - 190))}px`; this.menu.querySelector<HTMLButtonElement>('button')?.focus(); }
+  private openMenu(id: string, x: number, y: number): void { const ref = { kind: 'resource' as const, id }; if (!this.selection.contains(ref)) this.selection.select(ref); this.menu.replaceChildren(); const add = (label: string, action: () => void, disabled = false): void => { const button = document.createElement('button'); button.type = 'button'; button.className = 'resource-context-menu__item'; button.setAttribute('role', 'menuitem'); button.textContent = label; button.disabled = disabled; button.addEventListener('click', () => { action(); this.closeMenu(); }); this.menu.append(button); }; add('Cut', () => this.onStatus(this.editing.cut((message) => window.confirm(message)).message)); add('Copy', () => this.onStatus(this.editing.copy().message)); add('Paste', () => this.onStatus(this.editing.paste().message)); add('Duplicate', () => this.onStatus(this.editing.duplicate().message)); add('Delete', () => this.onStatus(this.editing.deleteSelection((message) => window.confirm(message)).message)); add('Clear Selection', () => { this.selection.clear(); this.onStatus('Selection cleared'); }); const arrangements: readonly [string, GeometryCommand][] = [['Align Left', 'align-left'], ['Align Right', 'align-right'], ['Align Top', 'align-top'], ['Align Bottom', 'align-bottom'], ['Distribute Horizontally', 'distribute-x'], ['Distribute Vertically', 'distribute-y'], ['Equal Horizontal Gaps', 'equal-gaps-x'], ['Equal Vertical Gaps', 'equal-gaps-y'], ['Match Width', 'match-width'], ['Match Height', 'match-height'], ['Match Size', 'match-size']]; for (const [label, command] of arrangements) add(label, () => this.onStatus(this.geometryEditing.run(command).message), !this.geometryEditing.isAvailable(command)); this.menu.hidden = false; this.menu.style.left = `${Math.min(Math.max(0, x), Math.max(0, this.viewport.clientWidth - 185))}px`; this.menu.style.top = `${Math.min(Math.max(0, y), Math.max(0, this.viewport.clientHeight - 380))}px`; this.menu.querySelector<HTMLButtonElement>('button')?.focus(); }
   private closeMenu(): void { this.menu.hidden = true; this.menu.replaceChildren(); this.viewport.focus({ preventScroll: true }); }
 
   private readonly flushPendingMove = (): void => {
@@ -169,6 +174,7 @@ export class ResourceInteractionController {
     const final = this.store.getResource(active.resourceId); const changed = Boolean(commit && final && (final.worldX !== active.original.x || final.worldY !== active.original.y));
     if (changed && final) this.commands.commitResourceGroupMove(active.originals.map((item) => ({ id: item.id, before: item.point, after: { x: this.store.getResource(item.id)?.worldX ?? item.point.x, y: this.store.getResource(item.id)?.worldY ?? item.point.y } })));
     this.active = null;
+    this.guides.clear();
     const node = this.viewport.querySelector<HTMLElement>(`[data-resource-id="${active.resourceId}"]`);
     node?.classList.remove('placed-resource--moving');
     if (this.viewport.hasPointerCapture(active.pointerId)) this.viewport.releasePointerCapture(active.pointerId);

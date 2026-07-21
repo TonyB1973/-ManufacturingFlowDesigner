@@ -29,6 +29,9 @@ import { CommandHistoryService } from '../services/history/CommandHistoryService
 import { CommandFactory } from '../services/history/CommandFactory';
 import { HistoryController } from '../services/history/HistoryController';
 import { ApplicationClipboardService } from '../services/editing/ApplicationClipboardService';
+import { GeometrySelectionService } from '../services/geometry/GeometrySelectionService';
+import { GeometryEditingService } from '../services/geometry/GeometryEditingService';
+import { GeometryCommandFactory } from '../services/history/GeometryCommandFactory';
 
 export interface AppShellResult {
   readonly element: HTMLElement;
@@ -55,6 +58,9 @@ export function createAppShell(): AppShellResult {
   projectSession = new ProjectSessionService(resourceStore, operationStore, connectionStore, workspaceStore, selectionStore, resourceIds, operationIds, connectionIds);
   const commandContext = { resources: resourceStore, operations: operationStore, connections: connectionStore, project: projectSession, selection: selectionStore };
   const history = new CommandHistoryService(commandContext, 200); projectSession.attachHistory(history); const commands = new CommandFactory(history, commandContext);
+  const geometrySelection = new GeometrySelectionService(selectionStore, workspaceStore, operationStore, resourceStore);
+  const geometryCommands = new GeometryCommandFactory(history);
+  const geometryEditing = new GeometryEditingService(geometrySelection, geometryCommands, projectSession);
   selectionStore.setValidator((item) => item.kind === 'resource' ? Boolean(resourceStore.getResource(item.id)) : item.kind === 'operation' ? Boolean(operationStore.getOperation(item.id)) : Boolean(connectionStore.getConnection(item.id)));
   const editing = new ApplicationClipboardService(selectionStore, resourceStore, operationStore, connectionStore, workspaceStore, projectSession, commands, resourceIds, operationIds, connectionIds);
   const statusBar = createStatusBar();
@@ -62,7 +68,7 @@ export function createAppShell(): AppShellResult {
   const projectDialogs = createProjectDialogs(); const deletionDialog = createResourceDeletionDialog(resourceStore, operationStore, commands, statusBar.setMessage); shell.append(projectDialogs.element, deletionDialog.element);
   const requestResourceDeletion = (id: string): void => deletionDialog.request(id);
   const left = createLeftSidebar(resourceStore, operationStore, connectionStore, workspaceStore, projectSession, selectionStore, commands);
-  const right = createRightSidebar(resourceStore, operationStore, connectionStore, workspaceStore, selectionStore, requestResourceDeletion, projectSession, commands, editing);
+  const right = createRightSidebar(resourceStore, operationStore, connectionStore, workspaceStore, selectionStore, requestResourceDeletion, projectSession, commands, editing, geometrySelection, geometryEditing);
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
   const rightToggle = actionButton('Hide inspector panels', 'panel-toggle panel-toggle--right');
 
@@ -88,11 +94,14 @@ export function createAppShell(): AppShellResult {
     selectionStore,
     commands,
     editing,
+    geometrySelection,
+    geometryEditing,
+    geometryCommands,
     requestResourceDeletion,
     onFocusModeChange: (active) => shell.classList.toggle('app-shell--canvas-focus', active),
   });
   body.append(left.element, leftToggle, workspace.element, rightToggle, right.element);
-  const ribbon = createRibbon(workspaceStore); const historyController = new HistoryController(history, shell, workspace.cancelActiveInteractions, statusBar.setMessage); ribbon.setHistoryCommands(historyController); const projectFiles = new ProjectFileController(projectSession, new ProjectFileService(), projectDialogs, ribbon.setFileBusy, workspace.cancelActiveInteractions); ribbon.setFileCommands(projectFiles);
+  const ribbon = createRibbon(workspaceStore, geometryEditing); const historyController = new HistoryController(history, shell, workspace.cancelActiveInteractions, statusBar.setMessage); ribbon.setHistoryCommands(historyController); const projectFiles = new ProjectFileController(projectSession, new ProjectFileService(), projectDialogs, ribbon.setFileBusy, workspace.cancelActiveInteractions); ribbon.setFileCommands(projectFiles);
   shell.append(titleBar.element, ribbon.element, body, statusBar.element);
   const updateStatus = (): void => {
     const selected = selectionStore.getSelection(); const selectionCount = selectionStore.getState().items.length;
@@ -112,14 +121,14 @@ export function createAppShell(): AppShellResult {
     updateStatus();
   });
   const unsubscribeOperationStatus = operationStore.subscribe((change) => { if (change.kind === 'deleted') { connectionStore.deleteForOperation(change.operationId); connectionStore.recalculateAll(); } else if (change.kind === 'created' || change.kind === 'updated') connectionStore.recalculateAll(); updateStatus(); });
-  const unsubscribeConnectionStatus = connectionStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(updateStatus); updateStatus();
+  const unsubscribeConnectionStatus = connectionStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(() => { updateStatus(); geometryEditing.notify(); }); const unsubscribeGeometryResources = resourceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryOperations = operationStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryWorkspace = workspaceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); updateStatus();
   const unsubscribeHistory = history.subscribe(statusBar.setHistory); statusBar.setHistory(history.getState());
   const unsubscribeProject = projectSession.subscribe((state) => { titleBar.setProject(state.metadata.name, state.dirty, state.fileName); statusBar.setProject(state.metadata.name, state.dirty); updateStatus(); }); const initialProject = projectSession.getState(); titleBar.setProject(initialProject.metadata.name, initialProject.dirty, initialProject.fileName); statusBar.setProject(initialProject.metadata.name, initialProject.dirty);
   return {
     element: shell,
     statusBar,
     dispose: () => {
-      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeSelectionStatus(); unsubscribeProject(); unsubscribeHistory();
+      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeSelectionStatus(); unsubscribeGeometryResources(); unsubscribeGeometryOperations(); unsubscribeGeometryWorkspace(); unsubscribeProject(); unsubscribeHistory();
       left.dispose();
       right.dispose();
       workspace.dispose();

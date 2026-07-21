@@ -107,7 +107,7 @@ export class EngineeringGrid {
     this.resourceLayer.setAttribute('display', processFlow ? 'none' : 'inline');
     this.operationLayer.setAttribute('display', processFlow ? 'inline' : 'none');
     this.connectionLayer.setAttribute('display', processFlow ? 'inline' : 'none');
-    this.interactionLayer.setAttribute('display', processFlow ? 'inline' : 'none');
+    this.interactionLayer.setAttribute('display', 'inline');
   }
 
   public render(state: CanvasState, size: ViewportSize): void {

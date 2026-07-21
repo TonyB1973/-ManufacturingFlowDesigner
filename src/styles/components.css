@@ -261,3 +261,21 @@
   background: color-mix(in srgb, var(--accent-strong, #2383e2) 14%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, white 35%, transparent) inset;
 }
+
+.selection-overlay { pointer-events: none; }
+.selection-bounds { fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
+.selection-bounds--outer { stroke: #0b1116; stroke-width: 4; stroke-dasharray: 7 4; opacity: .8; }
+.selection-bounds--inner { stroke: #ffe16a; stroke-width: 1.5; stroke-dasharray: 7 4; }
+.resize-handle { pointer-events: all; }
+.resize-handle__hit { fill: transparent; stroke: none; pointer-events: all; }
+.resize-handle__visible { fill: #f6d451; stroke: #101419; stroke-width: 1.5; pointer-events: none; vector-effect: non-scaling-stroke; }
+.resize-handle[data-resize-handle="left"], .resize-handle[data-resize-handle="right"] { cursor: ew-resize; }
+.resize-handle[data-resize-handle="top"], .resize-handle[data-resize-handle="bottom"] { cursor: ns-resize; }
+.resize-handle[data-resize-handle="top-left"], .resize-handle[data-resize-handle="bottom-right"] { cursor: nwse-resize; }
+.resize-handle[data-resize-handle="top-right"], .resize-handle[data-resize-handle="bottom-left"] { cursor: nesw-resize; }
+.alignment-guide { stroke: #4fd6ff; stroke-width: 1.5; stroke-dasharray: 5 3; pointer-events: none; vector-effect: non-scaling-stroke; }
+.multi-selection-properties { display: grid; gap: 8px; padding: 11px; }
+.multi-selection-properties h3, .multi-selection-properties p { margin: 0; }
+.multi-selection-properties p { color: var(--text-muted); font-size: 10px; }
+.multi-selection-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.secondary-button:disabled, .resource-context-menu__item:disabled { opacity: .42; cursor: not-allowed; }
