@@ -299,3 +299,49 @@
 .multi-selection-properties p { color: var(--text-muted); font-size: 10px; }
 .multi-selection-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .secondary-button:disabled, .resource-context-menu__item:disabled { opacity: .42; cursor: not-allowed; }
+.factory-boundary {
+  fill: rgba(71, 105, 125, 0.12);
+  stroke: #78a9c4;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.factory-boundary--selected,
+.factory-structure--selected,
+.factory-wall.factory-structure--selected {
+  stroke: #f2c14e;
+  stroke-width: 4;
+  filter: drop-shadow(0 0 3px rgba(242, 193, 78, 0.7));
+}
+
+.factory-area rect {
+  fill: rgba(45, 137, 172, 0.18);
+  stroke: #4ca3c7;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.factory-area--restricted rect,
+.factory-area--hazard rect {
+  fill: rgba(182, 72, 72, 0.2);
+  stroke: #e27767;
+  stroke-dasharray: 12 6;
+}
+
+.factory-area--controlled rect { stroke-dasharray: 5 4; }
+.factory-structure-label { fill: #d9e8ee; font-size: 13px; paint-order: stroke; stroke: #17232a; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.factory-aisle { cursor: pointer; }
+.factory-aisle__corridor { stroke: rgba(169, 149, 71, 0.25); stroke-linejoin: round; stroke-linecap: square; }
+.factory-aisle--emergency .factory-aisle__corridor { stroke: rgba(190, 76, 67, 0.28); }
+.factory-aisle__centreline { stroke: #d1b95d; stroke-width: 2; stroke-dasharray: 12 7; vector-effect: non-scaling-stroke; }
+.factory-aisle--forklift .factory-aisle__centreline { stroke-dasharray: 18 5 3 5; }
+.factory-aisle--pedestrian .factory-aisle__centreline { stroke-dasharray: 4 5; }
+.factory-aisle.factory-structure--selected .factory-aisle__centreline { stroke: #f2c14e; stroke-width: 4; }
+.factory-wall { fill: #465159; stroke: #aebac0; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: pointer; }
+.factory-wall--safety-barrier, .factory-wall--fence { fill: #5a5032; stroke-dasharray: 7 4; }
+.factory-drawing-preview { fill: rgba(93, 176, 211, 0.18); stroke: #75d5ff; stroke-width: 2; stroke-dasharray: 8 5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.factory-drawing-point { fill: #17232a; stroke: #75d5ff; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.factory-structure-handle { fill: #17232a; stroke: #f2c14e; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; }
+.canvas-viewport--draw-tool { cursor: crosshair; }
+.factory-area.factory-structure--selected rect { stroke: #f2c14e; stroke-width: 4; }

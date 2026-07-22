@@ -10,6 +10,7 @@ import type { ApplicationClipboardService } from '../../services/editing/Applica
 import type { GeometrySelectionService } from '../../services/geometry/GeometrySelectionService';
 import type { GeometryEditingService } from '../../services/geometry/GeometryEditingService';
 import type { GeometryCommandFactory } from '../../services/history/GeometryCommandFactory';
+import type { FactoryStructureStore } from '../../services/FactoryStructureStore';
 
 export interface WorkspaceOptions {
   readonly application: HTMLElement;
@@ -17,6 +18,7 @@ export interface WorkspaceOptions {
   readonly resourceStore: ResourceStore;
   readonly operationStore: OperationStore;
   readonly connectionStore: ConnectionStore;
+  readonly structureStore: FactoryStructureStore;
   readonly selectionStore: SelectionController;
   readonly workspaceStore: WorkspaceStore;
   readonly requestResourceDeletion: (resourceId: string) => void;
@@ -29,7 +31,7 @@ export interface WorkspaceOptions {
 }
 
 export function createWorkspace(options: WorkspaceOptions): CanvasViewportController {
-  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.workspaceStore, options.selectionStore, options.commands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, {
+  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.workspaceStore, options.selectionStore, options.commands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, {
     onZoomChange: options.statusBar.setZoom,
     onGridVisibilityChange: options.statusBar.setGridVisible,
     onCoordinatesChange: options.statusBar.setCoordinates,

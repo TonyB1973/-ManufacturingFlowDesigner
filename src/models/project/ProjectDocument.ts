@@ -4,10 +4,14 @@ import type { OperationTemplate } from '../operations/OperationTemplate';
 import type { ResourceInstance } from '../resources/ResourceInstance';
 import type { ResourceTemplate } from '../resources/ResourceTemplate';
 import type { WorkspaceId, WorkspaceViewportState } from '../workspace/Workspace';
+import type { FactoryLayoutBoundary } from '../factory/FactoryLayoutBoundary';
+import type { FactoryWall } from '../factory/FactoryWall';
+import type { FactoryArea } from '../factory/FactoryArea';
+import type { FactoryAisle } from '../factory/FactoryAisle';
 
 export const PROJECT_FORMAT = 'ManufacturingFlowDesigner' as const;
-export const PROJECT_SCHEMA_VERSION = '1.1.0' as const;
-export const APPLICATION_VERSION = '0.3.0' as const;
+export const PROJECT_SCHEMA_VERSION = '1.2.0' as const;
+export const APPLICATION_VERSION = '0.4.0' as const;
 export const PROJECT_MIME_TYPE = 'application/vnd.manufacturing-flow-designer+json' as const;
 export const PROJECT_FILE_EXTENSION = '.mflow' as const;
 
@@ -48,6 +52,10 @@ export interface ProjectDocument {
   readonly resources: readonly PersistedResourceInstance[];
   readonly operations: readonly PersistedOperationInstance[];
   readonly connections: readonly PersistedProcessConnection[];
+  readonly layoutBoundaries: readonly FactoryLayoutBoundary[];
+  readonly walls: readonly FactoryWall[];
+  readonly areas: readonly FactoryArea[];
+  readonly aisles: readonly FactoryAisle[];
   readonly workspaces: PersistedWorkspaces;
   readonly settings: ProjectSettings;
 }

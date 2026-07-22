@@ -2,6 +2,10 @@ import type { WorkspaceId } from '../workspace/Workspace';
 
 export type SelectionItem =
   | { readonly kind: 'resource'; readonly id: string }
+  | { readonly kind: 'boundary'; readonly id: string }
+  | { readonly kind: 'wall'; readonly id: string }
+  | { readonly kind: 'area'; readonly id: string }
+  | { readonly kind: 'aisle'; readonly id: string }
   | { readonly kind: 'operation'; readonly id: string }
   | { readonly kind: 'connection'; readonly id: string };
 

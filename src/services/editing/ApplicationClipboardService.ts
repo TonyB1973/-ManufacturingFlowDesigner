@@ -12,18 +12,31 @@ import type { CommandFactory } from '../history/CommandFactory';
 import type { ConnectionIdProvider } from '../../utilities/ConnectionIdGenerator';
 import type { OperationIdProvider } from '../../utilities/OperationIdGenerator';
 import type { ResourceIdProvider } from '../../utilities/ResourceIdGenerator';
+import type { FactoryStructureStore } from '../FactoryStructureStore';
+import type { FactoryStructureIdProvider } from '../../utilities/FactoryStructureIdGenerator';
+import type { FactoryWall } from '../../models/factory/FactoryWall';
+import type { FactoryArea } from '../../models/factory/FactoryArea';
+import type { FactoryAisle } from '../../models/factory/FactoryAisle';
+import { aisleCorridorRectangles, combineFactoryExtents, wallRectangle } from '../geometry/FactoryStructureGeometry';
+import { rectangleCorners } from '../geometry/FactoryFootprintGeometry';
 
-export const CLIPBOARD_LIMITS = { resources: 5_000, operations: 10_000, connections: 20_000 } as const;
+export const CLIPBOARD_LIMITS = { resources: 5_000, operations: 10_000, connections: 20_000, structures: 20_000 } as const;
 const PASTE_OFFSET = 20;
 
 interface ClipboardResource { readonly sourceId: string; readonly value: PlacedResource; }
 interface ClipboardOperation { readonly sourceId: string; readonly value: OperationInstance; }
 interface ClipboardConnection { readonly sourceId: string; readonly value: ProcessConnection; }
+interface ClipboardWall { readonly sourceId: string; readonly value: FactoryWall; }
+interface ClipboardArea { readonly sourceId: string; readonly value: FactoryArea; }
+interface ClipboardAisle { readonly sourceId: string; readonly value: FactoryAisle; }
 export interface ApplicationClipboard {
   readonly sourceWorkspace: WorkspaceId;
   readonly resources: readonly ClipboardResource[];
   readonly operations: readonly ClipboardOperation[];
   readonly connections: readonly ClipboardConnection[];
+  readonly walls: readonly ClipboardWall[];
+  readonly areas: readonly ClipboardArea[];
+  readonly aisles: readonly ClipboardAisle[];
   readonly bounds: { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
   readonly copiedAt: number;
   readonly pasteCount: number;
@@ -34,6 +47,9 @@ export interface EditingResult { readonly ok: boolean; readonly message: string;
 const cloneResource = (value: PlacedResource): PlacedResource => ({ ...value, clearance: { ...value.clearance }, selected: false });
 const cloneOperation = (value: OperationInstance): OperationInstance => ({ ...value, selected: false });
 const cloneConnection = (value: ProcessConnection): ProcessConnection => ({ ...value, sourceAnchor: { ...value.sourceAnchor }, targetAnchor: { ...value.targetAnchor }, routePoints: value.routePoints.map((point) => ({ ...point })), selected: false });
+const cloneWall = (value: FactoryWall): FactoryWall => ({ ...value, start: { ...value.start }, end: { ...value.end } });
+const cloneArea = (value: FactoryArea): FactoryArea => ({ ...value });
+const cloneAisle = (value: FactoryAisle): FactoryAisle => ({ ...value, points: value.points.map((point) => ({ ...point })) });
 
 export class ApplicationClipboardService {
   private clipboard: ApplicationClipboard | null = null;
@@ -48,6 +64,10 @@ export class ApplicationClipboardService {
     private readonly resourceIds: ResourceIdProvider,
     private readonly operationIds: OperationIdProvider,
     private readonly connectionIds: ConnectionIdProvider,
+    private readonly structure: FactoryStructureStore,
+    private readonly wallIds: FactoryStructureIdProvider,
+    private readonly areaIds: FactoryStructureIdProvider,
+    private readonly aisleIds: FactoryStructureIdProvider,
   ) {}
 
   public getClipboard(): ApplicationClipboard | null { return this.clipboard; }
@@ -55,7 +75,7 @@ export class ApplicationClipboardService {
 
   public copy(): EditingResult {
     const candidate = this.capture(); if ('message' in candidate) return { ok: false, message: candidate.message, count: 0 };
-    this.clipboard = candidate; const count = candidate.resources.length + candidate.operations.length + candidate.connections.length;
+    this.clipboard = candidate; const count = candidate.resources.length + candidate.operations.length + candidate.connections.length + candidate.walls.length + candidate.areas.length + candidate.aisles.length;
     return { ok: true, message: `Copied ${count} ${count === 1 ? 'item' : 'items'}`, count };
   }
 
@@ -78,13 +98,13 @@ export class ApplicationClipboardService {
   }
 
   public deleteSelection(confirmResources: (message: string) => boolean): EditingResult {
-    const items = this.selection.getState().items; if (this.workspaces.getActive() === 'factoryLayout') { const ids = items.filter((item) => item.kind === 'resource' && !this.resources.getResource(item.id)?.locked).map((item) => item.id); if (!ids.length) return { ok: false, message: 'No unlocked resources selected', count: 0 }; const assignments = ids.reduce((sum, id) => sum + this.operations.getAssignmentCount(id), 0); if (!confirmResources(`Delete ${ids.length} resource${ids.length === 1 ? '' : 's'}? ${assignments} operation assignment${assignments === 1 ? '' : 's'} will be cleared.`)) return { ok: false, message: 'Delete cancelled', count: 0 }; const result = this.commands.deleteResources(ids, 'Delete selection'); return { ok: result === 'deleted', message: result === 'deleted' ? `Deleted ${ids.length} resources` : 'Resources could not be deleted', count: result === 'deleted' ? ids.length : 0 }; }
+    const items = this.selection.getState().items; if (this.workspaces.getActive() === 'factoryLayout') { const ids = items.filter((item) => item.kind === 'resource' && !this.resources.getResource(item.id)?.locked).map((item) => item.id); const structures = items.filter((item): item is Extract<SelectionItem, { readonly kind: 'wall' | 'area' | 'aisle' }> => item.kind === 'wall' || item.kind === 'area' || item.kind === 'aisle'); const boundarySelected = items.some((item) => item.kind === 'boundary'); if (ids.length && structures.length) return { ok: false, message: 'Delete resources and factory structure separately to preserve one atomic history action', count: 0 }; if (structures.length) { const ok = this.commands.deleteFactoryStructures(structures, 'Delete structure selection'); return { ok, message: ok ? `Deleted ${structures.length} structure items` : 'No unlocked structure selected', count: ok ? structures.length : 0 }; } if (!ids.length) return { ok: false, message: boundarySelected ? 'Delete the factory boundary separately after confirming its scope' : 'No unlocked Factory Layout items selected', count: 0 }; const assignments = ids.reduce((sum, id) => sum + this.operations.getAssignmentCount(id), 0); if (!confirmResources(`Delete ${ids.length} resource${ids.length === 1 ? '' : 's'}? ${assignments} operation assignment${assignments === 1 ? '' : 's'} will be cleared.`)) return { ok: false, message: 'Delete cancelled', count: 0 }; const result = this.commands.deleteResources(ids, 'Delete selection'); return { ok: result === 'deleted', message: result === 'deleted' ? `Deleted ${ids.length} resources` : 'Resources could not be deleted', count: result === 'deleted' ? ids.length : 0 }; }
     const operationIds = items.filter((item) => item.kind === 'operation' && !this.operations.getOperation(item.id)?.locked).map((item) => item.id); const connectionIds = items.filter((item) => item.kind === 'connection' && !this.connections.getConnection(item.id)?.locked).map((item) => item.id); if (!operationIds.length && !connectionIds.length) return { ok: false, message: 'No unlocked process items selected', count: 0 }; const result = this.commands.deleteProcess(operationIds, connectionIds, 'Delete selection'); const count = operationIds.length + connectionIds.length; return { ok: result === 'deleted', message: result === 'deleted' ? `Deleted ${count} items` : 'Selection could not be deleted', count: result === 'deleted' ? count : 0 };
   }
 
   public selectAll(): EditingResult {
     const workspace = this.workspaces.getActive(); const items: SelectionItem[] = workspace === 'factoryLayout'
-      ? this.resources.getPlacedResources().filter((item) => item.visible).map((item) => ({ kind: 'resource', id: item.id }))
+      ? [...this.resources.getPlacedResources().filter((item) => item.visible).map((item) => ({ kind: 'resource' as const, id: item.id })), ...this.structure.getWalls().filter((item) => item.visible).map((item) => ({ kind: 'wall' as const, id: item.id })), ...this.structure.getAreas().filter((item) => item.visible).map((item) => ({ kind: 'area' as const, id: item.id })), ...this.structure.getAisles().filter((item) => item.visible).map((item) => ({ kind: 'aisle' as const, id: item.id }))]
       : [...this.operations.getOperations().filter((item) => item.visible).map((item) => ({ kind: 'operation' as const, id: item.id })), ...this.connections.getConnections().filter((item) => item.visible).map((item) => ({ kind: 'connection' as const, id: item.id }))];
     this.selection.set(items, items.at(-1)); return { ok: true, message: `Selected ${items.length} ${items.length === 1 ? 'item' : 'items'}`, count: items.length };
   }
@@ -95,19 +115,30 @@ export class ApplicationClipboardService {
     const operations = workspace === 'processFlow' ? items.filter((item) => item.kind === 'operation').map((item) => this.operations.getOperation(item.id)).filter((item): item is OperationInstance => Boolean(item && (!skipLocked || !item.locked))) : [];
     const operationIds = new Set(operations.map((item) => item.id)); const explicitlySelected = new Set(items.filter((item) => item.kind === 'connection').map((item) => item.id));
     const connections = workspace === 'processFlow' ? this.connections.getConnections().filter((item) => (!skipLocked || !item.locked) && operationIds.has(item.sourceOperationId) && operationIds.has(item.targetOperationId) && (explicitlySelected.has(item.id) || operationIds.size > 0)) : [];
-    if (!resources.length && !operations.length && !connections.length) return { message: skipLocked ? 'No unlocked items selected' : 'Nothing selected to copy' };
-    if (resources.length > CLIPBOARD_LIMITS.resources || operations.length > CLIPBOARD_LIMITS.operations || connections.length > CLIPBOARD_LIMITS.connections) return { message: 'Selection exceeds the application clipboard safety limit' };
+    const walls = workspace === 'factoryLayout' ? items.filter((item) => item.kind === 'wall').map((item) => this.structure.getWall(item.id)).filter((item): item is FactoryWall => Boolean(item && (!skipLocked || !item.locked))) : [];
+    const areas = workspace === 'factoryLayout' ? items.filter((item) => item.kind === 'area').map((item) => this.structure.getArea(item.id)).filter((item): item is FactoryArea => Boolean(item && (!skipLocked || !item.locked))) : [];
+    const aisles = workspace === 'factoryLayout' ? items.filter((item) => item.kind === 'aisle').map((item) => this.structure.getAisle(item.id)).filter((item): item is FactoryAisle => Boolean(item && (!skipLocked || !item.locked))) : [];
+    if (!resources.length && !operations.length && !connections.length && !walls.length && !areas.length && !aisles.length) return { message: items.some((item) => item.kind === 'boundary') ? 'Factory boundary cannot be copied' : skipLocked ? 'No unlocked items selected' : 'Nothing selected to copy' };
+    if (resources.length > CLIPBOARD_LIMITS.resources || operations.length > CLIPBOARD_LIMITS.operations || connections.length > CLIPBOARD_LIMITS.connections || walls.length + areas.length + aisles.length > CLIPBOARD_LIMITS.structures) return { message: 'Selection exceeds the application clipboard safety limit' };
     const boxes = [
       ...resources.map((item) => ({ minX: item.worldX - item.width / 2, minY: item.worldY - item.depth / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.depth / 2 })),
       ...operations.map((item) => ({ minX: item.worldX - item.width / 2, minY: item.worldY - item.height / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.height / 2 })),
+      ...[...walls.map(wallRectangle), ...areas.map((item) => rectangleCorners({ x: item.worldX, y: item.worldY }, item.width, item.depth, item.rotationDegrees)), ...aisles.flatMap(aisleCorridorRectangles)].map((polygon) => combineFactoryExtents([polygon])).filter((item): item is NonNullable<ReturnType<typeof combineFactoryExtents>> => Boolean(item)).map((item) => ({ minX: item.minX, minY: item.minY, maxX: item.maxX, maxY: item.maxY })),
     ];
     const bounds = boxes.length ? { minX: Math.min(...boxes.map((box) => box.minX)), minY: Math.min(...boxes.map((box) => box.minY)), maxX: Math.max(...boxes.map((box) => box.maxX)), maxY: Math.max(...boxes.map((box) => box.maxY)) } : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
-    return { sourceWorkspace: workspace, resources: resources.map((value) => ({ sourceId: value.id, value: cloneResource(value) })), operations: operations.map((value) => ({ sourceId: value.id, value: cloneOperation(value) })), connections: connections.map((value) => ({ sourceId: value.id, value: { ...cloneConnection(value), routePoints: [], routeStatus: 'clear' } })), bounds, copiedAt: Date.now(), pasteCount: 0 };
+    return { sourceWorkspace: workspace, resources: resources.map((value) => ({ sourceId: value.id, value: cloneResource(value) })), operations: operations.map((value) => ({ sourceId: value.id, value: cloneOperation(value) })), connections: connections.map((value) => ({ sourceId: value.id, value: { ...cloneConnection(value), routePoints: [], routeStatus: 'clear' } })), walls: walls.map((value) => ({ sourceId: value.id, value: cloneWall(value) })), areas: areas.map((value) => ({ sourceId: value.id, value: cloneArea(value) })), aisles: aisles.map((value) => ({ sourceId: value.id, value: cloneAisle(value) })), bounds, copiedAt: Date.now(), pasteCount: 0 };
   }
 
   private pasteClipboard(source: ApplicationClipboard, updateClipboard: boolean, description: string): EditingResult {
     const pasteCount = source.pasteCount + 1; const delta = PASTE_OFFSET * pasteCount; const snap = this.workspaces.getViewport(source.sourceWorkspace).snapEnabled; const interval = this.project.getSettings().gridBaseInterval; const offset = (value: number): number => { const moved = value + delta; return snap ? Math.round(moved / interval) * interval : moved; };
     if (source.sourceWorkspace === 'factoryLayout') {
+      if (source.walls.length || source.areas.length || source.aisles.length) {
+        if (source.resources.length) return { ok: false, message: 'Paste resources and factory structure separately', count: 0 };
+        const walls = source.walls.map(({ value }) => ({ ...cloneWall(value), id: this.wallIds.next(), name: `${value.name} copy`, start: { x: offset(value.start.x), y: offset(value.start.y) }, end: { x: offset(value.end.x), y: offset(value.end.y) }, locked: false }));
+        const areas = source.areas.map(({ value }) => ({ ...cloneArea(value), id: this.areaIds.next(), name: `${value.name} copy`, worldX: offset(value.worldX), worldY: offset(value.worldY), locked: false }));
+        const aisles = source.aisles.map(({ value }) => ({ ...cloneAisle(value), id: this.aisleIds.next(), name: `${value.name} copy`, points: value.points.map((point) => ({ x: offset(point.x), y: offset(point.y) })), locked: false }));
+        if (!this.commands.insertFactoryStructure({ walls, areas, aisles }, description)) return { ok: false, message: 'Factory structure could not be pasted', count: 0 }; if (updateClipboard) this.clipboard = { ...source, pasteCount }; const count = walls.length + areas.length + aisles.length; return { ok: true, message: `${description.replace(' selection', '')}d ${count} structure items`, count };
+      }
       const existingNames = new Set(this.resources.getPlacedResources().map((item) => item.name)); const snapshots = source.resources.map(({ value }) => { const base = value.name.replace(/\s+copy(?: \d+)?$/i, ''); let index = 1; let name = `${base} copy`; while (existingNames.has(name)) { index += 1; name = `${base} copy ${index}`; } existingNames.add(name); return { ...cloneResource(value), id: this.resourceIds.next(), name, worldX: offset(value.worldX), worldY: offset(value.worldY), locked: false }; });
       if (!this.commands.insertResources(snapshots, description)) return { ok: false, message: 'Resources could not be pasted', count: 0 }; if (updateClipboard) this.clipboard = { ...source, pasteCount }; return { ok: true, message: `${description.replace(' selection', '')}d ${snapshots.length} resources`, count: snapshots.length };
     }
@@ -117,7 +148,7 @@ export class ApplicationClipboardService {
   }
 
   private deleteCaptured(candidate: ApplicationClipboard, description: string): EditingResult {
-    if (candidate.sourceWorkspace === 'factoryLayout') { const result = this.commands.deleteResources(candidate.resources.map((item) => item.sourceId), description); return { ok: result === 'deleted', message: result === 'deleted' ? `Deleted ${candidate.resources.length} resources` : 'Resources could not be deleted', count: result === 'deleted' ? candidate.resources.length : 0 }; }
+    if (candidate.sourceWorkspace === 'factoryLayout') { if (candidate.walls.length || candidate.areas.length || candidate.aisles.length) { if (candidate.resources.length) return { ok: false, message: 'Cut resources and factory structure separately', count: 0 }; const refs = [...candidate.walls.map((item) => ({ kind: 'wall' as const, id: item.sourceId })), ...candidate.areas.map((item) => ({ kind: 'area' as const, id: item.sourceId })), ...candidate.aisles.map((item) => ({ kind: 'aisle' as const, id: item.sourceId }))]; const ok = this.commands.deleteFactoryStructures(refs, description); return { ok, message: ok ? `Deleted ${refs.length} structure items` : 'Factory structure could not be deleted', count: ok ? refs.length : 0 }; } const result = this.commands.deleteResources(candidate.resources.map((item) => item.sourceId), description); return { ok: result === 'deleted', message: result === 'deleted' ? `Deleted ${candidate.resources.length} resources` : 'Resources could not be deleted', count: result === 'deleted' ? candidate.resources.length : 0 }; }
     const operationIds = candidate.operations.map((item) => item.sourceId); const connectionIds = this.selection.getState().items.filter((item) => item.kind === 'connection').map((item) => item.id); const result = this.commands.deleteProcess(operationIds, connectionIds, description); const count = operationIds.length + candidate.connections.length; return { ok: result === 'deleted', message: result === 'deleted' ? `Deleted ${count} items` : 'Selection could not be deleted', count: result === 'deleted' ? count : 0 };
   }
 }

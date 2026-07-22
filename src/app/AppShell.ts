@@ -32,6 +32,9 @@ import { ApplicationClipboardService } from '../services/editing/ApplicationClip
 import { GeometrySelectionService } from '../services/geometry/GeometrySelectionService';
 import { GeometryEditingService } from '../services/geometry/GeometryEditingService';
 import { GeometryCommandFactory } from '../services/history/GeometryCommandFactory';
+import { FactoryStructureIdGenerator } from '../utilities/FactoryStructureIdGenerator';
+import { FactoryStructureStore } from '../services/FactoryStructureStore';
+import { validateFactoryStructure } from '../services/FactoryStructureValidation';
 
 export interface AppShellResult {
   readonly element: HTMLElement;
@@ -47,6 +50,8 @@ export function createAppShell(): AppShellResult {
   const resourceStore = new ResourceStore(RESOURCE_TEMPLATES, resourceIds, selectionStore);
   const operationStore = new OperationStore(OPERATION_TEMPLATES, operationIds, selectionStore);
   const workspaceStore = new WorkspaceStore();
+  const boundaryIds = new FactoryStructureIdGenerator('BND'); const wallIds = new FactoryStructureIdGenerator('WALL'); const areaIds = new FactoryStructureIdGenerator('AREA'); const aisleIds = new FactoryStructureIdGenerator('AISLE');
+  const structureStore = new FactoryStructureStore(boundaryIds, wallIds, areaIds, aisleIds);
   let projectSession: ProjectSessionService | null = null;
   const connectionStore = new ConnectionStore(connectionIds, (id) => operationStore.getOperation(id), (connection) => {
     const source = operationStore.getOperation(connection.sourceOperationId); const target = operationStore.getOperation(connection.targetOperationId);
@@ -55,20 +60,20 @@ export function createAppShell(): AppShellResult {
     const route = routeOrthogonal({ source: anchorWorldPosition(source, connection.sourceAnchor), sourceDirection: anchorDirection(connection.sourceAnchor), target: anchorWorldPosition(target, connection.targetAnchor), targetDirection: anchorDirection(connection.targetAnchor), obstacles, clearance: projectSession?.getSettings().routingClearance ?? 16 });
     return { points: route.points, status: route.fallback ? 'fallback' : 'clear' };
   }, selectionStore);
-  projectSession = new ProjectSessionService(resourceStore, operationStore, connectionStore, workspaceStore, selectionStore, resourceIds, operationIds, connectionIds);
-  const commandContext = { resources: resourceStore, operations: operationStore, connections: connectionStore, project: projectSession, selection: selectionStore };
+  projectSession = new ProjectSessionService(resourceStore, operationStore, connectionStore, structureStore, workspaceStore, selectionStore, resourceIds, operationIds, connectionIds);
+  const commandContext = { resources: resourceStore, operations: operationStore, connections: connectionStore, structure: structureStore, project: projectSession, selection: selectionStore };
   const history = new CommandHistoryService(commandContext, 200); projectSession.attachHistory(history); const commands = new CommandFactory(history, commandContext);
   const geometrySelection = new GeometrySelectionService(selectionStore, workspaceStore, operationStore, resourceStore);
   const geometryCommands = new GeometryCommandFactory(history);
   const geometryEditing = new GeometryEditingService(geometrySelection, geometryCommands, projectSession);
-  selectionStore.setValidator((item) => item.kind === 'resource' ? Boolean(resourceStore.getResource(item.id)) : item.kind === 'operation' ? Boolean(operationStore.getOperation(item.id)) : Boolean(connectionStore.getConnection(item.id)));
-  const editing = new ApplicationClipboardService(selectionStore, resourceStore, operationStore, connectionStore, workspaceStore, projectSession, commands, resourceIds, operationIds, connectionIds);
+  selectionStore.setValidator((item) => item.kind === 'resource' ? Boolean(resourceStore.getResource(item.id)) : item.kind === 'operation' ? Boolean(operationStore.getOperation(item.id)) : item.kind === 'connection' ? Boolean(connectionStore.getConnection(item.id)) : item.kind === 'boundary' ? Boolean(structureStore.getBoundary(item.id)) : item.kind === 'wall' ? Boolean(structureStore.getWall(item.id)) : item.kind === 'area' ? Boolean(structureStore.getArea(item.id)) : Boolean(structureStore.getAisle(item.id)));
+  const editing = new ApplicationClipboardService(selectionStore, resourceStore, operationStore, connectionStore, workspaceStore, projectSession, commands, resourceIds, operationIds, connectionIds, structureStore, wallIds, areaIds, aisleIds);
   const statusBar = createStatusBar();
   const titleBar = createTitleBar();
   const projectDialogs = createProjectDialogs(); const deletionDialog = createResourceDeletionDialog(resourceStore, operationStore, commands, statusBar.setMessage); shell.append(projectDialogs.element, deletionDialog.element);
   const requestResourceDeletion = (id: string): void => deletionDialog.request(id);
-  const left = createLeftSidebar(resourceStore, operationStore, connectionStore, workspaceStore, projectSession, selectionStore, commands);
-  const right = createRightSidebar(resourceStore, operationStore, connectionStore, workspaceStore, selectionStore, requestResourceDeletion, projectSession, commands, editing, geometrySelection, geometryEditing);
+  const left = createLeftSidebar(resourceStore, operationStore, connectionStore, structureStore, workspaceStore, projectSession, selectionStore, commands);
+  const right = createRightSidebar(resourceStore, operationStore, connectionStore, structureStore, workspaceStore, selectionStore, requestResourceDeletion, projectSession, commands, editing, geometrySelection, geometryEditing);
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
   const rightToggle = actionButton('Hide inspector panels', 'panel-toggle panel-toggle--right');
 
@@ -90,6 +95,7 @@ export function createAppShell(): AppShellResult {
     resourceStore,
     operationStore,
     connectionStore,
+    structureStore,
     workspaceStore,
     selectionStore,
     commands,
@@ -105,7 +111,7 @@ export function createAppShell(): AppShellResult {
   shell.append(titleBar.element, ribbon.element, body, statusBar.element);
   const updateStatus = (): void => {
     const selected = selectionStore.getSelection(); const selectionCount = selectionStore.getState().items.length;
-    const label = selectionCount > 1 ? `${selectionCount} items` : selected.kind === 'project' ? `Project ${projectSession.getMetadata().name}` : selected.kind === 'resource' ? `Resource ${resourceStore.getResource(selected.id)?.name ?? selected.id}` : selected.kind === 'operation' ? `Operation OP ${operationStore.getOperation(selected.id)?.sequence ?? selected.id}` : selected.kind === 'connection' ? `Connection ${selected.id}` : '0';
+    const label = selectionCount > 1 ? `${selectionCount} items` : selected.kind === 'project' ? `Project ${projectSession.getMetadata().name}` : selected.kind === 'resource' ? `Resource ${resourceStore.getResource(selected.id)?.name ?? selected.id}` : selected.kind === 'operation' ? `Operation OP ${operationStore.getOperation(selected.id)?.sequence ?? selected.id}` : selected.kind === 'connection' ? `Connection ${selected.id}` : selected.kind === 'none' ? '0' : `${selected.kind} ${selected.id}`;
     statusBar.setSelectionLabel(label);
     statusBar.setResourceCount(resourceStore.getResourceCount());
     statusBar.setOperationCount(operationStore.getOperationCount());
@@ -113,7 +119,7 @@ export function createAppShell(): AppShellResult {
     const operationHealth = validateOperations(operationStore.getOperations(), (id) => resourceStore.getResource(id), (id) => Boolean(resourceStore.getTemplate(id)));
     const resourceHealth = validateResources(resourceStore.getPlacedResources(), resourceStore.getTemplates(), (id) => operationStore.getAssignmentCount(id));
     const connectionHealth = validateProcessConnections(operationStore.getOperations(), connectionStore.getConnections());
-    const errors = operationHealth.errors + resourceHealth.errors + connectionHealth.errors; const warnings = operationHealth.warnings + resourceHealth.warnings + connectionHealth.warnings;
+    const structureHealth = validateFactoryStructure(resourceStore.getPlacedResources(), structureStore); const errors = operationHealth.errors + resourceHealth.errors + connectionHealth.errors + structureHealth.issues.filter((issue) => issue.severity === 'error').length; const warnings = operationHealth.warnings + resourceHealth.warnings + connectionHealth.warnings + structureHealth.issues.filter((issue) => issue.severity === 'warning').length;
     statusBar.setHealth(errors, warnings); titleBar.setHealth(errors, warnings);
   };
   const unsubscribeResourceStatus = resourceStore.subscribe((change) => {
@@ -121,14 +127,14 @@ export function createAppShell(): AppShellResult {
     updateStatus();
   });
   const unsubscribeOperationStatus = operationStore.subscribe((change) => { if (change.kind === 'deleted') { connectionStore.deleteForOperation(change.operationId); connectionStore.recalculateAll(); } else if (change.kind === 'created' || change.kind === 'updated') connectionStore.recalculateAll(); updateStatus(); });
-  const unsubscribeConnectionStatus = connectionStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(() => { updateStatus(); geometryEditing.notify(); }); const unsubscribeGeometryResources = resourceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryOperations = operationStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryWorkspace = workspaceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); updateStatus();
+  const unsubscribeConnectionStatus = connectionStore.subscribe(updateStatus); const unsubscribeStructureStatus = structureStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(() => { updateStatus(); geometryEditing.notify(); }); const unsubscribeGeometryResources = resourceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryOperations = operationStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryWorkspace = workspaceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); updateStatus();
   const unsubscribeHistory = history.subscribe(statusBar.setHistory); statusBar.setHistory(history.getState());
   const unsubscribeProject = projectSession.subscribe((state) => { titleBar.setProject(state.metadata.name, state.dirty, state.fileName); statusBar.setProject(state.metadata.name, state.dirty); updateStatus(); }); const initialProject = projectSession.getState(); titleBar.setProject(initialProject.metadata.name, initialProject.dirty, initialProject.fileName); statusBar.setProject(initialProject.metadata.name, initialProject.dirty);
   return {
     element: shell,
     statusBar,
     dispose: () => {
-      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeSelectionStatus(); unsubscribeGeometryResources(); unsubscribeGeometryOperations(); unsubscribeGeometryWorkspace(); unsubscribeProject(); unsubscribeHistory();
+      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeStructureStatus(); unsubscribeSelectionStatus(); unsubscribeGeometryResources(); unsubscribeGeometryOperations(); unsubscribeGeometryWorkspace(); unsubscribeProject(); unsubscribeHistory();
       left.dispose();
       right.dispose();
       workspace.dispose();

@@ -2,6 +2,16 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 2.6 scope
+
+Sprint 2.6 adds authored factory structure to the Factory Layout workspace. Use **Draw Boundary** (or `B`) to drag a rectangular floor boundary, or choose the orthogonal boundary mode for a multi-segment outline completed with `Enter`; replacing the single existing boundary requires confirmation. **Draw Wall** (`W`) creates horizontal or vertical physical barriers with editable thickness. **Draw Area** (`A`) creates named engineering zones such as Department, Work Cell, Restricted, Hazard, and Controlled areas, with explicit Allowed, Warning, or Prohibited resource-placement policies. **Draw Aisle** (`I`) creates orthogonal pedestrian, material, forklift, shared, emergency, or general corridors with editable width and direction. `Escape` cancels drawing and `Backspace` removes the latest temporary path point.
+
+Boundary, Areas, Aisles, Walls, and Resources render in a deliberate engineering layer order and can be shown or hidden independently without disabling their validation. Project Explorer groups every structural family, while Properties edits names, notes, visibility, locks, dimensions, types, policies, endpoints, and path coordinates. Fit Boundary frames the floor outline and Fit All includes visible factory structure and physical resources. Factory structure is never rendered or selected in Process Flow.
+
+Validation reports entities outside the boundary, resource and clearance intersections with walls, resource-policy violations in areas, and resources, walls, or prohibited areas obstructing aisles. Emergency-aisle obstruction and prohibited placement are errors; advisory clearances and ordinary aisle obstruction are warnings. The Inspector presents a navigable textual issue list as well as floor area, structure counts, wall length, aisle length, and type summaries, so warnings do not rely on colour or small canvas icons.
+
+Every completed create, replacement, property edit, or deletion is reversible and keeps stable IDs through Undo/Redo. Drawing previews, selections, layer switches, and validation results remain transient. The `.mflow` schema is `1.2.0`; opening a `1.1.0` project explicitly adds empty structure collections while preserving resources, clearances, operations, connections, metadata, settings, IDs, and both workspace viewports.
+
 ## Sprint 2.5 scope
 
 Sprint 2.5 turns Factory Layout resources into engineering footprints. Every Resource Instance has centre-based `worldX`/`worldY` coordinates, physical width and depth, normalized rotation, and an independently owned optional clearance envelope with left, right, top, and bottom distances, category, and note.
@@ -82,12 +92,12 @@ Manufacturing Flow Designer project files use:
 - extension: `.mflow`
 - media type: `application/vnd.manufacturing-flow-designer+json`
 - format identifier: `ManufacturingFlowDesigner`
-- current schema: `1.1.0`
-- current application version: `0.3.0`
+- current schema: `1.2.0`
+- current application version: `0.4.0`
 
-The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, Process Flow operations and connections, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
+The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Process Flow operations and connections, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
 
-Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 30 nested levels, and 200,000 inspected JSON values. They are defensive limits rather than expected working sizes.
+Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 10 boundaries, 50,000 walls, 20,000 areas, 20,000 aisles, 30 nested levels, and bounded structural vertex counts. They are defensive limits rather than expected working sizes.
 
 Selection, active gestures, tool state, validation output, browser file handles, connection route points, and route status are deliberately excluded. Connection geometry is derived and recalculated once after a complete project has loaded.
 
@@ -135,6 +145,7 @@ npm run test:history
 npm run test:editing
 npm run test:canvas
 npm run test:factory
+npm run test:structure
 npm run build
 git diff --check
 ```
@@ -156,16 +167,17 @@ git diff --check
 - `GeometryCommandFactory` commits complete multi-object geometry changes as one reversible action.
 - `AlignmentGuideService`, `AlignmentGuideController`, `SelectionOverlayRenderer`, and `ResizeInteractionController` isolate transient canvas guidance and pointer interaction from the domain model.
 - `FactoryFootprintGeometry` owns rotated corners, AABBs, point rotation, clearance envelopes, and SAT intersection; `FactoryLayoutValidation` derives engineering issues and summaries from resource state.
-- Domain stores remain the runtime authorities for resources, operations, connections, selection, and workspace viewports.
+- `FactoryStructureGeometry`, `FactoryStructureStore`, and `FactoryStructureValidation` own orthogonal structural geometry, stable entities, collisions, placement policy, and summaries without depending on SVG.
+- Domain stores remain the runtime authorities for resources, operations, connections, factory structure, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, and [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, and [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation.
 
 ## Current limitations
 
-The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no persistent/collaborative history, autosave/recovery, cloud sync, scenario comparison, custom-template editor, walls/dimensions, concurrency simulation, or WPF history implementation yet. Browser download fallback cannot overwrite an existing file silently.
+The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no persistent/collaborative history, autosave/recovery, cloud sync, scenario comparison, custom-template editor, general dimensioning, concurrency simulation, or WPF history implementation yet. Browser download fallback cannot overwrite an existing file silently.
 
 Clipboard contents are session-only and cannot be exchanged with external applications. Multi-selection supports the current single Factory Layout. Nudge command coalescing, symmetric centre resize, keyboard resize, arbitrary-angle on-canvas resize, permanent grouping, rulers, manual waypoints, and cross-workspace conversion are not implemented.
 
-Sprint 2.6 is planned to add Factory walls, areas, aisles and layout boundaries.
+Sprint 2.7 is planned to add walking and material-flow routes. Aisles in Sprint 2.6 describe reserved factory corridors; they do not implement routing.
 
-Development for this sprint is performed on `feature/sprint-2.5-factory-layout-engineering`.
+Development for this sprint is performed on `feature/sprint-2.6-factory-structure`.
