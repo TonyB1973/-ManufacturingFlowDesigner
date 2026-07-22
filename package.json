@@ -20,7 +20,8 @@
     "test:factory": "node scripts/verify-factory-layout-engineering.mjs",
     "test:structure": "node scripts/verify-factory-structure.mjs",
     "test:routes": "node scripts/verify-factory-routes.mjs",
-    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history && npm run test:editing && npm run test:canvas && npm run test:factory && npm run test:structure && npm run test:routes"
+    "test:demo": "node scripts/verify-demo-project.mjs",
+    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history && npm run test:editing && npm run test:canvas && npm run test:factory && npm run test:structure && npm run test:routes && npm run test:demo"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

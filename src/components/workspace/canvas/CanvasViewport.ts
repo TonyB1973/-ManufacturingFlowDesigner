@@ -118,6 +118,10 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     renderFrame = requestAnimationFrame(() => {
       renderFrame = 0;
       grid.render(state, size);
+      viewport.dataset.zoomTier = state.zoom < 0.6 ? 'overview' : 'detail';
+      viewport.style.setProperty('--canvas-overview-font-size', `${9 / state.zoom}px`);
+      viewport.style.setProperty('--canvas-overview-stroke-width', `${2 / state.zoom}px`);
+      viewport.style.setProperty('--canvas-overview-issue-font-size', `${14 / state.zoom}px`);
       toolbar.setZoom(state.zoom);
       toolbar.setTool(state.tool);
       toolbar.setGridVisible(state.gridVisible);
@@ -447,8 +451,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   processTab.addEventListener('click', () => activateWorkspace('processFlow')); layoutTab.addEventListener('click', () => activateWorkspace('factoryLayout'));
   const cancelActiveInteractions = (): void => { cancelMarquee(); resizeInteraction?.cancel(); rotationInteraction?.cancel(); structureDrawing?.cancel(false); structureEditing?.cancel(); routeDrawing?.cancel(false); routeEditing?.cancel(); guides.clear(); resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool !== 'select' && state.tool !== 'pan') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
   const renderWorkspace = (workspaceId: WorkspaceId): void => {
-    if (workspaceId !== activeWorkspace) cancelActiveInteractions();
-    saveViewport(); activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.setWorkspace(workspaceId); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
+    if (workspaceId !== activeWorkspace) { cancelActiveInteractions(); saveViewport(); }
+    activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.setWorkspace(workspaceId); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
     const processActive = workspaceId === 'processFlow'; toolbar.setConnectionToolsEnabled(processActive); toolbar.setFactoryToolsEnabled(!processActive); processTab.setAttribute('aria-selected', String(processActive)); layoutTab.setAttribute('aria-selected', String(!processActive)); processTab.tabIndex = processActive ? 0 : -1; layoutTab.tabIndex = processActive ? -1 : 0; canvasTitle.textContent = processActive ? 'Process Flow — Operations' : 'Factory Layout — Resources & Structure'; viewport.setAttribute('aria-label', `${processActive ? 'Process Flow' : 'Factory Layout'} engineering canvas. Use the mouse wheel to zoom and middle mouse or Space plus drag to pan.`); callbacks.onWorkspaceChange(workspaceId); callbacks.onStatusChange(`Workspace: ${processActive ? 'Process Flow' : 'Factory Layout'}`); requestRender();
   };
   const unsubscribeWorkspace = workspaceStore.subscribe(renderWorkspace); grid.setWorkspace(activeWorkspace); renderWorkspace(activeWorkspace);

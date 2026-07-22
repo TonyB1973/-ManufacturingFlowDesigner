@@ -4,8 +4,9 @@ import { deserializeProject } from './ProjectDeserializer';
 import { ProjectFileService, type ProjectFileHandle } from './ProjectFileService';
 import { serializeProject } from './ProjectSerializer';
 import type { ProjectSessionService } from './ProjectSessionService';
+import { createDemoProject } from './DemoProjectFactory';
 
-export interface ProjectFileCommands { newProject(): Promise<void>; open(): Promise<void>; save(): Promise<boolean>; saveAs(): Promise<boolean>; }
+export interface ProjectFileCommands { newProject(): Promise<void>; open(): Promise<void>; save(): Promise<boolean>; saveAs(): Promise<boolean>; loadDemo(): Promise<void>; }
 
 export class ProjectFileController implements ProjectFileCommands {
   private handle: ProjectFileHandle | null = null;
@@ -16,6 +17,7 @@ export class ProjectFileController implements ProjectFileCommands {
     files.registerLaunchConsumer((opened) => { void this.acceptOpenedFile(opened); }, (error) => { void this.run(async () => { throw error; }, 'Project could not be opened'); });
   }
   public async newProject(): Promise<void> { await this.run(async () => { if (!await this.allowReplace('create a new project')) { reportStatus('New project cancelled'); return; } this.beforeReplace(); this.handle = null; this.session.newProject(); reportStatus('New project created'); }, 'New project could not be created'); }
+  public async loadDemo(): Promise<void> { await this.run(async () => { if (!await this.allowReplace('load the demonstration project')) { reportStatus('Demo load cancelled'); return; } this.beforeReplace(); this.handle = null; this.session.openProject(createDemoProject(), 'Manufacturing Flow Demonstration.mflow'); reportStatus('Demonstration project loaded'); }, 'Demonstration project could not be loaded'); }
   public async open(): Promise<void> {
     await this.run(async () => {
       if (!await this.allowReplace('open another project')) { reportStatus('Open cancelled'); return; }

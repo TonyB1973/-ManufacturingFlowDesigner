@@ -204,6 +204,7 @@
 .placed-resource__icon { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
 .placed-resource__name { fill: #e0e4e8; font: 600 11px "Segoe UI", sans-serif; pointer-events: none; }
 .placed-resource__type { fill: #9ba5ae; font: 9px "Segoe UI", sans-serif; letter-spacing: .35px; pointer-events: none; }
+.placed-resource__overview-label { display: none; fill: #f4f7f8; font: 700 var(--canvas-overview-font-size, 9px) Consolas, monospace; paint-order: stroke; stroke: #10171c; stroke-width: var(--canvas-overview-stroke-width, 2px); stroke-linejoin: round; pointer-events: none; }
 .placed-resource__selection { display: none; fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .placed-resource__selection-label { display: none; fill: var(--accent); font: 700 8px "Segoe UI", sans-serif; letter-spacing: .7px; pointer-events: none; }
 .placed-resource--selected .placed-resource__selection, .placed-resource--selected .placed-resource__selection-label { display: inline; }
@@ -330,7 +331,9 @@
 }
 
 .factory-area--controlled rect { stroke-dasharray: 5 4; }
-.factory-structure-label { fill: #d9e8ee; font-size: 13px; paint-order: stroke; stroke: #17232a; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.factory-structure-label-group { pointer-events: none; }
+.factory-structure-label-background { fill: rgba(18, 25, 29, .88); stroke: rgba(102, 135, 149, .55); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.factory-structure-label { fill: #d9e8ee; font-size: 13px; pointer-events: none; }
 .factory-aisle { cursor: pointer; }
 .factory-aisle__corridor { stroke: rgba(169, 149, 71, 0.25); stroke-linejoin: round; stroke-linecap: square; }
 .factory-aisle--emergency .factory-aisle__corridor { stroke: rgba(190, 76, 67, 0.28); }
@@ -357,7 +360,9 @@
 .factory-route__line, .factory-route-preview { fill: none; stroke: var(--route-color, #63d49a); stroke-width: 3; stroke-linecap: square; stroke-linejoin: miter; pointer-events: none; vector-effect: non-scaling-stroke; }
 .factory-route__arrow { fill: var(--route-color, #63d49a); stroke: none; }
 .factory-route__endpoint { fill: #131a1e; stroke: var(--route-color); stroke-width: 2; pointer-events: none; }
-.factory-route__label { fill: #e8f2ed; font: 600 10px "Segoe UI", sans-serif; paint-order: stroke; stroke: #12191d; stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.factory-route__label-group { pointer-events: none; }
+.factory-route__label-background { fill: rgba(18, 25, 29, .92); stroke: var(--route-color); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.factory-route__label { fill: #e8f2ed; font: 600 10px "Segoe UI", sans-serif; pointer-events: none; }
 .factory-route__issue { font: 14px "Segoe UI Emoji", sans-serif; text-anchor: middle; pointer-events: none; }
 .factory-route:hover .factory-route__line { stroke-width: 4; filter: brightness(1.2); }
 .factory-route--selected .factory-route__line { stroke: #fff1a6; stroke-width: 5; filter: drop-shadow(0 0 3px #000); }
@@ -371,5 +376,14 @@
 .factory-route-preview { stroke: #fff1a6; stroke-dasharray: 8 5; pointer-events: none; }
 .factory-route-edit-handle { fill: #131a1e; stroke: #fff1a6; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; pointer-events: all; }
 .factory-route-edit-handle--endpoint { fill: #fff1a6; stroke: #151b20; }
+.canvas-viewport[data-zoom-tier="overview"] .placed-resource__content,
+.canvas-viewport[data-zoom-tier="overview"] .placed-resource__orientation,
+.canvas-viewport[data-zoom-tier="overview"] .placed-resource__dimensions,
+.canvas-viewport[data-zoom-tier="overview"] .factory-structure-label-group,
+.canvas-viewport[data-zoom-tier="overview"] .factory-route__label-group,
+.canvas-viewport[data-zoom-tier="overview"] .factory-route__endpoint { display: none; }
+.canvas-viewport[data-zoom-tier="overview"] .placed-resource__overview-label { display: inline; }
+.canvas-viewport[data-zoom-tier="overview"] .factory-route__line { marker-start: none; marker-end: none; stroke-width: 2; }
+.canvas-viewport[data-zoom-tier="overview"] .factory-route__issue { font-size: var(--canvas-overview-issue-font-size, 14px); paint-order: stroke; stroke: #12191d; stroke-width: var(--canvas-overview-stroke-width, 2px); }
 .route-type-selector { min-width: 86px; padding: 3px 5px; color: var(--text); background: #171d22; border: 1px solid var(--border); font-size: 11px; }
 .canvas-viewport--route-tool { cursor: crosshair; }

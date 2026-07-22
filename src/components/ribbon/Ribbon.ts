@@ -64,7 +64,7 @@ export function createRibbon(workspaceStore?: WorkspaceStore, geometryEditing?: 
   return { element: ribbon, setFileCommands: (commands) => { fileCommands = commands; }, setHistoryCommands: (commands) => { unsubscribeHistory?.(); historyCommands = commands; unsubscribeHistory = commands.subscribe(updateWorkspaceCommands); updateWorkspaceCommands(); }, setFileBusy: (busy) => { fileBusy = busy; updateWorkspaceCommands(); }, dispose: () => { unsubscribe?.(); unsubscribeGeometry?.(); unsubscribeHistory?.(); } };
 }
 
-const fileCommandNames = new Map<string, keyof ProjectFileCommands>([['New', 'newProject'], ['Open', 'open'], ['Save', 'save'], ['Save As', 'saveAs']]);
+const fileCommandNames = new Map<string, keyof ProjectFileCommands>([['New', 'newProject'], ['Open', 'open'], ['Save', 'save'], ['Save As', 'saveAs'], ['Load Demo', 'loadDemo']]);
 const historyCommandNames = new Map<string, 'undo' | 'redo'>([['Undo', 'undo'], ['Redo', 'redo']]);
 
 const canvasCommands = new Map<string, CanvasCommand>([

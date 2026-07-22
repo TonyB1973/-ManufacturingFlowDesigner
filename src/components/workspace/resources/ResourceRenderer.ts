@@ -42,6 +42,7 @@ interface ResourceNode {
   readonly icon: SVGPathElement;
   readonly name: SVGTextElement;
   readonly type: SVGTextElement;
+  readonly overviewLabel: SVGTextElement;
   readonly selection: SVGRectElement;
   readonly selectionLabel: SVGTextElement;
   readonly lockLabel: SVGTextElement;
@@ -135,6 +136,7 @@ export class ResourceRenderer {
     type.classList.add('placed-resource__type');
     type.setAttribute('font-family', 'Segoe UI, sans-serif');
     type.setAttribute('font-size', String(TYPE_FONT_SIZE));
+    const overviewLabel = svgElement('text'); overviewLabel.classList.add('placed-resource__overview-label'); overviewLabel.setAttribute('text-anchor', 'middle'); overviewLabel.setAttribute('dominant-baseline', 'central');
     const selection = svgElement('rect');
     selection.classList.add('placed-resource__selection');
     const selectionLabel = svgElement('text');
@@ -147,9 +149,9 @@ export class ResourceRenderer {
     const orientation = svgElement('path'); orientation.classList.add('placed-resource__orientation'); orientation.setAttribute('d', 'M -8 -3 L 8 -3 M 8 -3 L 3 -8 M 8 -3 L 3 2');
     const warning = svgElement('text'); warning.classList.add('placed-resource__warning'); warning.textContent = '!';
     content.append(icon, name, type, lockLabel);
-    group.append(title, clearance, definitions, body, accent, content, orientation, dimensions, warning, selection, selectionLabel);
+    group.append(title, clearance, definitions, body, accent, content, overviewLabel, orientation, dimensions, warning, selection, selectionLabel);
     this.layer.append(group);
-    this.nodes.set(resource.id, { group, title, clearance, body, accent, content, clipRect, icon, name, type, selection, selectionLabel, lockLabel, dimensions, orientation, warning });
+    this.nodes.set(resource.id, { group, title, clearance, body, accent, content, clipRect, icon, name, type, overviewLabel, selection, selectionLabel, lockLabel, dimensions, orientation, warning });
     this.renderResource(resource);
   }
 
@@ -216,13 +218,17 @@ export class ResourceRenderer {
     node.type.setAttribute('display', showType ? 'inline' : 'none');
     node.type.dataset.availableWidth = String(availableTypeWidth);
     node.type.textContent = fittedType;
+    node.overviewLabel.textContent = resource.id.replace('RES-', 'R');
     node.selectionLabel.setAttribute('x', String(x + 8));
     node.selectionLabel.setAttribute('y', String(y - 7));
     node.lockLabel.setAttribute('x', String(-x - HORIZONTAL_PADDING));
     node.lockLabel.setAttribute('y', String(-y - VERTICAL_PADDING - 1));
     node.lockLabel.setAttribute('display', resource.locked ? 'inline' : 'none');
     node.orientation.setAttribute('transform', `translate(0 ${y + 9})`);
-    node.dimensions.setAttribute('x', '0'); node.dimensions.setAttribute('y', String(-y + 13)); node.dimensions.setAttribute('text-anchor', 'middle'); node.dimensions.textContent = `${resource.width} × ${resource.depth} mm · ${resource.rotationDegrees}°`;
+    node.dimensions.setAttribute('x', '0');
+    node.dimensions.setAttribute('y', String(-y - VERTICAL_PADDING));
+    node.dimensions.setAttribute('text-anchor', 'middle');
+    node.dimensions.textContent = `${resource.width} × ${resource.depth} mm · ${resource.rotationDegrees}°`;
     node.warning.setAttribute('x', String(-x - 10)); node.warning.setAttribute('y', String(y + 14)); node.warning.setAttribute('display', relatedIssues.length ? 'inline' : 'none');
   }
 

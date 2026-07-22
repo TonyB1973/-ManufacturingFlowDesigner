@@ -97,6 +97,10 @@ npm run dev
 
 Open the local address shown by Vite. In PowerShell environments that block `npm.ps1`, use `npm.cmd`.
 
+### Demonstration project
+
+Use **File → Load Demo** to replace the current project with a known-clean, editable manufacturing example. The demo contains an assigned five-step Process Flow and a corresponding Factory Layout with six resources, a boundary, production and logistics areas, a shared aisle, material routes, and a walking route. Unsaved work receives the same discard confirmation used by New and Open. The demo is also exercised by `npm run test:demo` so it can remain a stable demonstration and regression baseline as later sprints add features.
+
 ## Project files
 
 Manufacturing Flow Designer project files use:
