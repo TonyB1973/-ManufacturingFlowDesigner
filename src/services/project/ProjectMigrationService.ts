@@ -9,6 +9,7 @@ export class ProjectMigrationService {
     this.register('1.0.0', '1.1.0', migrateFactoryLayoutEngineering);
     this.register('1.1.0', '1.2.0', migrateFactoryStructure);
     this.register('1.2.0', '1.3.0', migrateFactoryRoutes);
+    this.register('1.3.0', '1.4.0', migrateFactoryAnnotations);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -38,6 +39,26 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateFactoryAnnotations(document: Record<string, unknown>): Record<string, unknown> {
+  const settings = isRecord(document.settings) ? document.settings : {};
+  const legacyPrecision = typeof settings.displayPrecision === 'number' ? settings.displayPrecision : 2;
+  return {
+    ...document,
+    applicationVersion: '0.6.0',
+    factoryAnnotations: [],
+    settings: {
+      ...settings,
+      unitSystem: 'metric',
+      displayPrecision: legacyPrecision,
+      units: { modelLengthUnit: 'mm', displayLengthUnit: 'mm', displayPrecision: legacyPrecision, showTrailingZeros: false },
+      dimensionTextScale: 1,
+      annotationTextSize: 14,
+      defaultDimensionOffset: 60,
+      defaultDimensionLayer: 'Dimensions',
+    },
+  };
 }
 
 function migrateFactoryRoutes(document: Record<string, unknown>): Record<string, unknown> {

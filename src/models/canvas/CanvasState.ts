@@ -1,4 +1,4 @@
-export type CanvasTool = 'select' | 'pan' | 'connect' | 'delete-link' | 'draw-boundary-rect' | 'draw-boundary-orthogonal' | 'draw-wall' | 'draw-area' | 'draw-aisle' | 'draw-route';
+export type CanvasTool = 'select' | 'pan' | 'connect' | 'delete-link' | 'draw-boundary-rect' | 'draw-boundary-orthogonal' | 'draw-wall' | 'draw-area' | 'draw-aisle' | 'draw-route' | 'measure' | 'dimension-horizontal' | 'dimension-vertical' | 'dimension-aligned' | 'coordinate-marker' | 'text-note' | 'leader';
 
 export interface CanvasState {
   panX: number;

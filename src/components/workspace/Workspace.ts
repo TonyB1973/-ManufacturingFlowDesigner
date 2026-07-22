@@ -13,6 +13,10 @@ import type { GeometryCommandFactory } from '../../services/history/GeometryComm
 import type { FactoryStructureStore } from '../../services/FactoryStructureStore';
 import type { FactoryRouteStore } from '../../services/FactoryRouteStore';
 import type { FactoryRouteCommandFactory } from '../../services/history/FactoryRouteCommandFactory';
+import type { FactoryAnnotationStore } from '../../services/FactoryAnnotationStore';
+import type { AnnotationAnchorResolver } from '../../services/annotations/AnnotationAnchorResolver';
+import type { FactoryAnnotationCommandFactory } from '../../services/history/FactoryAnnotationCommandFactory';
+import type { ProjectSessionService } from '../../services/project/ProjectSessionService';
 
 export interface WorkspaceOptions {
   readonly application: HTMLElement;
@@ -22,12 +26,16 @@ export interface WorkspaceOptions {
   readonly connectionStore: ConnectionStore;
   readonly structureStore: FactoryStructureStore;
   readonly routeStore: FactoryRouteStore;
+  readonly annotationStore: FactoryAnnotationStore;
+  readonly annotationResolver: AnnotationAnchorResolver;
   readonly selectionStore: SelectionController;
   readonly workspaceStore: WorkspaceStore;
   readonly requestResourceDeletion: (resourceId: string) => void;
   readonly onFocusModeChange: (active: boolean) => void;
   readonly commands: CommandFactory;
   readonly routeCommands: FactoryRouteCommandFactory;
+  readonly annotationCommands: FactoryAnnotationCommandFactory;
+  readonly projectSession: ProjectSessionService;
   readonly editing: ApplicationClipboardService;
   readonly geometrySelection: GeometrySelectionService;
   readonly geometryEditing: GeometryEditingService;
@@ -35,7 +43,7 @@ export interface WorkspaceOptions {
 }
 
 export function createWorkspace(options: WorkspaceOptions): CanvasViewportController {
-  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, {
+  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.annotationStore, options.annotationResolver, options.projectSession, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.annotationCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, {
     onZoomChange: options.statusBar.setZoom,
     onGridVisibilityChange: options.statusBar.setGridVisible,
     onCoordinatesChange: options.statusBar.setCoordinates,

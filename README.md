@@ -2,6 +2,16 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 2.8 scope
+
+Sprint 2.8 adds Factory Layout measurement, associative dimensions, coordinate markers, text notes, and leaders. **Measure** (`M`) is session-only and reports aligned distance, horizontal/vertical components, angle, and endpoint coordinates; it never dirties or saves the project. Persistent tools create Horizontal (`H`), Vertical (`V`), and Aligned (`D`) dimensions, Coordinate markers (`Shift+C`), Notes (`N`), and Leaders (`L`). Shift constrains measurement or adds orthogonal leader elbows, Alt bypasses snapping, Escape cancels, and **Create Dimension from Measurement** promotes a completed measurement through normal command history.
+
+Annotation anchors are typed references to free points, resources, boundaries, walls, areas, aisles, and Factory Routes. Attached annotations resolve against current geometry and therefore follow later movement, resize, rotation, or route editing; free anchors stay at authored world coordinates. Deleting a referenced entity removes dependent annotations in the same reversible action, including annotations attached to routes cascaded by resource or area deletion. Locked annotations reject geometry/property edits and direct deletion while still allowing visibility and unlock changes.
+
+Dimensions render with extension lines, arrowheads, upright screen-readable text, unit conversion, precision overrides, prefixes/suffixes, and short-span arrow handling. Coordinate, Notes, Dimensions, and General layers can be toggled without disabling validation. Project Explorer, Inspector, fit commands, marquee selection, Copy/Cut/Paste/Duplicate, Undo/Redo, navigable validation issues, and the demonstration project all include annotations while preserving strict Process Flow / Factory Layout separation.
+
+The `.mflow` schema is `1.4.0` and application version is `0.6.0`. Migration from `1.3.0` adds an empty `factoryAnnotations` collection and explicit unit/annotation settings without modifying prior authored geometry, routes, process data, IDs, or viewport states.
+
 ## Sprint 2.7 scope
 
 Sprint 2.7 adds first-class Factory Routes for walking and physical material movement. Use **Route** or `T` in Factory Layout, select Walking, Material, Forklift, AGV, Tugger, or General, then choose resource/area perimeter anchors or free floor positions. Click to author orthogonal waypoints, `Enter` completes, `Backspace` removes the latest point, and `Escape` cancels without history. Resource and area endpoints follow later movement, resize, and rotation; free endpoints remain fixed world positions.
@@ -99,7 +109,7 @@ Open the local address shown by Vite. In PowerShell environments that block `npm
 
 ### Demonstration project
 
-Use **File → Load Demo** to replace the current project with a known-clean, editable manufacturing example. The demo contains an assigned five-step Process Flow and a corresponding Factory Layout with six resources, a boundary, production and logistics areas, a shared aisle, material routes, and a walking route. Unsaved work receives the same discard confirmation used by New and Open. The demo is also exercised by `npm run test:demo` so it can remain a stable demonstration and regression baseline as later sprints add features.
+Use **File → Load Demo** to replace the current project with a known-clean, editable manufacturing example. The demo contains an assigned five-step Process Flow and a corresponding Factory Layout with six resources, a boundary, production and logistics areas, a shared aisle, material routes, a walking route, and representative dimensions, coordinate, note, and leader annotations. Unsaved work receives the same discard confirmation used by New and Open. The demo is also exercised by `npm run test:demo` so it can remain a stable demonstration and regression baseline as later sprints add features.
 
 ## Project files
 
@@ -108,12 +118,12 @@ Manufacturing Flow Designer project files use:
 - extension: `.mflow`
 - media type: `application/vnd.manufacturing-flow-designer+json`
 - format identifier: `ManufacturingFlowDesigner`
-- current schema: `1.3.0`
-- current application version: `0.5.0`
+- current schema: `1.4.0`
+- current application version: `0.6.0`
 
-The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Process Flow operations and connections, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
+The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
 
-Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 10 boundaries, 50,000 walls, 20,000 areas, 20,000 aisles, 30 nested levels, and bounded structural vertex counts. They are defensive limits rather than expected working sizes.
+Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 10,000 Factory Annotations, 10 boundaries, 50,000 walls, 20,000 areas, 20,000 aisles, 30 nested levels, and bounded structural, route, and leader vertex counts. They are defensive limits rather than expected working sizes.
 
 Selection, active gestures, tool state, validation output, browser file handles, process-connection route points, resolved Factory Route endpoints, distance, and travel time are deliberately excluded. Process-connection geometry is derived and recalculated once after a complete project has loaded.
 
@@ -163,6 +173,7 @@ npm run test:canvas
 npm run test:factory
 npm run test:structure
 npm run test:routes
+npm run test:annotations
 npm run build
 git diff --check
 ```
@@ -186,16 +197,21 @@ git diff --check
 - `FactoryFootprintGeometry` owns rotated corners, AABBs, point rotation, clearance envelopes, and SAT intersection; `FactoryLayoutValidation` derives engineering issues and summaries from resource state.
 - `FactoryStructureGeometry`, `FactoryStructureStore`, and `FactoryStructureValidation` own orthogonal structural geometry, stable entities, collisions, placement policy, and summaries without depending on SVG.
 - `FactoryRouteStore`, `FactoryRouteGeometry`, and `FactoryRouteValidation` own typed physical routes, derived orthogonal geometry, metrics, and engineering checks independently of Process Connections and SVG.
-- Domain stores remain the runtime authorities for resources, operations, connections, factory structure, factory routes, selection, and workspace viewports.
+- `FactoryAnnotationStore`, `AnnotationAnchorResolver`, `LinearDimensionGeometry`, and `LengthUnitService` own persistent annotations, associative geometry, deterministic measurement, and unit formatting independently of SVG.
+- Domain stores remain the runtime authorities for resources, operations, connections, factory structure, factory routes, factory annotations, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, and [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, and [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for measurement, associative anchors, annotations, and units.
 
 ## Current limitations
 
-The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no persistent/collaborative history, autosave/recovery, cloud sync, scenario comparison, custom-template editor, general dimensioning, concurrency simulation, or WPF history implementation yet. Browser download fallback cannot overwrite an existing file silently.
+The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no persistent/collaborative history, autosave/recovery, cloud sync, scenario comparison, custom-template editor, angular/radial dimensioning, concurrency simulation, or WPF history implementation yet. Browser download fallback cannot overwrite an existing file silently.
 
 Clipboard contents are session-only and cannot be exchanged with external applications. Multi-selection supports the current single Factory Layout. Nudge command coalescing, symmetric centre resize, keyboard resize, arbitrary-angle on-canvas resize, permanent grouping, rulers, manual waypoints, and cross-workspace conversion are not implemented.
 
-Sprint 2.8 is planned to add measurement, dimensions, and engineering annotation. Route travel-time estimates are nominal geometric calculations, not simulation.
+Route travel-time estimates are nominal geometric calculations, not simulation. Annotation anchor editing is currently provided through typed creation, property editing, clipboard remapping, and referenced-entity geometry changes rather than a full CAD constraint solver.
 
-Development for this sprint is performed on `feature/sprint-2.7-factory-routes`.
+## Planned Sprint 2.9
+
+Sprint 2.9 is planned to introduce the Standard Work data model and timing foundations. Standard Work is intentionally outside Sprint 2.8.
+
+Development for this sprint is performed on `feature/sprint-2.8-layout-dimensions-annotations`.

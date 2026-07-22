@@ -387,3 +387,45 @@
 .canvas-viewport[data-zoom-tier="overview"] .factory-route__issue { font-size: var(--canvas-overview-issue-font-size, 14px); paint-order: stroke; stroke: #12191d; stroke-width: var(--canvas-overview-stroke-width, 2px); }
 .route-type-selector { min-width: 86px; padding: 3px 5px; color: var(--text); background: #171d22; border: 1px solid var(--border); font-size: 11px; }
 .canvas-viewport--route-tool { cursor: crosshair; }
+.factory-annotation {
+  color: #16324f;
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.factory-dimension__extension,
+.factory-dimension__line,
+.factory-coordinate__leader,
+.factory-leader__line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  vector-effect: non-scaling-stroke;
+}
+
+.factory-dimension__extension { opacity: .72; }
+.factory-annotation__arrow { fill: none; stroke: currentColor; stroke-width: 1.35; }
+.factory-annotation__text { fill: #102a43; font-family: Inter, "Segoe UI", sans-serif; paint-order: stroke; stroke: rgba(255,255,255,.75); stroke-width: 2px; }
+.factory-annotation__text-background { fill: rgba(255,255,255,.94); stroke: #9fb3c8; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.factory-coordinate__marker { fill: #fff; stroke: #1769aa; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.factory-annotation--selected { color: #d97706; filter: drop-shadow(0 0 2px rgba(217,119,6,.45)); }
+.factory-annotation--locked { cursor: not-allowed; opacity: .84; }
+.factory-annotation__lock { fill: #7b341e; font-weight: 700; }
+.factory-annotation__error { fill: #b91c1c; font-size: 18px; }
+
+.temporary-measurement__line,
+.temporary-measurement__component,
+.factory-annotation-preview {
+  fill: none;
+  stroke: #0f766e;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.temporary-measurement__component { stroke: #64748b; stroke-width: 1; }
+.temporary-measurement__point { fill: #fff; stroke: #0f766e; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.temporary-measurement__text,
+.temporary-measurement__coordinates { fill: #0f172a; font-family: Inter, "Segoe UI", sans-serif; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 3px; pointer-events: none; }
+.temporary-measurement__coordinates { fill: #475569; font-weight: 500; }

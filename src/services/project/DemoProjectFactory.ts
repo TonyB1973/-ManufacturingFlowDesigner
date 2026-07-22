@@ -182,11 +182,18 @@ export function createDemoProject(now = new Date().toISOString()): ProjectDocume
       { id: 'FRT-0004', layoutId: DEFAULT_FACTORY_LAYOUT_ID, name: 'Inspection to packing', routeType: 'Material', direction: 'Forward', source: routeEndpoint('RES-0004', 'bottom'), target: routeEndpoint('RES-0005', 'top'), waypoints: [{ x: 1000, y: 300 }, { x: 1000, y: 420 }], visible: true, locked: false, enabled: true, nominalSpeed: 1.2, note: 'Approved product transfer to packing.' },
       { id: 'FRT-0005', layoutId: DEFAULT_FACTORY_LAYOUT_ID, name: 'Packing operator walk', routeType: 'Walking', direction: 'Two Way', source: routeEndpoint('RES-0005', 'left'), target: routeEndpoint('RES-0006', 'right'), waypoints: [], visible: true, locked: false, enabled: true, nominalSpeed: 1.4, note: 'Operator movement between packing and finished goods.' },
     ],
+    factoryAnnotations: [
+      { id: 'ANN-0001', annotationType: 'linearDimension', layoutId: DEFAULT_FACTORY_LAYOUT_ID, dimensionKind: 'Horizontal', startAnchor: { kind: 'boundary', boundaryId: 'BND-0001', feature: 'vertex', index: 0 }, endAnchor: { kind: 'boundary', boundaryId: 'BND-0001', feature: 'vertex', index: 1 }, offset: -70, textPosition: 0.5, prefix: '', suffix: '', textOverride: '', showUnit: true, precisionOverride: null, visible: true, locked: false, layer: 'Dimensions', note: 'Overall factory width.', createdUtc: now },
+      { id: 'ANN-0002', annotationType: 'linearDimension', layoutId: DEFAULT_FACTORY_LAYOUT_ID, dimensionKind: 'Vertical', startAnchor: { kind: 'boundary', boundaryId: 'BND-0001', feature: 'vertex', index: 1 }, endAnchor: { kind: 'boundary', boundaryId: 'BND-0001', feature: 'vertex', index: 2 }, offset: -70, textPosition: 0.5, prefix: '', suffix: '', textOverride: '', showUnit: true, precisionOverride: null, visible: true, locked: false, layer: 'Dimensions', note: 'Overall factory depth.', createdUtc: now },
+      { id: 'ANN-0003', annotationType: 'coordinate', layoutId: DEFAULT_FACTORY_LAYOUT_ID, anchor: { kind: 'resource', resourceId: 'RES-0002', feature: 'centre' }, showX: true, showY: true, labelOffset: { x: 30, y: -30 }, prefix: '', suffix: '', precisionOverride: null, visible: true, locked: false, layer: 'Coordinates', note: 'Machining cell centre datum.', createdUtc: now },
+      { id: 'ANN-0004', annotationType: 'text', layoutId: DEFAULT_FACTORY_LAYOUT_ID, worldPosition: { x: 550, y: -40 }, text: 'DEMO FACTORY LAYOUT', textSize: 18, textAlign: 'centre', rotationDegrees: 0, backgroundEnabled: true, borderEnabled: false, visible: true, locked: false, layer: 'Notes', note: 'Demo title.', createdUtc: now },
+      { id: 'ANN-0005', annotationType: 'leader', layoutId: DEFAULT_FACTORY_LAYOUT_ID, anchor: { kind: 'resource', resourceId: 'RES-0004', feature: 'centre' }, elbowPoints: [{ x: 1120, y: 80 }], textPosition: { x: 1180, y: 40 }, text: 'Final quality gate', textSize: 16, arrowStyle: 'filled', visible: true, locked: false, layer: 'Notes', note: 'Example resource callout.', createdUtc: now },
+    ],
     workspaces: {
       active: 'processFlow',
       processFlow: { panX: 55, panY: 100, zoom: 0.5, gridVisible: true, originVisible: true, snapEnabled: true },
       factoryLayout: { panX: 50, panY: 90, zoom: 0.28, gridVisible: true, originVisible: true, snapEnabled: true },
     },
-    settings: { ...DEFAULT_PROJECT_SETTINGS },
+    settings: { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units } },
   };
 }

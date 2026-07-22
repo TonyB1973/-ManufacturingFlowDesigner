@@ -6,6 +6,7 @@ import type { WorkspaceId } from '../../models/workspace/Workspace';
 import type { ProjectSessionService } from '../project/ProjectSessionService';
 import type { FactoryStructureStore } from '../FactoryStructureStore';
 import type { FactoryRouteStore } from '../FactoryRouteStore';
+import type { FactoryAnnotationStore } from '../FactoryAnnotationStore';
 
 export interface CommandExecutionContext {
   readonly resources: ResourceStore;
@@ -13,6 +14,7 @@ export interface CommandExecutionContext {
   readonly connections: ConnectionStore;
   readonly structure: FactoryStructureStore;
   readonly routes: FactoryRouteStore;
+  readonly annotations: FactoryAnnotationStore;
   readonly project: ProjectSessionService;
   readonly selection: SelectionController;
 }
