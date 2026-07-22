@@ -345,3 +345,31 @@
 .factory-structure-handle { fill: #17232a; stroke: #f2c14e; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; }
 .canvas-viewport--draw-tool { cursor: crosshair; }
 .factory-area.factory-structure--selected rect { stroke: #f2c14e; stroke-width: 4; }
+
+.factory-route { --route-color: #63d49a; cursor: pointer; pointer-events: all; }
+.factory-route--walking { --route-color: #61c5f2; }
+.factory-route--material { --route-color: #f2bd55; }
+.factory-route--forklift { --route-color: #f08a55; }
+.factory-route--agv { --route-color: #a989f5; }
+.factory-route--tugger { --route-color: #df72bf; }
+.factory-route--general { --route-color: #78d19a; }
+.factory-route__hit { fill: none; stroke: transparent; stroke-width: 18; pointer-events: stroke; vector-effect: non-scaling-stroke; }
+.factory-route__line, .factory-route-preview { fill: none; stroke: var(--route-color, #63d49a); stroke-width: 3; stroke-linecap: square; stroke-linejoin: miter; pointer-events: none; vector-effect: non-scaling-stroke; }
+.factory-route__arrow { fill: var(--route-color, #63d49a); stroke: none; }
+.factory-route__endpoint { fill: #131a1e; stroke: var(--route-color); stroke-width: 2; pointer-events: none; }
+.factory-route__label { fill: #e8f2ed; font: 600 10px "Segoe UI", sans-serif; paint-order: stroke; stroke: #12191d; stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.factory-route__issue { font: 14px "Segoe UI Emoji", sans-serif; text-anchor: middle; pointer-events: none; }
+.factory-route:hover .factory-route__line { stroke-width: 4; filter: brightness(1.2); }
+.factory-route--selected .factory-route__line { stroke: #fff1a6; stroke-width: 5; filter: drop-shadow(0 0 3px #000); }
+.factory-route--selected .factory-route__endpoint { stroke: #fff1a6; }
+.factory-route--locked .factory-route__line { stroke-dasharray: 10 4; }
+.factory-route--disabled { opacity: .42; }
+.factory-route--warning .factory-route__line { stroke-dasharray: 9 5; }
+.factory-route--error .factory-route__line { stroke: #ff6f6f; }
+.factory-route-port-hit { fill: transparent; stroke: none; pointer-events: all; cursor: crosshair; }
+.factory-route-port { fill: #11191e; stroke: #79ddad; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.factory-route-preview { stroke: #fff1a6; stroke-dasharray: 8 5; pointer-events: none; }
+.factory-route-edit-handle { fill: #131a1e; stroke: #fff1a6; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; pointer-events: all; }
+.factory-route-edit-handle--endpoint { fill: #fff1a6; stroke: #151b20; }
+.route-type-selector { min-width: 86px; padding: 3px 5px; color: var(--text); background: #171d22; border: 1px solid var(--border); font-size: 11px; }
+.canvas-viewport--route-tool { cursor: crosshair; }

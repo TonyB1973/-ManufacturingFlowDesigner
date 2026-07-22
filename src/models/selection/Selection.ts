@@ -6,6 +6,7 @@ export type SelectionItem =
   | { readonly kind: 'wall'; readonly id: string }
   | { readonly kind: 'area'; readonly id: string }
   | { readonly kind: 'aisle'; readonly id: string }
+  | { readonly kind: 'factoryRoute'; readonly id: string }
   | { readonly kind: 'operation'; readonly id: string }
   | { readonly kind: 'connection'; readonly id: string };
 

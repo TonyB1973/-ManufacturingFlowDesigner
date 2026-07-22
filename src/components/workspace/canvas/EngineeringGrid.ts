@@ -34,6 +34,7 @@ export class EngineeringGrid {
   private readonly areaLayer = svgElement('g');
   private readonly aisleLayer = svgElement('g');
   private readonly wallLayer = svgElement('g');
+  private readonly routeLayer = svgElement('g');
   private readonly resourceLayer = svgElement('g');
   private readonly operationLayer = svgElement('g');
   private readonly connectionLayer = svgElement('g');
@@ -96,8 +97,8 @@ export class EngineeringGrid {
     this.operationLayer.id = 'canvas-operations';
     this.interactionLayer.id = 'canvas-interactions';
     this.futureWorldLayer.id = 'canvas-world-layers';
-    this.boundaryLayer.id = 'canvas-factory-boundary'; this.areaLayer.id = 'canvas-factory-areas'; this.aisleLayer.id = 'canvas-factory-aisles'; this.wallLayer.id = 'canvas-factory-walls';
-    this.futureWorldLayer.append(this.connectionLayer, this.boundaryLayer, this.areaLayer, this.aisleLayer, this.wallLayer, this.resourceLayer, this.operationLayer, this.interactionLayer);
+    this.boundaryLayer.id = 'canvas-factory-boundary'; this.areaLayer.id = 'canvas-factory-areas'; this.aisleLayer.id = 'canvas-factory-aisles'; this.wallLayer.id = 'canvas-factory-walls'; this.routeLayer.id = 'canvas-factory-routes';
+    this.futureWorldLayer.append(this.connectionLayer, this.boundaryLayer, this.areaLayer, this.aisleLayer, this.wallLayer, this.routeLayer, this.resourceLayer, this.operationLayer, this.interactionLayer);
     this.svg.append(definitions, background, this.gridLayer, this.axesLayer, this.futureWorldLayer);
   }
 
@@ -113,12 +114,13 @@ export class EngineeringGrid {
   public getAreaLayer(): SVGGElement { return this.areaLayer; }
   public getAisleLayer(): SVGGElement { return this.aisleLayer; }
   public getWallLayer(): SVGGElement { return this.wallLayer; }
+  public getRouteLayer(): SVGGElement { return this.routeLayer; }
   public setWorkspace(workspace: WorkspaceId): void {
     const processFlow = workspace === 'processFlow';
     this.resourceLayer.setAttribute('display', processFlow || !this.resourceVisible ? 'none' : 'inline');
     this.operationLayer.setAttribute('display', processFlow ? 'inline' : 'none');
     this.connectionLayer.setAttribute('display', processFlow ? 'inline' : 'none');
-    for (const layer of [this.boundaryLayer, this.areaLayer, this.aisleLayer, this.wallLayer]) layer.setAttribute('display', processFlow ? 'none' : 'inline');
+    for (const layer of [this.boundaryLayer, this.areaLayer, this.aisleLayer, this.wallLayer, this.routeLayer]) layer.setAttribute('display', processFlow ? 'none' : 'inline');
     this.interactionLayer.setAttribute('display', 'inline');
   }
 
