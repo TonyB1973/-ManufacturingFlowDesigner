@@ -11,6 +11,7 @@ import type { FactoryRouteStore } from '../FactoryRouteStore';
 import { cloneFactoryRoute } from '../../models/factory/FactoryRoute';
 import type { FactoryAnnotationStore } from '../FactoryAnnotationStore';
 import { cloneFactoryAnnotation } from '../../models/factory/FactoryAnnotation';
+import type { StandardWorkStore } from '../StandardWorkStore';
 
 export interface ProjectSerializationSource {
   readonly metadata: ProjectMetadata;
@@ -21,6 +22,7 @@ export interface ProjectSerializationSource {
   readonly structure: FactoryStructureStore;
   readonly routes: FactoryRouteStore;
   readonly annotations: FactoryAnnotationStore;
+  readonly standardWork: StandardWorkStore;
   readonly workspaces: WorkspaceStore;
 }
 
@@ -42,12 +44,14 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
     aisles: byId(source.structure.getAisles()).map((item) => ({ ...item, points: item.points.map((point) => ({ ...point })) })),
     factoryRoutes: byId(source.routes.getRoutes()).map(cloneFactoryRoute),
     factoryAnnotations: byId(source.annotations.getAnnotations()).map(cloneFactoryAnnotation),
+    standardWorkStudies: byId(source.standardWork.getStudies()).map((item) => ({ ...item })),
+    standardWorkEntries: byId(source.standardWork.getEntries()).map((item) => ({ ...item })),
     workspaces: {
       active: source.workspaces.getActive(),
       processFlow: source.workspaces.getViewport('processFlow'),
       factoryLayout: source.workspaces.getViewport('factoryLayout'),
     },
-    settings: { ...source.settings },
+    settings: { ...source.settings, units: { ...source.settings.units }, standardWork: { ...source.settings.standardWork } },
   };
 }
 

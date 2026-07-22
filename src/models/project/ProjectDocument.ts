@@ -11,10 +11,11 @@ import type { FactoryAisle } from '../factory/FactoryAisle';
 import type { FactoryRoute } from '../factory/FactoryRoute';
 import type { FactoryAnnotation, FactoryAnnotationLayer } from '../factory/FactoryAnnotation';
 import type { LengthUnit } from '../../services/units/LengthUnitService';
+import type { StandardWorkEntry, StandardWorkStudy, StandardWorkTimeFormat } from '../standardWork/StandardWork';
 
 export const PROJECT_FORMAT = 'ManufacturingFlowDesigner' as const;
-export const PROJECT_SCHEMA_VERSION = '1.4.0' as const;
-export const APPLICATION_VERSION = '0.6.0' as const;
+export const PROJECT_SCHEMA_VERSION = '1.5.0' as const;
+export const APPLICATION_VERSION = '0.7.0' as const;
 export const PROJECT_MIME_TYPE = 'application/vnd.manufacturing-flow-designer+json' as const;
 export const PROJECT_FILE_EXTENSION = '.mflow' as const;
 
@@ -43,6 +44,7 @@ export interface ProjectSettings {
   annotationTextSize: number;
   defaultDimensionOffset: number;
   defaultDimensionLayer: FactoryAnnotationLayer;
+  standardWork: { timeFormat: StandardWorkTimeFormat };
 }
 
 export type PersistedResourceInstance = Omit<ResourceInstance, 'selected'>;
@@ -71,6 +73,8 @@ export interface ProjectDocument {
   readonly aisles: readonly FactoryAisle[];
   readonly factoryRoutes: readonly FactoryRoute[];
   readonly factoryAnnotations: readonly FactoryAnnotation[];
+  readonly standardWorkStudies: readonly StandardWorkStudy[];
+  readonly standardWorkEntries: readonly StandardWorkEntry[];
   readonly workspaces: PersistedWorkspaces;
   readonly settings: ProjectSettings;
 }
@@ -85,6 +89,7 @@ export const DEFAULT_PROJECT_SETTINGS: Readonly<ProjectSettings> = {
   annotationTextSize: 14,
   defaultDimensionOffset: 60,
   defaultDimensionLayer: 'Dimensions',
+  standardWork: { timeFormat: 'seconds' },
 };
 
 export function defaultViewport(): WorkspaceViewportState {

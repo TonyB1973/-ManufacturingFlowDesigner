@@ -2,6 +2,22 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 2.9 scope
+
+Sprint 2.9 introduces **Standard Work** as a third principal workspace beside Process Flow and Factory Layout. It uses a professional study/list/table layout rather than either CAD canvas, keeps a separate transient selection, and preserves the independent Process Flow and Factory Layout viewports while workspace changes safely cancel incomplete canvas gestures.
+
+Persistent `StandardWorkStudy` records own study metadata, revision, active state, notes, and stable `SW-####` identity. Ordered `StandardWorkEntry` records own only stable `SWE-####` identity, study and operation references, order, occurrences, enabled state, and study-specific notes. An entry deliberately does not copy an operation name, resource assignment, cycle time, or timing category: each display resolves its `operationId` against the live Process Flow operation store.
+
+Each operation has one authoritative non-negative `cycleTimeSeconds` and one timing category—Manual, Automatic, Walking, or Waiting. Effective entry duration is derived as operation cycle time × positive-integer occurrences. Disabled entries remain visible and saved but leave all totals. The workspace shows Manual, Automatic, Walking, and Waiting category totals and percentages, plus the accurately named **Sum of included operation durations**; overlap, scheduling, takt, and true operator or machine cycles are not inferred.
+
+Create, duplicate, rename, activate, and delete studies; add an available operation; or **Populate from Process Flow**, which appends missing operations by current operation sequence and ID. Study order is then independently user-controlled with drag reorder, Move Up/Down/Top/Bottom, and keyboard commands. One operation may occur once per study; use the occurrences multiplier for repetition. A duplicate add reveals the existing entry without changing history or dirty state.
+
+Study and entry edits, populate, ordering, occurrence and enabled changes, display-format settings, and operation timing changes use normal Undo/Redo. Deleting a referenced operation reports and atomically removes its attached Process Connections and every affected Standard Work entry; Undo restores exact IDs, references, and order. Deleting a physical resource continues only to clear operation assignments and therefore does not delete study entries.
+
+Keyboard controls include `Insert` to add the selected available operation, `Delete` to remove the selected entry or confirmed study, `Ctrl`/`Cmd+D` to duplicate a study, `Alt+Up/Down` to reorder, `Ctrl`/`Cmd+Home/End` to move to an end, and `Escape` to clear Standard Work selection. Normal Undo/Redo shortcuts continue to apply and editable controls retain native key handling.
+
+The `.mflow` schema is now `1.5.0` and application version is `0.7.0`. Schema `1.4.0` migrates explicitly to empty Standard Work collections, a Seconds display setting, and the new timing-category vocabulary while preserving metadata, physical resources, factory engineering data, operations, connections, assignments, IDs, units, and workspace state. Derived durations, summaries, percentages, validation, selection, and table scroll are never persisted.
+
 ## Sprint 2.8 scope
 
 Sprint 2.8 adds Factory Layout measurement, associative dimensions, coordinate markers, text notes, and leaders. **Measure** (`M`) is session-only and reports aligned distance, horizontal/vertical components, angle, and endpoint coordinates; it never dirties or saves the project. Persistent tools create Horizontal (`H`), Vertical (`V`), and Aligned (`D`) dimensions, Coordinate markers (`Shift+C`), Notes (`N`), and Leaders (`L`). Shift constrains measurement or adds orthogonal leader elbows, Alt bypasses snapping, Escape cancels, and **Create Dimension from Measurement** promotes a completed measurement through normal command history.
@@ -174,6 +190,7 @@ npm run test:factory
 npm run test:structure
 npm run test:routes
 npm run test:annotations
+npm run test:standard-work
 npm run build
 git diff --check
 ```
@@ -198,9 +215,10 @@ git diff --check
 - `FactoryStructureGeometry`, `FactoryStructureStore`, and `FactoryStructureValidation` own orthogonal structural geometry, stable entities, collisions, placement policy, and summaries without depending on SVG.
 - `FactoryRouteStore`, `FactoryRouteGeometry`, and `FactoryRouteValidation` own typed physical routes, derived orthogonal geometry, metrics, and engineering checks independently of Process Connections and SVG.
 - `FactoryAnnotationStore`, `AnnotationAnchorResolver`, `LinearDimensionGeometry`, and `LengthUnitService` own persistent annotations, associative geometry, deterministic measurement, and unit formatting independently of SVG.
-- Domain stores remain the runtime authorities for resources, operations, connections, factory structure, factory routes, factory annotations, selection, and workspace viewports.
+- `StandardWorkStore`, `StandardWorkOperationResolver`, `StandardWorkCalculationService`, `StandardWorkValidationService`, and `StandardWorkCommandFactory` keep persistent study data, live operation resolution, derived timing, validation, and history separate from the workspace DOM.
+- Domain stores remain the runtime authorities for resources, operations, connections, factory structure, factory routes, factory annotations, Standard Work studies/entries, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, and [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for measurement, associative anchors, annotations, and units.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for annotations and units, and [ADR-0010](docs/architecture/ADR-0010-standard-work-timing-foundations.md) for Standard Work references, timing, ordering, lifecycle, and persistence.
 
 ## Current limitations
 
@@ -210,8 +228,8 @@ Clipboard contents are session-only and cannot be exchanged with external applic
 
 Route travel-time estimates are nominal geometric calculations, not simulation. Annotation anchor editing is currently provided through typed creation, property editing, clipboard remapping, and referenced-entity geometry changes rather than a full CAD constraint solver.
 
-## Planned Sprint 2.9
+## Planned Sprint 3.0
 
-Sprint 2.9 is planned to introduce the Standard Work data model and timing foundations. Standard Work is intentionally outside Sprint 2.8.
+Sprint 3.0 is planned to add the **Standard Work Combination Chart**, building its visual timeline on the persistent Standard Work timing foundations created in Sprint 2.9. Operator lanes remain deferred to Sprint 3.1, with takt and balance analysis deferred to Sprint 3.2.
 
-Development for this sprint is performed on `feature/sprint-2.8-layout-dimensions-annotations`.
+Development for this sprint is performed on `feature/sprint-2.9-standard-work-foundations`.

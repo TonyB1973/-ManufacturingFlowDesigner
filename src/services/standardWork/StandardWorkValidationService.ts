@@ -1,0 +1,20 @@
+import { isValidStandardWorkEntry, isValidStandardWorkStudy, type StandardWorkEntry, type StandardWorkStudy } from '../../models/standardWork/StandardWork';
+import type { OperationStore } from '../OperationStore';
+
+export interface StandardWorkIssue { readonly severity: 'error' | 'warning'; readonly code: string; readonly message: string; readonly studyId?: string; readonly entryId?: string; readonly operationId?: string; }
+export interface StandardWorkValidation { readonly errors: number; readonly warnings: number; readonly issues: readonly StandardWorkIssue[]; }
+
+export function validateStandardWork(studies: readonly StandardWorkStudy[], entries: readonly StandardWorkEntry[], operations: OperationStore): StandardWorkValidation {
+  const issues: StandardWorkIssue[] = []; const studyIds = new Set<string>(); const entryIds = new Set<string>(); const pairs = new Set<string>();
+  for (const study of studies) { if (studyIds.has(study.id)) issues.push({ severity: 'error', code: 'duplicate-study-id', studyId: study.id, message: `Standard Work study ID ${study.id} is duplicated.` }); studyIds.add(study.id); if (!isValidStandardWorkStudy(study)) issues.push({ severity: 'error', code: 'invalid-study', studyId: study.id, message: `Standard Work study ${study.id} has invalid metadata.` }); if (!entries.some((entry) => entry.studyId === study.id)) issues.push({ severity: 'warning', code: 'empty-study', studyId: study.id, message: `Standard Work study ${study.id} is empty.` }); }
+  for (const entry of entries) {
+    if (entryIds.has(entry.id)) issues.push({ severity: 'error', code: 'duplicate-entry-id', entryId: entry.id, message: `Standard Work entry ID ${entry.id} is duplicated.` }); entryIds.add(entry.id);
+    if (!isValidStandardWorkEntry(entry)) issues.push({ severity: 'error', code: 'invalid-entry', studyId: entry.studyId, entryId: entry.id, operationId: entry.operationId, message: `Standard Work entry ${entry.id} has invalid order, occurrences, or notes.` });
+    if (!studyIds.has(entry.studyId)) issues.push({ severity: 'error', code: 'missing-study', studyId: entry.studyId, entryId: entry.id, message: `Standard Work entry ${entry.id} references missing study ${entry.studyId}.` });
+    const operation = operations.getOperation(entry.operationId); if (!operation) issues.push({ severity: 'error', code: 'missing-operation', studyId: entry.studyId, entryId: entry.id, operationId: entry.operationId, message: `Standard Work entry ${entry.id} references missing operation ${entry.operationId}.` });
+    else { if (!Number.isFinite(operation.cycleTimeSeconds) || operation.cycleTimeSeconds < 0) issues.push({ severity: 'error', code: 'invalid-cycle-time', studyId: entry.studyId, entryId: entry.id, operationId: entry.operationId, message: `${entry.operationId} has an invalid cycle time.` }); else if (operation.cycleTimeSeconds === 0) issues.push({ severity: 'warning', code: 'zero-cycle-time', studyId: entry.studyId, entryId: entry.id, operationId: entry.operationId, message: `${entry.operationId} has zero cycle time.` }); if (!operation.assignedResourceId) issues.push({ severity: 'warning', code: 'unassigned-operation', studyId: entry.studyId, entryId: entry.id, operationId: entry.operationId, message: `${entry.operationId} is unassigned.` }); }
+    const pair = `${entry.studyId}\0${entry.operationId}`; if (pairs.has(pair)) issues.push({ severity: 'error', code: 'duplicate-operation', studyId: entry.studyId, entryId: entry.id, operationId: entry.operationId, message: `${entry.operationId} appears more than once in ${entry.studyId}. Use occurrences instead.` }); pairs.add(pair);
+    if (!entry.enabled) issues.push({ severity: 'warning', code: 'disabled-entry', studyId: entry.studyId, entryId: entry.id, operationId: entry.operationId, message: `${entry.id} is disabled and excluded from totals.` });
+  }
+  return { errors: issues.filter((issue) => issue.severity === 'error').length, warnings: issues.filter((issue) => issue.severity === 'warning').length, issues };
+}

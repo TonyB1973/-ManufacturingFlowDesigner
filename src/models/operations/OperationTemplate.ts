@@ -21,7 +21,7 @@ export type OperationCategory =
   | 'Storage'
   | 'Planning';
 
-export type TimingCategory = 'Value Added' | 'Non-Value Added' | 'Required Non-Value Added';
+export type TimingCategory = 'manual' | 'automatic' | 'walking' | 'waiting';
 
 export interface OperationTemplate {
   readonly id: string;

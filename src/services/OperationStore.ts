@@ -165,7 +165,8 @@ export class OperationStore {
   private isValidPatch(patch: OperationInstancePatch): boolean {
     if (patch.name !== undefined && patch.name.trim().length === 0) return false;
     if (patch.sequence !== undefined && (!Number.isInteger(patch.sequence) || patch.sequence <= 0)) return false;
-    if (patch.cycleTimeSeconds !== undefined && (!Number.isFinite(patch.cycleTimeSeconds) || patch.cycleTimeSeconds <= 0)) return false;
+    if (patch.cycleTimeSeconds !== undefined && (!Number.isFinite(patch.cycleTimeSeconds) || patch.cycleTimeSeconds < 0)) return false;
+    if (patch.timingCategory !== undefined && !['manual', 'automatic', 'walking', 'waiting'].includes(patch.timingCategory)) return false;
     for (const value of [patch.worldX, patch.worldY]) if (value !== undefined && !Number.isFinite(value)) return false;
     if (patch.width !== undefined && (!Number.isFinite(patch.width) || patch.width < MIN_OPERATION_WIDTH)) return false;
     if (patch.height !== undefined && (!Number.isFinite(patch.height) || patch.height < MIN_OPERATION_HEIGHT)) return false;

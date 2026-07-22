@@ -24,6 +24,10 @@ import type { FactoryAnnotationStore, FactoryAnnotationChange } from '../Factory
 import type { FactoryAnnotationIdGenerator } from '../../utilities/FactoryAnnotationIdGenerator';
 import { FACTORY_ANNOTATION_LAYERS } from '../../models/factory/FactoryAnnotation';
 import { LENGTH_UNITS } from '../units/LengthUnitService';
+import { StandardWorkStore, type StandardWorkChange } from '../StandardWorkStore';
+import { StandardWorkSelectionStore } from '../standardWork/StandardWorkSelectionStore';
+import { StandardWorkEntryIdGenerator, StandardWorkStudyIdGenerator } from '../../utilities/StandardWorkIdGenerator';
+import { STANDARD_WORK_TIME_FORMATS } from '../../models/standardWork/StandardWork';
 
 export interface ProjectSessionState {
   readonly metadata: ProjectMetadata;
@@ -57,6 +61,8 @@ export class ProjectSessionService {
     private readonly connectionIds: ConnectionIdGenerator,
     private readonly routeIds: FactoryRouteIdGenerator,
     private readonly annotationIds: FactoryAnnotationIdGenerator,
+    public readonly standardWork: StandardWorkStore = new StandardWorkStore(new StandardWorkStudyIdGenerator(), new StandardWorkEntryIdGenerator(), (id) => Boolean(this.operations.getOperation(id))),
+    private readonly standardWorkSelection: StandardWorkSelectionStore = new StandardWorkSelectionStore(),
     private readonly projectIds = new ProjectIdGenerator(),
   ) {
     this.metadata = this.createMetadata();
@@ -67,13 +73,14 @@ export class ProjectSessionService {
       structure.subscribe((change) => this.structureChanged(change)),
       routes.subscribe((change) => this.routeChanged(change)),
       annotations.subscribe((change) => this.annotationChanged(change)),
+      standardWork.subscribe((change) => this.standardWorkChanged(change)),
       this.dirtyState.subscribe(() => this.notify()),
     ];
   }
 
   public getState(): ProjectSessionState { return { metadata: { ...this.metadata }, settings: this.getSettings(), fileName: this.fileName, dirty: this.dirtyState.isDirty() }; }
   public getMetadata(): ProjectMetadata { return { ...this.metadata }; }
-  public getSettings(): ProjectSettings { return { ...this.settings, units: { ...this.settings.units } }; }
+  public getSettings(): ProjectSettings { return { ...this.settings, units: { ...this.settings.units }, standardWork: { ...this.settings.standardWork } }; }
   public isDirty(): boolean { return this.dirtyState.isDirty(); }
   public subscribe(listener: (state: ProjectSessionState) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
 
@@ -83,10 +90,11 @@ export class ProjectSessionService {
     this.metadata = next; this.notify(); return true;
   }
   public applySettings(patch: Partial<ProjectSettings>): boolean {
-    const next = { ...this.settings, ...patch, units: { ...this.settings.units, ...patch.units } };
+    const next = { ...this.settings, ...patch, units: { ...this.settings.units, ...patch.units }, standardWork: { ...this.settings.standardWork, ...patch.standardWork } };
     if (!Number.isFinite(next.gridBaseInterval) || next.gridBaseInterval <= 0 || !Number.isFinite(next.routingClearance) || next.routingClearance < 0 || next.unitSystem !== 'metric' || !Number.isInteger(next.displayPrecision) || next.displayPrecision < 0 || next.displayPrecision > 6) return false;
     if (!LENGTH_UNITS.includes(next.units.modelLengthUnit) || !LENGTH_UNITS.includes(next.units.displayLengthUnit) || !Number.isInteger(next.units.displayPrecision) || next.units.displayPrecision < 0 || next.units.displayPrecision > 6 || typeof next.units.showTrailingZeros !== 'boolean') return false;
     if (![next.dimensionTextScale, next.annotationTextSize, next.defaultDimensionOffset].every((value) => Number.isFinite(value) && value > 0) || !FACTORY_ANNOTATION_LAYERS.includes(next.defaultDimensionLayer)) return false;
+    if (!STANDARD_WORK_TIME_FORMATS.includes(next.standardWork.timeFormat)) return false;
     this.settings = next; if (patch.routingClearance !== undefined) this.connections.recalculateAll(); this.notify(); return true;
   }
 
@@ -99,7 +107,7 @@ export class ProjectSessionService {
     this.replace({
       format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: APPLICATION_VERSION, project: metadata,
       resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES,
-      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [], factoryAnnotations: [],
+      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [],
       workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
       settings: { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units } },
     }, null);
@@ -113,11 +121,12 @@ export class ProjectSessionService {
     this.loading = true;
     try {
       this.selection.clear();
+      this.standardWorkSelection.clear();
       const resources: ResourceInstance[] = document.resources.map((item) => ({ ...item, clearance: { ...item.clearance }, selected: false }));
       const operations: OperationInstance[] = document.operations.map((item) => ({ ...item, selected: false }));
       const connections: ProcessConnection[] = document.connections.map((item) => ({ ...item, sourceAnchor: { ...item.sourceAnchor }, targetAnchor: { ...item.targetAnchor }, routePoints: [], routeStatus: 'clear', selected: false }));
       this.metadata = { ...document.project };
-      this.settings = { ...document.settings, units: { ...document.settings.units } };
+      this.settings = { ...document.settings, units: { ...document.settings.units }, standardWork: { ...document.settings.standardWork } };
       this.fileName = fileName;
       this.resources.replaceAll(document.resourceTemplates, resources, false);
       this.operations.replaceAll(document.operationTemplates, operations, false);
@@ -125,6 +134,7 @@ export class ProjectSessionService {
       this.structure.replaceAll(document.layoutBoundaries, document.walls, document.areas, document.aisles, false);
       this.routes.replaceAll(document.factoryRoutes, false);
       this.annotations.replaceAll(document.factoryAnnotations, false);
+      this.standardWork.replaceAll(document.standardWorkStudies, document.standardWorkEntries, false);
       this.workspaces.restore(document.workspaces.active, document.workspaces.processFlow, document.workspaces.factoryLayout, false);
       this.resourceIds.ensureAfter(resources.map((item) => item.id));
       this.operationIds.ensureAfter(operations.map((item) => item.id));
@@ -132,7 +142,7 @@ export class ProjectSessionService {
       this.routeIds.ensureAfter(document.factoryRoutes.map((item) => item.id));
       this.annotationIds.ensureAfter(document.factoryAnnotations.map((item) => item.id));
       this.projectIds.ensureAfter([document.project.id]);
-      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.annotations.publishReset(); this.workspaces.publish();
+      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.annotations.publishReset(); this.standardWork.publishReset(); this.workspaces.publish();
       if (this.history) this.history.clear(); else this.dirtyState.markClean();
     } finally { this.loading = false; }
     this.notify();
@@ -147,5 +157,6 @@ export class ProjectSessionService {
   private structureChanged(change: FactoryStructureChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private routeChanged(change: FactoryRouteChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private annotationChanged(change: FactoryAnnotationChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private standardWorkChanged(change: StandardWorkChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private notify(): void { const state = this.getState(); for (const listener of this.listeners) listener(state); }
 }

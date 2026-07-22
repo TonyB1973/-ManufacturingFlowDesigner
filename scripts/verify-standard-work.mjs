@@ -1,0 +1,54 @@
+import { loadTypeScriptModule as loadModule } from './load-typescript-module.mjs';
+const load = (path) => loadModule(path, import.meta.url);
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+
+const { StandardWorkStore } = await load('../src/services/StandardWorkStore.ts');
+const { StandardWorkStudyIdGenerator, StandardWorkEntryIdGenerator } = await load('../src/utilities/StandardWorkIdGenerator.ts');
+const { StandardWorkSelectionStore } = await load('../src/services/standardWork/StandardWorkSelectionStore.ts');
+const { StandardWorkOperationResolver } = await load('../src/services/standardWork/StandardWorkOperationResolver.ts');
+const { calculateStandardWorkSummary } = await load('../src/services/standardWork/StandardWorkCalculationService.ts');
+const { validateStandardWork } = await load('../src/services/standardWork/StandardWorkValidationService.ts');
+const { formatDuration } = await load('../src/services/standardWork/DurationFormatter.ts');
+const { StandardWorkCommandFactory } = await load('../src/services/history/StandardWorkCommandFactory.ts');
+const { CommandFactory } = await load('../src/services/history/CommandFactory.ts');
+const { CommandHistoryService } = await load('../src/services/history/CommandHistoryService.ts');
+const { OperationStore } = await load('../src/services/OperationStore.ts');
+const { ResourceStore } = await load('../src/services/ResourceStore.ts');
+const { ConnectionStore } = await load('../src/services/ConnectionStore.ts');
+const { SelectionStore } = await load('../src/services/SelectionStore.ts');
+const { OperationIdGenerator } = await load('../src/utilities/OperationIdGenerator.ts');
+const { ResourceIdGenerator } = await load('../src/utilities/ResourceIdGenerator.ts');
+const { ConnectionIdGenerator } = await load('../src/utilities/ConnectionIdGenerator.ts');
+const { OPERATION_TEMPLATES } = await load('../src/core/constants/operationTemplates.ts');
+const { RESOURCE_TEMPLATES } = await load('../src/core/constants/resourceTemplates.ts');
+const { createDemoProject } = await load('../src/services/project/DemoProjectFactory.ts');
+const { deserializeProject } = await load('../src/services/project/ProjectDeserializer.ts');
+
+const canvasSelection = new SelectionStore(); const operations = new OperationStore(OPERATION_TEMPLATES, new OperationIdGenerator(), canvasSelection); const resources = new ResourceStore(RESOURCE_TEMPLATES, new ResourceIdGenerator(), canvasSelection);
+const connectionIds = new ConnectionIdGenerator(); const connections = new ConnectionStore(connectionIds, (id) => operations.getOperation(id), () => ({ points: [], status: 'clear' }), canvasSelection);
+const standardSelection = new StandardWorkSelectionStore(); const standardWork = new StandardWorkStore(new StandardWorkStudyIdGenerator(), new StandardWorkEntryIdGenerator(), (id) => Boolean(operations.getOperation(id)));
+const project = { getMetadata: () => ({ id: 'PRJ-TEST' }), getSettings: () => ({ standardWork: { timeFormat: 'seconds' } }), applyMetadata: () => true, applySettings: () => true };
+const noopStore = {}; const context = { resources, operations, connections, structure: noopStore, routes: noopStore, annotations: noopStore, standardWork, standardWorkSelection: standardSelection, project, selection: canvasSelection };
+const history = new CommandHistoryService(context, 200); const commands = new CommandFactory(history, context); const standardCommands = new StandardWorkCommandFactory(history, context); const resolver = new StandardWorkOperationResolver(operations, resources);
+
+const cut = operations.addOperation('op-cut', 0, 0); const machine = operations.addOperation('op-machine', 250, 0); const move = operations.addOperation('op-move', 500, 0); assert(cut && machine && move, 'Process Flow operations are available');
+operations.updateOperation(cut.id, { sequence: 30, cycleTimeSeconds: 20 }); operations.updateOperation(machine.id, { sequence: 10, cycleTimeSeconds: 40 }); operations.updateOperation(move.id, { sequence: 20, cycleTimeSeconds: 5 });
+const study = standardCommands.createStudy('Product A'); assert(study?.id === 'SW-0001' && standardSelection.get().id === study.id, 'Study creation uses stable ID and selects study');
+const populated = standardCommands.populate(study.id); assert(populated.length === 3 && standardWork.getEntries(study.id).map((entry) => entry.operationId).join(',') === [machine.id, move.id, cut.id].join(','), 'Populate follows current sequence then ID');
+assert(history.undoDescription?.includes('Populate'), 'Populate creates one history entry'); history.undo(); assert(standardWork.getEntries(study.id).length === 0, 'Populate undo removes every inserted entry'); history.redo(); assert(standardWork.getEntries(study.id).map((entry) => entry.id).join(',') === populated.map((entry) => entry.id).join(','), 'Populate redo restores exact entry IDs');
+const duplicateAttempt = standardCommands.addOperation(study.id, machine.id); assert(duplicateAttempt.kind === 'duplicate' && history.undoDescription?.includes('Populate'), 'Duplicate add reveals existing entry and creates no history');
+const entries = standardWork.getEntries(study.id); const machineEntry = entries.find((entry) => entry.operationId === machine.id); assert(machineEntry, 'Machine entry resolves');
+standardCommands.updateEntry(machineEntry.id, { occurrences: 3 }, 'Occurrences changed to 3'); let summary = calculateStandardWorkSummary(standardWork.getEntries(study.id), resolver); assert(summary.automaticSeconds === 120 && summary.sumOfIncludedDurations === 145, 'Occurrences multiply effective duration and category totals');
+standardCommands.updateEntry(machineEntry.id, { enabled: false }, 'Disable entry'); summary = calculateStandardWorkSummary(standardWork.getEntries(study.id), resolver); assert(summary.automaticSeconds === 0 && summary.disabledEntryCount === 1, 'Disabled entries remain stored and leave totals'); history.undo(); assert(standardWork.getEntry(machineEntry.id).enabled, 'Undo restores enabled state');
+const orderBefore = standardWork.getEntries(study.id).map((entry) => entry.id); standardCommands.moveToBottom(machineEntry.id); assert(standardWork.getEntries(study.id).at(-1).id === machineEntry.id && operations.getOperation(machine.id).sequence === 10, 'Study reorder is independent of Process Flow sequence'); history.undo(); assert(standardWork.getEntries(study.id).map((entry) => entry.id).join(',') === orderBefore.join(','), 'Reorder undo restores exact order'); history.redo(); assert(standardWork.getEntries(study.id).at(-1).id === machineEntry.id, 'Reorder redo is deterministic');
+commands.updateOperation(machine.id, { cycleTimeSeconds: 60 }); summary = calculateStandardWorkSummary(standardWork.getEntries(study.id), resolver); assert(summary.automaticSeconds === 180, 'Operation timing remains authoritative and updates study totals live'); history.undo(); assert(calculateStandardWorkSummary(standardWork.getEntries(study.id), resolver).automaticSeconds === 120, 'Operation timing undo restores derived totals');
+commands.updateOperation(machine.id, { timingCategory: 'manual' }); summary = calculateStandardWorkSummary(standardWork.getEntries(study.id), resolver); assert(summary.automaticSeconds === 0 && summary.manualSeconds === 140, 'Timing category edit moves duration between category totals'); history.undo();
+const duplicated = standardCommands.duplicateStudy(study.id); assert(duplicated?.id === 'SW-0002' && standardWork.getEntries(duplicated.id).every((entry) => !entries.some((source) => source.id === entry.id)), 'Duplicate study preserves references with new SW and SWE IDs'); standardCommands.deleteStudy(duplicated.id); history.undo(); assert(standardWork.getStudy(duplicated.id) && standardWork.getEntries(duplicated.id).length === 3, 'Delete Study undo restores metadata, references, IDs, and order');
+connections.createConnection(machine.id, move.id, { side: 'right', offset: .5 }, { side: 'left', offset: .5 }); const referencedInTwo = standardWork.getEntriesForOperation(machine.id); assert(referencedInTwo.length === 2, 'An operation may be referenced by multiple studies'); commands.deleteOperation(machine.id); assert(!operations.getOperation(machine.id) && !connections.getConnectionsForOperation(machine.id).length && !standardWork.getEntriesForOperation(machine.id).length, 'Operation deletion atomically cascades connections and Standard Work entries'); history.undo(); assert(operations.getOperation(machine.id) && connections.getConnectionsForOperation(machine.id).length === 1 && standardWork.getEntriesForOperation(machine.id).map((entry) => entry.id).join(',') === referencedInTwo.map((entry) => entry.id).join(','), 'Operation deletion undo restores exact operation, connection, entries, and IDs');
+operations.updateOperation(cut.id, { cycleTimeSeconds: 0 }); const validation = validateStandardWork(standardWork.getStudies(), standardWork.getEntries(), operations); assert(validation.issues.some((issue) => issue.code === 'zero-cycle-time' && issue.severity === 'warning'), 'Zero operation time is permitted with a warning');
+assert(formatDuration(65, 'seconds') === '65 s' && formatDuration(65, 'minutesSeconds') === '01:05' && formatDuration(3665, 'minutesSeconds') === '61:05' && formatDuration(3665, 'hoursMinutesSeconds') === '01:01:05', 'Duration formats change display without changing seconds');
+const persistedEntry = standardWork.getEntries(study.id)[0]; assert(!('cycleTimeSeconds' in persistedEntry) && !('timingCategory' in persistedEntry) && !('name' in persistedEntry), 'Entry model contains no duplicated operation timing or name');
+const legacy = createDemoProject(); const legacyDocument = { ...legacy, schemaVersion: '1.4.0', applicationVersion: '0.6.0', operationTemplates: legacy.operationTemplates.map((item) => ({ ...item, timingCategory: 'Value Added' })), operations: legacy.operations.map((item) => ({ ...item, timingCategory: 'Value Added' })) }; delete legacyDocument.standardWorkStudies; delete legacyDocument.standardWorkEntries; const migrated = deserializeProject(JSON.stringify(legacyDocument)); assert(migrated.migratedFrom === '1.4.0' && migrated.document.schemaVersion === '1.5.0' && migrated.document.standardWorkStudies.length === 0 && migrated.document.settings.standardWork.timeFormat === 'seconds', 'Schema 1.4 migrates explicitly with empty Standard Work collections and default display setting');
+
+connections.dispose(); operations.dispose(); resources.dispose();
+console.log('Standard Work timing foundation checks passed.');
