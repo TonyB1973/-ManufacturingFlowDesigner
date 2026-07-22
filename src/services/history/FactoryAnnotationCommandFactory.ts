@@ -1,0 +1,18 @@
+import { cloneFactoryAnnotation, type FactoryAnnotation, type FactoryAnnotationPatch } from '../../models/factory/FactoryAnnotation';
+import type { SelectionItem } from '../../models/selection/Selection';
+import type { CommandExecutionContext } from './ApplicationCommand';
+import { ReversibleCommand } from './ApplicationCommand';
+import type { CommandHistoryService } from './CommandHistoryService';
+
+const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
+export class FactoryAnnotationCommandFactory {
+  public constructor(private readonly history: CommandHistoryService, private readonly context: CommandExecutionContext) {}
+  public insert(annotation: FactoryAnnotation, description = `Create annotation ${annotation.id}`): boolean { return this.insertMany([annotation], description); }
+  public insertMany(values: readonly FactoryAnnotation[], description = 'Insert annotations'): boolean {
+    const snapshots = values.map(cloneFactoryAnnotation); if (!snapshots.length) return false; const refs: SelectionItem[] = snapshots.map((item) => ({ kind: 'factoryAnnotation', id: item.id }));
+    return this.run(new ReversibleCommand(description, snapshots.map((item) => item.id), 'factoryLayout', ({ annotations, selection }) => { for (const item of snapshots) if (!annotations.restoreAnnotation(item)) throw new Error(`Annotation ${item.id} could not be inserted.`); selection.set(refs, refs.at(-1)); }, ({ annotations, selection }) => { for (const item of [...snapshots].reverse()) if (!annotations.deleteAnnotation(item.id, true)) throw new Error(`Annotation ${item.id} could not be removed.`); selection.clear(); }));
+  }
+  public update(id: string, patch: FactoryAnnotationPatch, description = `Edit annotation ${id}`): boolean { const current = this.context.annotations.getAnnotation(id); const keys = Object.keys(patch); if (!current || !keys.length || current.locked && keys.some((key) => key !== 'locked' && key !== 'visible')) return false; const before = cloneFactoryAnnotation(current); const after = { ...cloneFactoryAnnotation(current), ...patch } as FactoryAnnotation; if (same(before, after)) return false; return this.run(new ReversibleCommand(description, [id], 'factoryLayout', ({ annotations }) => { if (!annotations.updateAnnotation(id, patch)) throw new Error('Annotation update was rejected.'); }, ({ annotations }) => { annotations.deleteAnnotation(id, true); if (!annotations.restoreAnnotation(before)) throw new Error('Annotation update could not be undone.'); })); }
+  public delete(ids: readonly string[], description = 'Delete annotations', includeLocked = false): boolean { const snapshots = ids.map((id) => this.context.annotations.getAnnotation(id)).filter((item): item is FactoryAnnotation => Boolean(item && (includeLocked || !item.locked))).map(cloneFactoryAnnotation); if (!snapshots.length) return false; const refs: SelectionItem[] = snapshots.map((item) => ({ kind: 'factoryAnnotation', id: item.id })); return this.run(new ReversibleCommand(description, snapshots.map((item) => item.id), 'factoryLayout', ({ annotations, selection }) => { for (const item of snapshots) if (!annotations.deleteAnnotation(item.id, includeLocked)) throw new Error(`Annotation ${item.id} could not be deleted.`); selection.clear(); }, ({ annotations, selection }) => { for (const item of snapshots) if (!annotations.restoreAnnotation(item)) throw new Error(`Annotation ${item.id} could not be restored.`); selection.set(refs, refs.at(-1)); })); }
+  private run(command: ReversibleCommand): boolean { try { return this.history.execute(command); } catch { return false; } }
+}

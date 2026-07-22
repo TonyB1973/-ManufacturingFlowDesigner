@@ -16,8 +16,10 @@ import { FACTORY_AREA_TYPES, RESOURCE_PLACEMENT_POLICIES, type FactoryArea } fro
 import { FACTORY_AISLE_DIRECTIONS, FACTORY_AISLE_TYPES, type FactoryAisle } from '../../models/factory/FactoryAisle';
 import { validateOrthogonalPolygon, validateOrthogonalPolyline } from '../geometry/FactoryStructureGeometry';
 import { FACTORY_ROUTE_ANCHOR_SIDES, FACTORY_ROUTE_DIRECTIONS, FACTORY_ROUTE_TYPES, type FactoryRoute, type FactoryRouteEndpoint } from '../../models/factory/FactoryRoute';
+import { FACTORY_ANNOTATION_LAYERS, LEADER_ARROW_STYLES, LINEAR_DIMENSION_KINDS, RECTANGLE_ANNOTATION_FEATURES, type AnnotationAnchor, type FactoryAnnotation } from '../../models/factory/FactoryAnnotation';
+import { LENGTH_UNITS } from '../units/LengthUnitService';
 
-const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000 } as const;
+const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const ANCHOR_SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const CONNECTION_TYPES = new Set(['Standard', 'Rework', 'Alternate', 'Information']);
@@ -56,6 +58,7 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const areas = areaValues(root.areas, issues);
   const aisles = aisleValues(root.aisles, issues);
   const factoryRoutes = factoryRouteValues(root.factoryRoutes, issues);
+  const factoryAnnotations = factoryAnnotationValues(root.factoryAnnotations, issues);
   const workspaces = workspaceValues(root.workspaces, issues);
   const settings = settingsValue(root.settings, issues);
 
@@ -64,15 +67,16 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   uniqueIds('resource', resources, issues);
   uniqueIds('operation', operations, issues);
   uniqueIds('connection', connections, issues);
-  uniqueIds('boundary', layoutBoundaries, issues); uniqueIds('wall', walls, issues); uniqueIds('area', areas, issues); uniqueIds('aisle', aisles, issues); uniqueIds('factory route', factoryRoutes, issues);
+  uniqueIds('boundary', layoutBoundaries, issues); uniqueIds('wall', walls, issues); uniqueIds('area', areas, issues); uniqueIds('aisle', aisles, issues); uniqueIds('factory route', factoryRoutes, issues); uniqueIds('factory annotation', factoryAnnotations, issues);
   if (layoutBoundaries.filter((item) => item.layoutId === DEFAULT_FACTORY_LAYOUT_ID).length > 1) issues.push('Only one active factory boundary is allowed per layout.');
   const entityIds = new Set<string>();
-  [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles, ...factoryRoutes].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
+  [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles, ...factoryRoutes, ...factoryAnnotations].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
   const resourceTemplateIds = new Set(resourceTemplates.map((item) => item.id));
   const operationTemplateIds = new Set(operationTemplates.map((item) => item.id));
   const resourceIds = new Set(resources.map((item) => item.id));
   const operationIds = new Set(operations.map((item) => item.id));
   const areaIds = new Set(areas.map((item) => item.id));
+  const boundaryIds = new Set(layoutBoundaries.map((item) => item.id)); const wallIds = new Set(walls.map((item) => item.id)); const aisleIds = new Set(aisles.map((item) => item.id)); const routeIds = new Set(factoryRoutes.map((item) => item.id));
   resources.forEach((item) => { if (!resourceTemplateIds.has(item.templateId)) issues.push(`Resource ${item.id} references missing template ${item.templateId}.`); });
   operations.forEach((item) => {
     if (!operationTemplateIds.has(item.templateId)) issues.push(`Operation ${item.id} references missing template ${item.templateId}.`);
@@ -94,10 +98,24 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
       if (endpoint.kind === 'area' && !areaIds.has(endpoint.areaId)) issues.push(`FactoryRoute ${route.id} references missing factory area ${endpoint.areaId}.`);
     }
   });
+  factoryAnnotations.forEach((annotation) => {
+    const anchors = annotation.annotationType === 'linearDimension' ? [annotation.startAnchor, annotation.endAnchor] : annotation.annotationType === 'coordinate' || annotation.annotationType === 'leader' ? [annotation.anchor] : [];
+    for (const anchor of anchors) {
+      if (anchor.kind === 'resource' && !resourceIds.has(anchor.resourceId)) issues.push(`FactoryAnnotation ${annotation.id} references missing physical resource ${anchor.resourceId}.`);
+      if (anchor.kind === 'boundary' && !boundaryIds.has(anchor.boundaryId)) issues.push(`FactoryAnnotation ${annotation.id} references missing boundary ${anchor.boundaryId}.`);
+      if (anchor.kind === 'wall' && !wallIds.has(anchor.wallId)) issues.push(`FactoryAnnotation ${annotation.id} references missing wall ${anchor.wallId}.`);
+      if (anchor.kind === 'area' && !areaIds.has(anchor.areaId)) issues.push(`FactoryAnnotation ${annotation.id} references missing area ${anchor.areaId}.`);
+      if (anchor.kind === 'aisle' && !aisleIds.has(anchor.aisleId)) issues.push(`FactoryAnnotation ${annotation.id} references missing aisle ${anchor.aisleId}.`);
+      if (anchor.kind === 'factoryRoute' && !routeIds.has(anchor.factoryRouteId)) issues.push(`FactoryAnnotation ${annotation.id} references missing FactoryRoute ${anchor.factoryRouteId}.`);
+      if (anchor.kind === 'boundary') { const entity = layoutBoundaries.find((item) => item.id === anchor.boundaryId); if (entity && (anchor.index < 0 || anchor.index >= entity.points.length)) issues.push(`FactoryAnnotation ${annotation.id} has an invalid boundary anchor index.`); }
+      if (anchor.kind === 'aisle') { const entity = aisles.find((item) => item.id === anchor.aisleId); const limit = anchor.feature === 'vertex' ? entity?.points.length ?? 0 : Math.max(0, (entity?.points.length ?? 0) - 1); if (entity && (anchor.index < 0 || anchor.index >= limit)) issues.push(`FactoryAnnotation ${annotation.id} has an invalid aisle anchor index.`); }
+      if (anchor.kind === 'factoryRoute' && (anchor.feature === 'waypoint' || anchor.feature === 'segment')) { const entity = factoryRoutes.find((item) => item.id === anchor.factoryRouteId); const index = anchor.index ?? -1; const limit = anchor.feature === 'waypoint' ? entity?.waypoints.length ?? 0 : (entity?.waypoints.length ?? 0) + 1; if (entity && (index < 0 || index >= limit)) issues.push(`FactoryAnnotation ${annotation.id} has an invalid FactoryRoute anchor index.`); }
+    }
+  });
   if (issues.length) throw new ProjectValidationError(issues);
   return {
     format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: root.applicationVersion as string,
-    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes,
+    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations,
     workspaces: workspaces!, settings: settings!,
   };
 }
@@ -208,6 +226,33 @@ function factoryRouteEndpointValue(value: unknown): FactoryRouteEndpoint | null 
   if (item.kind === 'area' && nonEmpty(item.areaId)) return { kind: 'area', areaId: item.areaId, anchorSide: item.anchorSide as Extract<FactoryRouteEndpoint, { kind: 'area' }>['anchorSide'], anchorOffset: item.anchorOffset };
   return null;
 }
+function annotationAnchorValue(value: unknown): AnnotationAnchor | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null; const item = value as Record<string, unknown>;
+  if (item.kind === 'free') { const point = pointValue(item.point); return point ? { kind: 'free', point } : null; }
+  const validOptionalOffset = item.offset === undefined || finite(item.offset) && item.offset >= 0 && item.offset <= 1;
+  const validRectangleFeature = RECTANGLE_ANNOTATION_FEATURES.includes(item.feature as never) && validOptionalOffset && (item.feature !== 'perimeter' || ANCHOR_SIDES.has(String(item.side)));
+  if (item.kind === 'resource' && nonEmpty(item.resourceId) && validRectangleFeature) return { kind: 'resource', resourceId: item.resourceId, feature: item.feature as never, ...(item.side !== undefined ? { side: item.side as never } : {}), ...(item.offset !== undefined ? { offset: item.offset as number } : {}) };
+  if (item.kind === 'area' && nonEmpty(item.areaId) && validRectangleFeature) return { kind: 'area', areaId: item.areaId, feature: item.feature as never, ...(item.side !== undefined ? { side: item.side as never } : {}), ...(item.offset !== undefined ? { offset: item.offset as number } : {}) };
+  if (item.kind === 'boundary' && nonEmpty(item.boundaryId) && (item.feature === 'vertex' || item.feature === 'edge') && Number.isInteger(item.index) && Number(item.index) >= 0 && validOptionalOffset) return { kind: 'boundary', boundaryId: item.boundaryId, feature: item.feature, index: item.index as number, ...(item.offset !== undefined ? { offset: item.offset as number } : {}) };
+  if (item.kind === 'wall' && nonEmpty(item.wallId) && ['start', 'centre', 'end', 'edge'].includes(String(item.feature)) && validOptionalOffset) return { kind: 'wall', wallId: item.wallId, feature: item.feature as never, ...(item.offset !== undefined ? { offset: item.offset as number } : {}) };
+  if (item.kind === 'aisle' && nonEmpty(item.aisleId) && (item.feature === 'vertex' || item.feature === 'segment') && Number.isInteger(item.index) && Number(item.index) >= 0 && validOptionalOffset) return { kind: 'aisle', aisleId: item.aisleId, feature: item.feature, index: item.index as number, ...(item.offset !== undefined ? { offset: item.offset as number } : {}) };
+  if (item.kind === 'factoryRoute' && nonEmpty(item.factoryRouteId) && ['source', 'target', 'waypoint', 'segment'].includes(String(item.feature)) && (item.feature === 'source' || item.feature === 'target' || Number.isInteger(item.index) && Number(item.index) >= 0) && validOptionalOffset) return { kind: 'factoryRoute', factoryRouteId: item.factoryRouteId, feature: item.feature as never, ...(item.index !== undefined ? { index: item.index as number } : {}), ...(item.offset !== undefined ? { offset: item.offset as number } : {}) };
+  return null;
+}
+function validAnnotationCommon(item: Record<string, unknown>): boolean { return nonEmpty(item.id) && /^ANN-\d+$/.test(String(item.id)) && item.layoutId === DEFAULT_FACTORY_LAYOUT_ID && FACTORY_ANNOTATION_LAYERS.includes(item.layer as never) && bool(item.visible) && bool(item.locked) && boundedString(item.note) && isoUtc(item.createdUtc); }
+function factoryAnnotationValues(value: unknown, issues: string[]): FactoryAnnotation[] {
+  let leaderPoints = 0;
+  const result = arrayValue(value, 'factoryAnnotations', LIMITS.annotations, issues).flatMap((raw, index) => {
+    const item = record(raw, `factoryAnnotations[${index}]`, issues); if (!item) return [];
+    let valid = validAnnotationCommon(item);
+    if (item.annotationType === 'linearDimension') { const start = annotationAnchorValue(item.startAnchor); const end = annotationAnchorValue(item.endAnchor); valid &&= Boolean(start && end && LINEAR_DIMENSION_KINDS.includes(item.dimensionKind as never) && finite(item.offset) && finite(item.textPosition) && item.textPosition >= 0 && item.textPosition <= 1 && boundedString(item.textOverride, 20000) && boundedString(item.prefix, 200) && boundedString(item.suffix, 200) && bool(item.showUnit) && (item.precisionOverride === null || Number.isInteger(item.precisionOverride) && Number(item.precisionOverride) >= 0 && Number(item.precisionOverride) <= 6)); if (!valid) issues.push(`factoryAnnotations[${index}] has invalid linear dimension fields.`); return start && end ? [{ ...item, startAnchor: start, endAnchor: end } as unknown as FactoryAnnotation] : []; }
+    if (item.annotationType === 'coordinate') { const anchor = annotationAnchorValue(item.anchor); const labelOffset = pointValue(item.labelOffset); valid &&= Boolean(anchor && labelOffset && bool(item.showX) && bool(item.showY) && (item.showX || item.showY) && boundedString(item.prefix, 200) && boundedString(item.suffix, 200) && (item.precisionOverride === null || Number.isInteger(item.precisionOverride) && Number(item.precisionOverride) >= 0 && Number(item.precisionOverride) <= 6)); if (!valid) issues.push(`factoryAnnotations[${index}] has invalid coordinate fields.`); return anchor && labelOffset ? [{ ...item, anchor, labelOffset } as unknown as FactoryAnnotation] : []; }
+    if (item.annotationType === 'text') { const worldPosition = pointValue(item.worldPosition); valid &&= Boolean(worldPosition && boundedString(item.text, 20000) && positive(item.textSize) && item.textSize <= 200 && ['left', 'centre', 'right'].includes(String(item.textAlign)) && finite(item.rotationDegrees) && bool(item.backgroundEnabled) && bool(item.borderEnabled)); if (!valid) issues.push(`factoryAnnotations[${index}] has invalid text fields.`); return worldPosition ? [{ ...item, worldPosition } as unknown as FactoryAnnotation] : []; }
+    if (item.annotationType === 'leader') { const anchor = annotationAnchorValue(item.anchor); const textPosition = pointValue(item.textPosition); const elbowPoints = pointsValue(item.elbowPoints, `factoryAnnotations[${index}].elbowPoints`, LIMITS.leaderPointsPerAnnotation, issues); leaderPoints += elbowPoints.length; valid &&= Boolean(anchor && textPosition && boundedString(item.text, 20000) && positive(item.textSize) && item.textSize <= 200 && LEADER_ARROW_STYLES.includes(item.arrowStyle as never)); if (!valid) issues.push(`factoryAnnotations[${index}] has invalid leader fields.`); return anchor && textPosition ? [{ ...item, anchor, textPosition, elbowPoints } as unknown as FactoryAnnotation] : []; }
+    issues.push(`factoryAnnotations[${index}] has an unrecognised annotation type.`); return [];
+  });
+  if (leaderPoints > LIMITS.leaderPoints) issues.push(`Total leader points exceed the safety limit of ${LIMITS.leaderPoints}.`); return result;
+}
 function anchorValue(value: unknown): ProcessConnection['sourceAnchor'] | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
@@ -233,7 +278,9 @@ function viewportValue(value: unknown): WorkspaceViewportState | null {
 }
 function settingsValue(value: unknown, issues: string[]): ProjectSettings | null {
   const item = record(value, 'settings', issues); if (!item) return null;
-  if (!positive(item.gridBaseInterval) || !finite(item.routingClearance) || item.routingClearance < 0 || item.unitSystem !== 'metric' || !finite(item.displayPrecision) || !Number.isInteger(item.displayPrecision) || item.displayPrecision < 0 || item.displayPrecision > 6) issues.push('settings has invalid fields.');
+  const units = record(item.units, 'settings.units', issues);
+  const validUnits = units && LENGTH_UNITS.includes(units.modelLengthUnit as never) && LENGTH_UNITS.includes(units.displayLengthUnit as never) && Number.isInteger(units.displayPrecision) && Number(units.displayPrecision) >= 0 && Number(units.displayPrecision) <= 6 && bool(units.showTrailingZeros);
+  if (!positive(item.gridBaseInterval) || !finite(item.routingClearance) || item.routingClearance < 0 || item.unitSystem !== 'metric' || !finite(item.displayPrecision) || !Number.isInteger(item.displayPrecision) || item.displayPrecision < 0 || item.displayPrecision > 6 || !validUnits || !positive(item.dimensionTextScale) || !positive(item.annotationTextSize) || !positive(item.defaultDimensionOffset) || !FACTORY_ANNOTATION_LAYERS.includes(item.defaultDimensionLayer as never)) issues.push('settings has invalid fields.');
   return item as unknown as ProjectSettings;
 }
 function uniqueIds(label: string, items: readonly { readonly id: string }[], issues: string[]): void {

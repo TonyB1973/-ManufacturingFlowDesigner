@@ -4,8 +4,9 @@ import { deserializeProject } from './ProjectDeserializer';
 import { ProjectFileService, type ProjectFileHandle } from './ProjectFileService';
 import { serializeProject } from './ProjectSerializer';
 import type { ProjectSessionService } from './ProjectSessionService';
+import { createDemoProject } from './DemoProjectFactory';
 
-export interface ProjectFileCommands { newProject(): Promise<void>; open(): Promise<void>; save(): Promise<boolean>; saveAs(): Promise<boolean>; }
+export interface ProjectFileCommands { newProject(): Promise<void>; open(): Promise<void>; save(): Promise<boolean>; saveAs(): Promise<boolean>; loadDemo(): Promise<void>; }
 
 export class ProjectFileController implements ProjectFileCommands {
   private handle: ProjectFileHandle | null = null;
@@ -16,6 +17,7 @@ export class ProjectFileController implements ProjectFileCommands {
     files.registerLaunchConsumer((opened) => { void this.acceptOpenedFile(opened); }, (error) => { void this.run(async () => { throw error; }, 'Project could not be opened'); });
   }
   public async newProject(): Promise<void> { await this.run(async () => { if (!await this.allowReplace('create a new project')) { reportStatus('New project cancelled'); return; } this.beforeReplace(); this.handle = null; this.session.newProject(); reportStatus('New project created'); }, 'New project could not be created'); }
+  public async loadDemo(): Promise<void> { await this.run(async () => { if (!await this.allowReplace('load the demonstration project')) { reportStatus('Demo load cancelled'); return; } this.beforeReplace(); this.handle = null; this.session.openProject(createDemoProject(), 'Manufacturing Flow Demonstration.mflow'); reportStatus('Demonstration project loaded'); }, 'Demonstration project could not be loaded'); }
   public async open(): Promise<void> {
     await this.run(async () => {
       if (!await this.allowReplace('open another project')) { reportStatus('Open cancelled'); return; }
@@ -35,7 +37,7 @@ export class ProjectFileController implements ProjectFileCommands {
     await this.run(async () => {
       reportStatus('Saving project…');
       const state = this.session.getState(); const savedAt = new Date().toISOString();
-      const result = serializeProject({ metadata: state.metadata, settings: state.settings, resources: this.session.resources, operations: this.session.operations, connections: this.session.connections, structure: this.session.structure, routes: this.session.routes, workspaces: this.session.workspaces }, savedAt);
+      const result = serializeProject({ metadata: state.metadata, settings: state.settings, resources: this.session.resources, operations: this.session.operations, connections: this.session.connections, structure: this.session.structure, routes: this.session.routes, annotations: this.session.annotations, workspaces: this.session.workspaces }, savedAt);
       const suggested = saveAs ? state.metadata.name : state.fileName ?? state.metadata.name;
       const saved = await this.files.save(result.text, suggested, this.handle, saveAs);
       if (!saved) { reportStatus('Save cancelled'); return; }

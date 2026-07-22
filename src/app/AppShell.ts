@@ -39,6 +39,11 @@ import { FactoryRouteIdGenerator } from '../utilities/FactoryRouteIdGenerator';
 import { FactoryRouteStore } from '../services/FactoryRouteStore';
 import { FactoryRouteCommandFactory } from '../services/history/FactoryRouteCommandFactory';
 import { validateFactoryRoutes } from '../services/FactoryRouteValidation';
+import { FactoryAnnotationIdGenerator } from '../utilities/FactoryAnnotationIdGenerator';
+import { FactoryAnnotationStore } from '../services/FactoryAnnotationStore';
+import { FactoryAnnotationCommandFactory } from '../services/history/FactoryAnnotationCommandFactory';
+import { AnnotationAnchorResolver } from '../services/annotations/AnnotationAnchorResolver';
+import { validateFactoryAnnotations } from '../services/annotations/FactoryAnnotationValidationService';
 
 export interface AppShellResult {
   readonly element: HTMLElement;
@@ -58,6 +63,7 @@ export function createAppShell(): AppShellResult {
   const structureStore = new FactoryStructureStore(boundaryIds, wallIds, areaIds, aisleIds);
   const routeIds = new FactoryRouteIdGenerator();
   const routeStore = new FactoryRouteStore(routeIds, { hasResource: (id) => Boolean(resourceStore.getResource(id)), hasArea: (id) => Boolean(structureStore.getArea(id)) });
+  const annotationIds = new FactoryAnnotationIdGenerator(); const annotationStore = new FactoryAnnotationStore(annotationIds);
   let projectSession: ProjectSessionService | null = null;
   const connectionStore = new ConnectionStore(connectionIds, (id) => operationStore.getOperation(id), (connection) => {
     const source = operationStore.getOperation(connection.sourceOperationId); const target = operationStore.getOperation(connection.targetOperationId);
@@ -66,21 +72,22 @@ export function createAppShell(): AppShellResult {
     const route = routeOrthogonal({ source: anchorWorldPosition(source, connection.sourceAnchor), sourceDirection: anchorDirection(connection.sourceAnchor), target: anchorWorldPosition(target, connection.targetAnchor), targetDirection: anchorDirection(connection.targetAnchor), obstacles, clearance: projectSession?.getSettings().routingClearance ?? 16 });
     return { points: route.points, status: route.fallback ? 'fallback' : 'clear' };
   }, selectionStore);
-  projectSession = new ProjectSessionService(resourceStore, operationStore, connectionStore, structureStore, routeStore, workspaceStore, selectionStore, resourceIds, operationIds, connectionIds, routeIds);
-  const commandContext = { resources: resourceStore, operations: operationStore, connections: connectionStore, structure: structureStore, routes: routeStore, project: projectSession, selection: selectionStore };
+  projectSession = new ProjectSessionService(resourceStore, operationStore, connectionStore, structureStore, routeStore, annotationStore, workspaceStore, selectionStore, resourceIds, operationIds, connectionIds, routeIds, annotationIds);
+  const commandContext = { resources: resourceStore, operations: operationStore, connections: connectionStore, structure: structureStore, routes: routeStore, annotations: annotationStore, project: projectSession, selection: selectionStore };
   const history = new CommandHistoryService(commandContext, 200); projectSession.attachHistory(history); const commands = new CommandFactory(history, commandContext);
   const routeCommands = new FactoryRouteCommandFactory(history, commandContext);
+  const annotationCommands = new FactoryAnnotationCommandFactory(history, commandContext); const annotationResolver = new AnnotationAnchorResolver({ resources: resourceStore, structure: structureStore, routes: routeStore });
   const geometrySelection = new GeometrySelectionService(selectionStore, workspaceStore, operationStore, resourceStore);
   const geometryCommands = new GeometryCommandFactory(history);
   const geometryEditing = new GeometryEditingService(geometrySelection, geometryCommands, projectSession);
-  selectionStore.setValidator((item) => item.kind === 'resource' ? Boolean(resourceStore.getResource(item.id)) : item.kind === 'operation' ? Boolean(operationStore.getOperation(item.id)) : item.kind === 'connection' ? Boolean(connectionStore.getConnection(item.id)) : item.kind === 'boundary' ? Boolean(structureStore.getBoundary(item.id)) : item.kind === 'wall' ? Boolean(structureStore.getWall(item.id)) : item.kind === 'area' ? Boolean(structureStore.getArea(item.id)) : item.kind === 'aisle' ? Boolean(structureStore.getAisle(item.id)) : Boolean(routeStore.getRoute(item.id)));
-  const editing = new ApplicationClipboardService(selectionStore, resourceStore, operationStore, connectionStore, workspaceStore, projectSession, commands, resourceIds, operationIds, connectionIds, structureStore, wallIds, areaIds, aisleIds, routeStore, routeIds, routeCommands);
+  selectionStore.setValidator((item) => item.kind === 'resource' ? Boolean(resourceStore.getResource(item.id)) : item.kind === 'operation' ? Boolean(operationStore.getOperation(item.id)) : item.kind === 'connection' ? Boolean(connectionStore.getConnection(item.id)) : item.kind === 'boundary' ? Boolean(structureStore.getBoundary(item.id)) : item.kind === 'wall' ? Boolean(structureStore.getWall(item.id)) : item.kind === 'area' ? Boolean(structureStore.getArea(item.id)) : item.kind === 'aisle' ? Boolean(structureStore.getAisle(item.id)) : item.kind === 'factoryRoute' ? Boolean(routeStore.getRoute(item.id)) : Boolean(annotationStore.getAnnotation(item.id)));
+  const editing = new ApplicationClipboardService(selectionStore, resourceStore, operationStore, connectionStore, workspaceStore, projectSession, commands, resourceIds, operationIds, connectionIds, structureStore, wallIds, areaIds, aisleIds, routeStore, routeIds, routeCommands, annotationStore, annotationIds);
   const statusBar = createStatusBar();
   const titleBar = createTitleBar();
-  const projectDialogs = createProjectDialogs(); const deletionDialog = createResourceDeletionDialog(resourceStore, operationStore, routeStore, commands, statusBar.setMessage); shell.append(projectDialogs.element, deletionDialog.element);
+  const projectDialogs = createProjectDialogs(); const deletionDialog = createResourceDeletionDialog(resourceStore, operationStore, routeStore, annotationStore, commands, statusBar.setMessage); shell.append(projectDialogs.element, deletionDialog.element);
   const requestResourceDeletion = (id: string): void => deletionDialog.request(id);
-  const left = createLeftSidebar(resourceStore, operationStore, connectionStore, structureStore, routeStore, workspaceStore, projectSession, selectionStore, commands);
-  const right = createRightSidebar(resourceStore, operationStore, connectionStore, structureStore, routeStore, workspaceStore, selectionStore, requestResourceDeletion, projectSession, commands, routeCommands, editing, geometrySelection, geometryEditing);
+  const left = createLeftSidebar(resourceStore, operationStore, connectionStore, structureStore, routeStore, annotationStore, annotationResolver, workspaceStore, projectSession, selectionStore, commands);
+  const right = createRightSidebar(resourceStore, operationStore, connectionStore, structureStore, routeStore, annotationStore, annotationResolver, workspaceStore, selectionStore, requestResourceDeletion, projectSession, commands, routeCommands, annotationCommands, editing, geometrySelection, geometryEditing);
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
   const rightToggle = actionButton('Hide inspector panels', 'panel-toggle panel-toggle--right');
 
@@ -104,10 +111,14 @@ export function createAppShell(): AppShellResult {
     connectionStore,
     structureStore,
     routeStore,
+    annotationStore,
+    annotationResolver,
     workspaceStore,
     selectionStore,
     commands,
     routeCommands,
+    annotationCommands,
+    projectSession,
     editing,
     geometrySelection,
     geometryEditing,
@@ -120,7 +131,7 @@ export function createAppShell(): AppShellResult {
   shell.append(titleBar.element, ribbon.element, body, statusBar.element);
   const updateStatus = (): void => {
     const selected = selectionStore.getSelection(); const selectionCount = selectionStore.getState().items.length;
-    const label = selectionCount > 1 ? `${selectionCount} items` : selected.kind === 'project' ? `Project ${projectSession.getMetadata().name}` : selected.kind === 'resource' ? `Resource ${resourceStore.getResource(selected.id)?.name ?? selected.id}` : selected.kind === 'operation' ? `Operation OP ${operationStore.getOperation(selected.id)?.sequence ?? selected.id}` : selected.kind === 'connection' ? `Connection ${selected.id}` : selected.kind === 'none' ? '0' : `${selected.kind} ${selected.id}`;
+    const label = selectionCount > 1 ? `${selectionCount} items` : selected.kind === 'project' ? `Project ${projectSession.getMetadata().name}` : selected.kind === 'resource' ? `Resource ${resourceStore.getResource(selected.id)?.name ?? selected.id}` : selected.kind === 'operation' ? `Operation OP ${operationStore.getOperation(selected.id)?.sequence ?? selected.id}` : selected.kind === 'connection' ? `Connection ${selected.id}` : selected.kind === 'factoryAnnotation' ? `Annotation ${selected.id}` : selected.kind === 'none' ? '0' : `${selected.kind} ${selected.id}`;
     statusBar.setSelectionLabel(label);
     statusBar.setResourceCount(resourceStore.getResourceCount());
     statusBar.setOperationCount(operationStore.getOperationCount());
@@ -128,7 +139,7 @@ export function createAppShell(): AppShellResult {
     const operationHealth = validateOperations(operationStore.getOperations(), (id) => resourceStore.getResource(id), (id) => Boolean(resourceStore.getTemplate(id)));
     const resourceHealth = validateResources(resourceStore.getPlacedResources(), resourceStore.getTemplates(), (id) => operationStore.getAssignmentCount(id));
     const connectionHealth = validateProcessConnections(operationStore.getOperations(), connectionStore.getConnections());
-    const structureHealth = validateFactoryStructure(resourceStore.getPlacedResources(), structureStore); const routeHealth = validateFactoryRoutes({ resources: resourceStore.getPlacedResources(), structure: structureStore, routes: routeStore }); const errors = operationHealth.errors + resourceHealth.errors + connectionHealth.errors + structureHealth.issues.filter((issue) => issue.severity === 'error').length + routeHealth.errors; const warnings = operationHealth.warnings + resourceHealth.warnings + connectionHealth.warnings + structureHealth.issues.filter((issue) => issue.severity === 'warning').length + routeHealth.warnings;
+    const structureHealth = validateFactoryStructure(resourceStore.getPlacedResources(), structureStore); const routeHealth = validateFactoryRoutes({ resources: resourceStore.getPlacedResources(), structure: structureStore, routes: routeStore }); const annotationHealth = validateFactoryAnnotations(annotationStore, annotationResolver); const errors = operationHealth.errors + resourceHealth.errors + connectionHealth.errors + structureHealth.issues.filter((issue) => issue.severity === 'error').length + routeHealth.errors + annotationHealth.errors; const warnings = operationHealth.warnings + resourceHealth.warnings + connectionHealth.warnings + structureHealth.issues.filter((issue) => issue.severity === 'warning').length + routeHealth.warnings + annotationHealth.warnings;
     statusBar.setHealth(errors, warnings); titleBar.setHealth(errors, warnings);
   };
   const unsubscribeResourceStatus = resourceStore.subscribe((change) => {
@@ -136,14 +147,14 @@ export function createAppShell(): AppShellResult {
     updateStatus();
   });
   const unsubscribeOperationStatus = operationStore.subscribe((change) => { if (change.kind === 'deleted') { connectionStore.deleteForOperation(change.operationId); connectionStore.recalculateAll(); } else if (change.kind === 'created' || change.kind === 'updated') connectionStore.recalculateAll(); updateStatus(); });
-  const unsubscribeConnectionStatus = connectionStore.subscribe(updateStatus); const unsubscribeStructureStatus = structureStore.subscribe(updateStatus); const unsubscribeRouteStatus = routeStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(() => { updateStatus(); geometryEditing.notify(); }); const unsubscribeGeometryResources = resourceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryOperations = operationStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryWorkspace = workspaceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); updateStatus();
+  const unsubscribeConnectionStatus = connectionStore.subscribe(updateStatus); const unsubscribeStructureStatus = structureStore.subscribe(updateStatus); const unsubscribeRouteStatus = routeStore.subscribe(updateStatus); const unsubscribeAnnotationStatus = annotationStore.subscribe(updateStatus); const unsubscribeSelectionStatus = selectionStore.subscribe(() => { updateStatus(); geometryEditing.notify(); }); const unsubscribeGeometryResources = resourceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryOperations = operationStore.subscribe(geometryEditing.notify.bind(geometryEditing)); const unsubscribeGeometryWorkspace = workspaceStore.subscribe(geometryEditing.notify.bind(geometryEditing)); updateStatus();
   const unsubscribeHistory = history.subscribe(statusBar.setHistory); statusBar.setHistory(history.getState());
   const unsubscribeProject = projectSession.subscribe((state) => { titleBar.setProject(state.metadata.name, state.dirty, state.fileName); statusBar.setProject(state.metadata.name, state.dirty); updateStatus(); }); const initialProject = projectSession.getState(); titleBar.setProject(initialProject.metadata.name, initialProject.dirty, initialProject.fileName); statusBar.setProject(initialProject.metadata.name, initialProject.dirty);
   return {
     element: shell,
     statusBar,
     dispose: () => {
-      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeStructureStatus(); unsubscribeRouteStatus(); unsubscribeSelectionStatus(); unsubscribeGeometryResources(); unsubscribeGeometryOperations(); unsubscribeGeometryWorkspace(); unsubscribeProject(); unsubscribeHistory();
+      unsubscribeResourceStatus(); unsubscribeOperationStatus(); unsubscribeConnectionStatus(); unsubscribeStructureStatus(); unsubscribeRouteStatus(); unsubscribeAnnotationStatus(); unsubscribeSelectionStatus(); unsubscribeGeometryResources(); unsubscribeGeometryOperations(); unsubscribeGeometryWorkspace(); unsubscribeProject(); unsubscribeHistory();
       left.dispose();
       right.dispose();
       workspace.dispose();

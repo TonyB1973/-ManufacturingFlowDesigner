@@ -58,4 +58,9 @@
 56. Deleting a Resource Instance or Area removes every attached Factory Route in the same reversible action. Resource deletion still clears operation assignments and never changes Process Connections.
 57. Route validation may use boundaries, walls, resources, clearances, areas, and aisles, but derived issues and summaries must not be stored in `.mflow`.
 58. Schema `1.3.0` owns `factoryRoutes` and explicitly migrates `1.2.0` projects by adding an empty collection without changing existing authored data or workspace viewports.
+59. Factory measurements are transient Factory Layout interactions; persistent dimensions, coordinates, text, and leaders are typed `FactoryAnnotation` entities and must never render or select in Process Flow.
+60. Annotation anchors reference free world points or stable Factory Layout entity IDs and geometric features. Resolve attached coordinates from current model geometry; do not persist resolved coordinates or derived measurement values.
+61. Annotation creation, editing, deletion, clipboard insertion, and dependency cascades are reversible. Deleting a referenced entity removes dependent annotations atomically, including annotations attached to routes deleted by the same action.
+62. Keep model length units separate from display units. Conversion and formatting are pure domain services; drawing geometry remains in the model unit and unit changes never rescale authored geometry.
+63. Schema `1.4.0` owns `factoryAnnotations` and unit/annotation settings and explicitly migrates `1.3.0` projects without changing prior authored data or workspace viewports.
 

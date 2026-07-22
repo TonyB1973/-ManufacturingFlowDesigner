@@ -23,6 +23,7 @@ const route = routes.createRoute({ kind: 'resource', resourceId: resource.id, an
 assert(route?.id === 'FRT-0001', 'Factory routes receive a stable FRT identifier');
 const points = routeGeometry.resolveFactoryRoutePolyline(route, resolver); assert(points.length >= 2 && routeGeometry.validateResolvedRoute(points).length === 0, 'Resolved route geometry is orthogonal and valid');
 close(routeGeometry.factoryRouteDistance(route, resolver), 950, 'Attached route distance');
+const midpoint = routeGeometry.pointAlongRoute([{ x: 0, y: 0 }, { x: 100, y: 0 }]); assert(midpoint?.x === 50 && midpoint.y === 0, 'Route labels use the true distance midpoint rather than an endpoint vertex');
 routes.updateRoute(route.id, { nominalSpeed: 100 }); close(routeGeometry.estimatedTravelTimeSeconds(routes.getRoute(route.id), resolver), 9.5, 'Travel time uses nominal speed');
 const resolvedAnchor = resolveFactoryRouteEndpoint(route.source, resolver); assert(resolvedAnchor.x === 400 && resolvedAnchor.y === 600, 'Resource perimeter anchor resolves deterministically');
 const health = validateFactoryRoutes({ resources: [resource], structure, routes }); assert(health.total === 1 && health.enabled === 1 && health.countsByType.Material === 1 && health.errors === 0, 'Route validation and summaries are deterministic');

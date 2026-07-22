@@ -3,6 +3,7 @@ import type { SelectionItem } from '../../models/selection/Selection';
 import type { GeometryPoint } from '../geometry/FactoryFootprintGeometry';
 import type { CommandExecutionContext } from './ApplicationCommand';
 import { ReversibleCommand } from './ApplicationCommand';
+import { cloneFactoryAnnotation } from '../../models/factory/FactoryAnnotation';
 import type { CommandHistoryService } from './CommandHistoryService';
 
 const same = (left: unknown, right: unknown): boolean => Object.is(left, right) || JSON.stringify(left) === JSON.stringify(right);
@@ -40,9 +41,10 @@ export class FactoryRouteCommandFactory {
   public deleteRoutes(ids: readonly string[], description = 'Delete routes'): boolean {
     const snapshots = ids.map((id) => this.context.routes.getRoute(id)).filter((route): route is FactoryRoute => Boolean(route && !route.locked)).map(cloneFactoryRoute); if (!snapshots.length) return false;
     const refs: SelectionItem[] = snapshots.map((route) => ({ kind: 'factoryRoute', id: route.id }));
-    return this.run(new ReversibleCommand(description, snapshots.map((route) => route.id), 'factoryLayout',
-      ({ routes, selection }) => { for (const route of snapshots) if (!routes.deleteRoute(route.id)) throw new Error(`FactoryRoute ${route.id} could not be deleted.`); selection.clear(); },
-      ({ routes, selection }) => { for (const route of snapshots) if (!routes.restoreRoute(route)) throw new Error(`FactoryRoute ${route.id} could not be restored.`); selection.set(refs, refs.at(-1)); }));
+    const annotations = snapshots.flatMap((route) => this.context.annotations.getAttached('factoryRoute', route.id)).filter((value, index, all) => all.findIndex((candidate) => candidate.id === value.id) === index).map(cloneFactoryAnnotation);
+    return this.run(new ReversibleCommand(description, [...snapshots.map((route) => route.id), ...annotations.map((annotation) => annotation.id)], 'factoryLayout',
+      ({ routes, annotations: store, selection }) => { for (const annotation of annotations) store.deleteAnnotation(annotation.id, true); for (const route of snapshots) if (!routes.deleteRoute(route.id)) throw new Error(`FactoryRoute ${route.id} could not be deleted.`); selection.clear(); },
+      ({ routes, annotations: store, selection }) => { for (const route of snapshots) if (!routes.restoreRoute(route)) throw new Error(`FactoryRoute ${route.id} could not be restored.`); for (const annotation of annotations) if (!store.restoreAnnotation(annotation)) throw new Error(`Annotation ${annotation.id} could not be restored.`); selection.set(refs, refs.at(-1)); }));
   }
 
   public insertRoutes(routes: readonly FactoryRoute[], description = 'Paste factory routes'): boolean {

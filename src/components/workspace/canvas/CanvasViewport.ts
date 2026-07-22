@@ -57,6 +57,15 @@ import { FactoryRouteDrawController } from '../factory/FactoryRouteDrawControlle
 import { FactoryRouteEditController } from '../factory/FactoryRouteEditController';
 import { resolveFactoryRoutePolyline } from '../../../services/geometry/FactoryRouteGeometry';
 import { FACTORY_ROUTE_REVEAL_EVENT } from '../../../core/events/factoryRouteEvents';
+import type { FactoryAnnotationStore } from '../../../services/FactoryAnnotationStore';
+import type { AnnotationAnchorResolver } from '../../../services/annotations/AnnotationAnchorResolver';
+import type { FactoryAnnotationCommandFactory } from '../../../services/history/FactoryAnnotationCommandFactory';
+import type { ProjectSessionService } from '../../../services/project/ProjectSessionService';
+import { AnnotationSnapService } from '../../../services/annotations/AnnotationSnapService';
+import { FactoryAnnotationRenderer } from '../annotations/FactoryAnnotationRenderer';
+import { TemporaryMeasurementController } from '../annotations/TemporaryMeasurementController';
+import { FactoryAnnotationDrawController } from '../annotations/FactoryAnnotationDrawController';
+import { FACTORY_ANNOTATION_REVEAL_EVENT } from '../../../core/events/factoryAnnotationEvents';
 
 const arrangementCommands = new Set<CanvasCommand>(['align-left', 'align-centre-x', 'align-right', 'align-top', 'align-centre-y', 'align-bottom', 'distribute-x', 'distribute-y', 'equal-gaps-x', 'equal-gaps-y', 'match-width', 'match-height', 'match-size']);
 const isGeometryCommand = (command: CanvasToolbarCommand | CanvasCommand): command is GeometryCommand => arrangementCommands.has(command as CanvasCommand);
@@ -79,7 +88,7 @@ export interface CanvasViewportController {
   dispose(): void;
 }
 
-export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, structureStore: FactoryStructureStore, routeStore: FactoryRouteStore, workspaceStore: WorkspaceStore, selectionStore: SelectionController, commands: CommandFactory, routeCommands: FactoryRouteCommandFactory, editing: ApplicationClipboardService, geometrySelection: GeometrySelectionService, geometryEditing: GeometryEditingService, geometryCommands: GeometryCommandFactory, callbacks: CanvasViewportCallbacks): CanvasViewportController {
+export function createCanvasViewport(application: HTMLElement, resourceStore: ResourceStore, operationStore: OperationStore, connectionStore: ConnectionStore, structureStore: FactoryStructureStore, routeStore: FactoryRouteStore, annotationStore: FactoryAnnotationStore, annotationResolver: AnnotationAnchorResolver, projectSession: ProjectSessionService, workspaceStore: WorkspaceStore, selectionStore: SelectionController, commands: CommandFactory, routeCommands: FactoryRouteCommandFactory, annotationCommands: FactoryAnnotationCommandFactory, editing: ApplicationClipboardService, geometrySelection: GeometrySelectionService, geometryEditing: GeometryEditingService, geometryCommands: GeometryCommandFactory, callbacks: CanvasViewportCallbacks): CanvasViewportController {
   const state = createCanvasState();
   const snap = new SnapService();
   const workspace = element('main', 'workspace');
@@ -109,6 +118,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   let structureEditing: FactoryStructureEditController | null = null;
   let routeDrawing: FactoryRouteDrawController | null = null;
   let routeEditing: FactoryRouteEditController | null = null;
+  let measurement: TemporaryMeasurementController | null = null;
+  let annotationDrawing: FactoryAnnotationDrawController | null = null;
 
   const saveViewport = (): void => workspaceStore.updateViewport(activeWorkspace, { panX: state.panX, panY: state.panY, zoom: state.zoom, gridVisible: state.gridVisible, originVisible: state.originVisible, snapEnabled: snap.enabled });
   const loadViewport = (workspaceId: WorkspaceId): void => { const stored = workspaceStore.getViewport(workspaceId); Object.assign(state, { panX: stored.panX, panY: stored.panY, zoom: stored.zoom, gridVisible: stored.gridVisible, originVisible: stored.originVisible, tool: 'select' }); snap.enabled = stored.snapEnabled; };
@@ -118,6 +129,10 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     renderFrame = requestAnimationFrame(() => {
       renderFrame = 0;
       grid.render(state, size);
+      viewport.dataset.zoomTier = state.zoom < 0.6 ? 'overview' : 'detail';
+      viewport.style.setProperty('--canvas-overview-font-size', `${9 / state.zoom}px`);
+      viewport.style.setProperty('--canvas-overview-stroke-width', `${2 / state.zoom}px`);
+      viewport.style.setProperty('--canvas-overview-issue-font-size', `${14 / state.zoom}px`);
       toolbar.setZoom(state.zoom);
       toolbar.setTool(state.tool);
       toolbar.setGridVisible(state.gridVisible);
@@ -132,6 +147,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       selectionOverlay?.viewportChanged();
       structureEditing?.viewportChanged();
       routeEditing?.viewportChanged();
+      annotationRenderer.viewportChanged();
+      const annotationLayers = annotationRenderer.getVisibility(); toolbar.setLayerVisible('layer-annotations', annotationLayers.annotations); toolbar.setLayerVisible('layer-dimensions', annotationLayers.Dimensions); toolbar.setLayerVisible('layer-coordinates', annotationLayers.Coordinates); toolbar.setLayerVisible('layer-notes', annotationLayers.Notes);
       viewport.classList.toggle('canvas-viewport--pan-tool', state.tool === 'pan' || temporaryPan);
       viewport.classList.toggle('canvas-viewport--draw-tool', String(state.tool).startsWith('draw-'));
       callbacks.onZoomChange(state.zoom);
@@ -174,6 +191,13 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       case 'draw-route':
         if (activeWorkspace !== 'factoryLayout') { callbacks.onStatusChange('Factory Routes are available only in Factory Layout'); break; }
         state.tool = state.tool === 'draw-route' ? 'select' : 'draw-route'; routeDrawing?.toolChanged(); break;
+      case 'measure': case 'dimension-horizontal': case 'dimension-vertical': case 'dimension-aligned': case 'coordinate-marker': case 'text-note': case 'leader':
+        if (activeWorkspace !== 'factoryLayout') { callbacks.onStatusChange('Measurement and annotation tools are available only in Factory Layout'); break; }
+        state.tool = state.tool === command ? 'select' : command; measurement?.toolChanged(); annotationDrawing?.toolChanged(); break;
+      case 'create-measured-horizontal': measurement?.createDimension('Horizontal'); break;
+      case 'create-measured-vertical': measurement?.createDimension('Vertical'); break;
+      case 'create-measured-aligned': measurement?.createDimension('Aligned'); break;
+      case 'clear-measurement': measurement?.clear(); break;
       case 'reverse-route': routeEditing?.reverseSelected(); break;
       case 'insert-route-waypoint': routeEditing?.insertWaypoint(); break;
       case 'delete-route-waypoint': routeEditing?.deleteWaypoint(); break;
@@ -195,6 +219,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       case 'fit-all-layout': if (activeWorkspace === 'factoryLayout') { fitActiveWorkspace(true, true); callbacks.onStatusChange('All visible Factory Layout entities fitted to viewport'); } break;
       case 'fit-routes': if (activeWorkspace === 'factoryLayout') { fitFactoryRoutes(); callbacks.onStatusChange('Factory Routes fitted to viewport'); } break;
       case 'fit-all-routes': if (activeWorkspace === 'factoryLayout') { fitActiveWorkspace(true, true, true); callbacks.onStatusChange('Factory Layout and routes fitted to viewport'); } break;
+      case 'fit-annotations': if (activeWorkspace === 'factoryLayout') { fitAnnotations(); callbacks.onStatusChange('Factory Annotations fitted to viewport'); } break;
+      case 'fit-all-annotations': if (activeWorkspace === 'factoryLayout') { fitActiveWorkspace(true, true, true, true); callbacks.onStatusChange('Factory Layout, routes and annotations fitted to viewport'); } break;
       case 'fit-layout':
         if (activeWorkspace !== 'factoryLayout') { callbacks.onStatusChange('Fit Layout is available only in Factory Layout'); break; }
         fitActiveWorkspace(false); callbacks.onStatusChange('Factory footprints fitted to viewport'); break;
@@ -209,6 +235,9 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       }
       case 'layer-routes': case 'layer-route-labels': case 'layer-route-arrows': {
         if (activeWorkspace !== 'factoryLayout') break; const key = command === 'layer-routes' ? 'routes' : command === 'layer-route-labels' ? 'labels' : 'arrows'; const current = routeRenderer.getVisibility(); routeRenderer.setVisibility({ [key]: !current[key] }); callbacks.onStatusChange(`${command.replace('layer-', '').replaceAll('-', ' ')} ${!current[key] ? 'shown' : 'hidden'}`); break;
+      }
+      case 'layer-annotations': case 'layer-dimensions': case 'layer-coordinates': case 'layer-notes': {
+        if (activeWorkspace !== 'factoryLayout') break; const key = command === 'layer-annotations' ? 'annotations' : command === 'layer-dimensions' ? 'Dimensions' : command === 'layer-coordinates' ? 'Coordinates' : 'Notes'; const current = annotationRenderer.getVisibility(); annotationRenderer.setVisibility({ [key]: !current[key] }); callbacks.onStatusChange(`${command.replace('layer-', '')} ${!current[key] ? 'shown' : 'hidden'}`); break;
       }
       case 'rotate-left': case 'rotate-right': case 'rotation-reset': {
         if (activeWorkspace !== 'factoryLayout') { callbacks.onStatusChange('Resource rotation is available only in Factory Layout'); break; }
@@ -227,7 +256,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         callbacks.onStatusChange(`Snap ${snap.toggle() ? 'enabled' : 'disabled'}`);
         break;
       case 'delete-selection':
-        { const selected = selectionStore.getSelection(); if (selected.kind === 'boundary') callbacks.onStatusChange(commands.deleteFactoryStructure('boundary', selected.id) ? 'boundary deleted' : 'boundary is locked or missing'); else { const result = editing.deleteSelection((message) => window.confirm(message)); callbacks.onStatusChange(result.message); } }
+        { const selected = selectionStore.getSelection(); const annotationIds = selectionStore.getState().items.filter((item) => item.kind === 'factoryAnnotation').map((item) => item.id); if (annotationIds.length) callbacks.onStatusChange(annotationCommands.delete(annotationIds) ? `Deleted ${annotationIds.length} annotation${annotationIds.length === 1 ? '' : 's'}` : 'No unlocked annotations selected'); else if (selected.kind === 'boundary') callbacks.onStatusChange(commands.deleteFactoryStructure('boundary', selected.id) ? 'boundary deleted' : 'boundary is locked or missing'); else { const result = editing.deleteSelection((message) => window.confirm(message)); callbacks.onStatusChange(result.message); } }
         break;
       case 'copy': { const result = editing.copy(); callbacks.onStatusChange(result.message); break; }
       case 'cut': { const result = editing.cut((message) => window.confirm(message)); callbacks.onStatusChange(result.message); break; }
@@ -252,7 +281,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         callbacks.onStatusChange(`Canvas Focus ${focusMode ? 'enabled' : 'disabled'}`);
         break;
     }
-    if (command === 'select' || command === 'pan' || command === 'connect' || command === 'delete-link' || String(command).startsWith('draw-')) { resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.toolChanged(); structureDrawing?.toolChanged(); routeDrawing?.toolChanged(); }
+    if (command === 'select' || command === 'pan' || command === 'connect' || command === 'delete-link' || String(command).startsWith('draw-') || ['measure', 'dimension-horizontal', 'dimension-vertical', 'dimension-aligned', 'coordinate-marker', 'text-note', 'leader'].includes(String(command))) { resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.toolChanged(); structureDrawing?.toolChanged(); routeDrawing?.toolChanged(); measurement?.toolChanged(); annotationDrawing?.toolChanged(); }
     requestRender();
   };
 
@@ -262,9 +291,13 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   const resourceRenderer = new ResourceRenderer(grid.getObjectLayer(), resourceStore);
   const structureRenderer = new FactoryStructureRenderer(grid.getBoundaryLayer(), grid.getAreaLayer(), grid.getAisleLayer(), grid.getWallLayer(), structureStore, selectionStore);
   const routeRenderer = new FactoryRouteRenderer(grid.getRouteLayer(), routeStore, resourceStore, structureStore, selectionStore);
+  const annotationRenderer = new FactoryAnnotationRenderer(grid.getAnnotationLayer(), annotationStore, annotationResolver, projectSession, selectionStore, state);
+  const annotationGeometryUnsubscribers = [resourceStore.subscribe(() => annotationRenderer.viewportChanged()), structureStore.subscribe(() => annotationRenderer.viewportChanged()), routeStore.subscribe(() => annotationRenderer.viewportChanged())];
   const previewLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g'); previewLayer.id = 'factory-drawing-preview'; grid.getInteractionLayer().append(previewLayer);
   const structureEditLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g'); structureEditLayer.id = 'factory-structure-edit'; grid.getInteractionLayer().append(structureEditLayer);
   const routeEditLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g'); routeEditLayer.id = 'factory-route-edit'; grid.getInteractionLayer().append(routeEditLayer);
+  const measurementLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g'); measurementLayer.id = 'factory-temporary-measurement'; grid.getInteractionLayer().append(measurementLayer);
+  const annotationPreviewLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g'); annotationPreviewLayer.id = 'factory-annotation-preview'; grid.getInteractionLayer().append(annotationPreviewLayer);
   const operationRenderer = new OperationRenderer(grid.getOperationLayer(), operationStore, resourceStore);
   const connectionRenderer = new ConnectionRenderer(grid.getConnectionLayer(), connectionStore, operationStore);
   const guides = new AlignmentGuideController(grid.getInteractionLayer(), state, operationStore, resourceStore);
@@ -293,6 +326,9 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   structureEditing = new FactoryStructureEditController(viewport, structureEditLayer, state, structureStore, selectionStore, snap, commands, callbacks.onStatusChange);
   routeDrawing = new FactoryRouteDrawController(viewport, state, snap, resourceStore, structureStore, routeCommands, previewLayer, () => toolbar.getRouteType(), () => structureRenderer.getVisibility().aisles, callbacks.onStatusChange, () => { state.tool = 'select'; requestRender(); });
   routeEditing = new FactoryRouteEditController(viewport, state, snap, routeStore, resourceStore, structureStore, selectionStore, routeCommands, editing, routeEditLayer, callbacks.onStatusChange);
+  const annotationSnap = new AnnotationSnapService(resourceStore, structureStore, routeStore, annotationStore, annotationResolver, snap);
+  measurement = new TemporaryMeasurementController(viewport, measurementLayer, state, annotationSnap, projectSession, annotationStore, annotationCommands, callbacks.onStatusChange);
+  annotationDrawing = new FactoryAnnotationDrawController(viewport, annotationPreviewLayer, state, annotationSnap, annotationStore, projectSession, annotationCommands, callbacks.onStatusChange, () => { state.tool = 'select'; requestRender(); });
   selectionOverlay = new SelectionOverlayRenderer(grid.getInteractionLayer(), state, geometrySelection, selectionStore, operationStore, resourceStore);
   resizeInteraction = new ResizeInteractionController(viewport, state, geometrySelection, operationStore, resourceStore, snap, geometryCommands, guides, callbacks.onStatusChange);
 
@@ -316,16 +352,24 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     onKeyboardCommand: runCommand,
   });
 
-  function fitActiveWorkspace(includeClearance = true, includeStructure = false, includeRoutes = false): void {
-    const points: Point[] = [];
-    if (activeWorkspace === 'processFlow') {
-      operationStore.getOperations().filter((item) => item.visible).forEach((item) => points.push({ x: item.worldX - item.width / 2, y: item.worldY - item.height / 2 }, { x: item.worldX + item.width / 2, y: item.worldY + item.height / 2 }));
-      connectionStore.getConnections().filter((connection) => connection.visible).forEach((connection) => points.push(...connection.routePoints));
-    } else { resourceStore.getPlacedResources().filter((item) => item.visible).forEach((item) => points.push(...(includeClearance && item.clearance.enabled ? clearancePolygon(item) : footprintPolygon(item)))); if (includeStructure) { structureStore.getBoundaries().filter((item) => item.visible).forEach((item) => points.push(...item.points)); structureStore.getWalls().filter((item) => item.visible).forEach((item) => points.push(...wallRectangle(item))); structureStore.getAreas().filter((item) => item.visible).forEach((item) => points.push(...rectangleCorners({ x: item.worldX, y: item.worldY }, item.width, item.depth, item.rotationDegrees))); structureStore.getAisles().filter((item) => item.visible).forEach((item) => aisleCorridorRectangles(item).forEach((polygon) => points.push(...polygon))); } if (includeRoutes && routeRenderer.getVisibility().routes) routeStore.getRoutes().filter((item) => item.visible).forEach((route) => points.push(...resolvedRoute(route.id))); }
+  function fitActiveWorkspace(includeClearance = true, includeStructure = false, includeRoutes = false, includeAnnotations = false): void {
+    const collectPoints = (): Point[] => {
+      const points: Point[] = [];
+      if (activeWorkspace === 'processFlow') {
+        operationStore.getOperations().filter((item) => item.visible).forEach((item) => points.push({ x: item.worldX - item.width / 2, y: item.worldY - item.height / 2 }, { x: item.worldX + item.width / 2, y: item.worldY + item.height / 2 }));
+        connectionStore.getConnections().filter((connection) => connection.visible).forEach((connection) => points.push(...connection.routePoints));
+      } else { resourceStore.getPlacedResources().filter((item) => item.visible).forEach((item) => points.push(...(includeClearance && item.clearance.enabled ? clearancePolygon(item) : footprintPolygon(item)))); if (includeStructure) { structureStore.getBoundaries().filter((item) => item.visible).forEach((item) => points.push(...item.points)); structureStore.getWalls().filter((item) => item.visible).forEach((item) => points.push(...wallRectangle(item))); structureStore.getAreas().filter((item) => item.visible).forEach((item) => points.push(...rectangleCorners({ x: item.worldX, y: item.worldY }, item.width, item.depth, item.rotationDegrees))); structureStore.getAisles().filter((item) => item.visible).forEach((item) => aisleCorridorRectangles(item).forEach((polygon) => points.push(...polygon))); } if (includeRoutes && routeRenderer.getVisibility().routes) routeStore.getRoutes().filter((item) => item.visible).forEach((route) => points.push(...resolvedRoute(route.id))); if (includeAnnotations) points.push(...annotationRenderer.getVisiblePoints()); }
+      return points;
+    };
+    const points = collectPoints();
     if (!points.length) { centreOrigin(state, size, 1); return; } fitPoints(points);
+    // Annotation labels use screen-stable type. Recalculate their world-space
+    // extents after fitting so long labels remain inside the final viewport.
+    if (includeAnnotations) for (let pass = 0; pass < 3; pass += 1) fitPoints(collectPoints());
   }
   function resolvedRoute(id: string): Point[] { const route = routeStore.getRoute(id); return route ? resolveFactoryRoutePolyline(route, { getResource: (resourceId) => resourceStore.getResource(resourceId), getArea: (areaId) => structureStore.getArea(areaId) }) : []; }
   function fitFactoryRoutes(): void { const points = routeRenderer.getVisibility().routes ? routeStore.getRoutes().filter((route) => route.visible).flatMap((route) => resolvedRoute(route.id)) : []; if (!points.length) { callbacks.onStatusChange('No visible Factory Routes'); return; } fitPoints(points); }
+  function fitAnnotations(): void { const points = annotationRenderer.getVisiblePoints(); if (!points.length) { callbacks.onStatusChange('No visible Factory Annotations'); return; } fitPoints(points); for (let pass = 0; pass < 3; pass += 1) fitPoints(annotationRenderer.getVisiblePoints()); }
   function fitPoints(points: readonly Point[]): void { const minX = Math.min(...points.map((p) => p.x)); const maxX = Math.max(...points.map((p) => p.x)); const minY = Math.min(...points.map((p) => p.y)); const maxY = Math.max(...points.map((p) => p.y)); const padding = 60; state.zoom = Math.min(state.maxZoom, Math.max(state.minZoom, Math.min((size.width - padding * 2) / Math.max(1, maxX - minX), (size.height - padding * 2) / Math.max(1, maxY - minY)))); state.panX = size.width / 2 - (minX + maxX) / 2 * state.zoom; state.panY = size.height / 2 - (minY + maxY) / 2 * state.zoom; }
 
   const isInsideViewport = (clientX: number, clientY: number): boolean => {
@@ -385,12 +429,14 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   document.addEventListener(RESOURCE_REVEAL_EVENT, handleResourceReveal);
   const handleFactoryRouteReveal = (event: Event): void => { const id = (event as CustomEvent<string>).detail; const points = resolvedRoute(id); if (!points.length) return; const bounds = polygonAabb(points); state.panX = size.width / 2 - ((bounds.minX + bounds.maxX) / 2) * state.zoom; state.panY = size.height / 2 - ((bounds.minY + bounds.maxY) / 2) * state.zoom; requestRender(); callbacks.onStatusChange(`Revealed ${id}`); };
   document.addEventListener(FACTORY_ROUTE_REVEAL_EVENT, handleFactoryRouteReveal);
+  const handleFactoryAnnotationReveal = (event: Event): void => { const id = (event as CustomEvent<string>).detail; const item = annotationStore.getAnnotation(id); if (!item) return; const points = item.annotationType === 'text' ? [item.worldPosition] : item.annotationType === 'coordinate' ? [annotationResolver.resolve(item.anchor, item.layoutId).point].filter((point): point is Point => Boolean(point)) : item.annotationType === 'leader' ? [annotationResolver.resolve(item.anchor, item.layoutId).point, ...item.elbowPoints, item.textPosition].filter((point): point is Point => Boolean(point)) : [annotationResolver.resolve(item.startAnchor, item.layoutId).point, annotationResolver.resolve(item.endAnchor, item.layoutId).point].filter((point): point is Point => Boolean(point)); if (!points.length) return; const bounds = polygonAabb(points); state.panX = size.width / 2 - ((bounds.minX + bounds.maxX) / 2) * state.zoom; state.panY = size.height / 2 - ((bounds.minY + bounds.maxY) / 2) * state.zoom; requestRender(); callbacks.onStatusChange(`Revealed ${id}`); };
+  document.addEventListener(FACTORY_ANNOTATION_REVEAL_EVENT, handleFactoryAnnotationReveal);
 
   let marqueeState: { readonly pointerId: number; readonly start: Point; readonly additive: boolean; readonly subtractive: boolean; moved: boolean } | null = null;
   const viewportPoint = (event: PointerEvent): Point => { const bounds = viewport.getBoundingClientRect(); return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }; };
   const handleBackgroundSelection = (event: PointerEvent): void => {
     if (event.button !== 0 || state.tool !== 'select') return; const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('[data-resource-id], [data-operation-id], [data-connection-id], [data-boundary-id], [data-wall-id], [data-area-id], [data-aisle-id], [data-factory-route-id], button, input, textarea, select')) return;
+    if (target?.closest('[data-resource-id], [data-operation-id], [data-connection-id], [data-boundary-id], [data-wall-id], [data-area-id], [data-aisle-id], [data-factory-route-id], [data-factory-annotation-id], button, input, textarea, select')) return;
     marqueeState = { pointerId: event.pointerId, start: viewportPoint(event), additive: event.ctrlKey || event.metaKey || event.shiftKey, subtractive: event.altKey, moved: false }; viewport.setPointerCapture(event.pointerId); event.preventDefault();
   };
   const handleMarqueeMove = (event: PointerEvent): void => { if (!marqueeState || event.pointerId !== marqueeState.pointerId) return; const point = viewportPoint(event); if (Math.hypot(point.x - marqueeState.start.x, point.y - marqueeState.start.y) < 3) return; marqueeState.moved = true; marquee.hidden = false; marquee.style.left = `${Math.min(point.x, marqueeState.start.x)}px`; marquee.style.top = `${Math.min(point.y, marqueeState.start.y)}px`; marquee.style.width = `${Math.abs(point.x - marqueeState.start.x)}px`; marquee.style.height = `${Math.abs(point.y - marqueeState.start.y)}px`; };
@@ -400,7 +446,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     if (!active.moved) { if (!active.additive && !active.subtractive) selectionStore.clear(); return; }
     const rectangle = normalizeRectangle(screenToWorld(active.start, state), screenToWorld(viewportPoint(event), state));
     const hits = activeWorkspace === 'factoryLayout'
-      ? [...resourceStore.getPlacedResources().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(footprintPolygon(item)))).map((item) => ({ kind: 'resource' as const, id: item.id })), ...structureStore.getBoundaries().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(item.points))).map((item) => ({ kind: 'boundary' as const, id: item.id })), ...structureStore.getWalls().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(wallRectangle(item)))).map((item) => ({ kind: 'wall' as const, id: item.id })), ...structureStore.getAreas().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(rectangleCorners({ x: item.worldX, y: item.worldY }, item.width, item.depth, item.rotationDegrees)))).map((item) => ({ kind: 'area' as const, id: item.id })), ...structureStore.getAisles().filter((item) => item.visible && aisleCorridorRectangles(item).some((polygon) => rectanglesIntersect(rectangle, polygonAabb(polygon)))).map((item) => ({ kind: 'aisle' as const, id: item.id })), ...(routeRenderer.getVisibility().routes ? routeStore.getRoutes().filter((item) => item.visible && polylineIntersectsRectangle(resolvedRoute(item.id), rectangle)).map((item) => ({ kind: 'factoryRoute' as const, id: item.id })) : [])]
+      ? [...resourceStore.getPlacedResources().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(footprintPolygon(item)))).map((item) => ({ kind: 'resource' as const, id: item.id })), ...structureStore.getBoundaries().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(item.points))).map((item) => ({ kind: 'boundary' as const, id: item.id })), ...structureStore.getWalls().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(wallRectangle(item)))).map((item) => ({ kind: 'wall' as const, id: item.id })), ...structureStore.getAreas().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(rectangleCorners({ x: item.worldX, y: item.worldY }, item.width, item.depth, item.rotationDegrees)))).map((item) => ({ kind: 'area' as const, id: item.id })), ...structureStore.getAisles().filter((item) => item.visible && aisleCorridorRectangles(item).some((polygon) => rectanglesIntersect(rectangle, polygonAabb(polygon)))).map((item) => ({ kind: 'aisle' as const, id: item.id })), ...(routeRenderer.getVisibility().routes ? routeStore.getRoutes().filter((item) => item.visible && polylineIntersectsRectangle(resolvedRoute(item.id), rectangle)).map((item) => ({ kind: 'factoryRoute' as const, id: item.id })) : []), ...(annotationRenderer.getVisibility().annotations ? annotationStore.getAnnotations().filter((item) => item.visible && annotationRenderer.getVisibility()[item.layer]).filter((item) => { const points = item.annotationType === 'text' ? [item.worldPosition] : item.annotationType === 'coordinate' ? [annotationResolver.resolve(item.anchor, item.layoutId).point].filter(Boolean) : item.annotationType === 'leader' ? [annotationResolver.resolve(item.anchor, item.layoutId).point, ...item.elbowPoints, item.textPosition].filter(Boolean) : [annotationResolver.resolve(item.startAnchor, item.layoutId).point, annotationResolver.resolve(item.endAnchor, item.layoutId).point].filter(Boolean); return points.length && rectanglesIntersect(rectangle, polygonAabb(points as Point[])); }).map((item) => ({ kind: 'factoryAnnotation' as const, id: item.id })) : [])]
       : [...operationStore.getOperations().filter((item) => item.visible && rectanglesIntersect(rectangle, { minX: item.worldX - item.width / 2, minY: item.worldY - item.height / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.height / 2 })).map((item) => ({ kind: 'operation' as const, id: item.id })), ...connectionStore.getConnections().filter((item) => item.visible && polylineIntersectsRectangle(item.routePoints, rectangle)).map((item) => ({ kind: 'connection' as const, id: item.id }))];
     if (active.subtractive) hits.forEach((item) => selectionStore.remove(item)); else if (active.additive) hits.forEach((item) => selectionStore.add(item)); else selectionStore.set(hits, hits.at(-1)); callbacks.onStatusChange(`Selected ${selectionStore.getState().items.length} items`);
   };
@@ -410,7 +456,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   const handleObjectKeyDown = (event: KeyboardEvent): void => {
     if (isTyping(event.target) || !application.contains(document.activeElement)) return;
     const commandKey = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
-    if (state.tool === 'draw-route' && ['enter', 'backspace', 'escape'].includes(key)) return;
+    if ((state.tool === 'draw-route' || ['measure', 'dimension-horizontal', 'dimension-vertical', 'dimension-aligned', 'coordinate-marker', 'text-note', 'leader'].includes(state.tool)) && ['enter', 'backspace', 'escape'].includes(key)) return;
+    if (activeWorkspace === 'factoryLayout' && !commandKey && !event.altKey) { const annotationShortcut = key === 'm' ? 'measure' : key === 'h' ? 'dimension-horizontal' : key === 'v' ? 'dimension-vertical' : key === 'd' ? 'dimension-aligned' : key === 'n' ? 'text-note' : key === 'l' ? 'leader' : key === 'c' && event.shiftKey ? 'coordinate-marker' : null; if (annotationShortcut) { event.preventDefault(); runCommand(annotationShortcut as CanvasToolbarCommand); return; } }
     if (activeWorkspace === 'factoryLayout' && !commandKey && !event.altKey && ['b', 'w', 'a', 'i', 't'].includes(key)) { event.preventDefault(); runCommand(key === 'b' ? 'draw-boundary-rect' : key === 'w' ? 'draw-wall' : key === 'a' ? 'draw-area' : key === 'i' ? 'draw-aisle' : 'draw-route'); return; }
     if (activeWorkspace === 'factoryLayout' && !commandKey && !event.altKey && key === 'r') { event.preventDefault(); routeEditing?.reverseSelected(); return; }
     if (commandKey && ['c', 'x', 'v', 'd', 'a'].includes(key)) { event.preventDefault(); const result = key === 'c' ? editing.copy() : key === 'x' ? editing.cut((message) => window.confirm(message)) : key === 'v' ? editing.paste() : key === 'd' ? editing.duplicate() : editing.selectAll(); callbacks.onStatusChange(result.message); return; }
@@ -445,11 +492,11 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   document.addEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);
   const activateWorkspace = (workspaceId: WorkspaceId): void => workspaceStore.activate(workspaceId);
   processTab.addEventListener('click', () => activateWorkspace('processFlow')); layoutTab.addEventListener('click', () => activateWorkspace('factoryLayout'));
-  const cancelActiveInteractions = (): void => { cancelMarquee(); resizeInteraction?.cancel(); rotationInteraction?.cancel(); structureDrawing?.cancel(false); structureEditing?.cancel(); routeDrawing?.cancel(false); routeEditing?.cancel(); guides.clear(); resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool !== 'select' && state.tool !== 'pan') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
+  const cancelActiveInteractions = (): void => { cancelMarquee(); resizeInteraction?.cancel(); rotationInteraction?.cancel(); structureDrawing?.cancel(false); structureEditing?.cancel(); routeDrawing?.cancel(false); routeEditing?.cancel(); measurement?.clear(false); annotationDrawing?.cancel(false); guides.clear(); resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool !== 'select' && state.tool !== 'pan') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
   const renderWorkspace = (workspaceId: WorkspaceId): void => {
-    if (workspaceId !== activeWorkspace) cancelActiveInteractions();
-    saveViewport(); activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.setWorkspace(workspaceId); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
-    const processActive = workspaceId === 'processFlow'; toolbar.setConnectionToolsEnabled(processActive); toolbar.setFactoryToolsEnabled(!processActive); processTab.setAttribute('aria-selected', String(processActive)); layoutTab.setAttribute('aria-selected', String(!processActive)); processTab.tabIndex = processActive ? 0 : -1; layoutTab.tabIndex = processActive ? -1 : 0; canvasTitle.textContent = processActive ? 'Process Flow — Operations' : 'Factory Layout — Resources & Structure'; viewport.setAttribute('aria-label', `${processActive ? 'Process Flow' : 'Factory Layout'} engineering canvas. Use the mouse wheel to zoom and middle mouse or Space plus drag to pan.`); callbacks.onWorkspaceChange(workspaceId); callbacks.onStatusChange(`Workspace: ${processActive ? 'Process Flow' : 'Factory Layout'}`); requestRender();
+    if (workspaceId !== activeWorkspace) { cancelActiveInteractions(); saveViewport(); }
+    activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.setWorkspace(workspaceId); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
+    const processActive = workspaceId === 'processFlow'; toolbar.setConnectionToolsEnabled(processActive); toolbar.setFactoryToolsEnabled(!processActive); processTab.setAttribute('aria-selected', String(processActive)); layoutTab.setAttribute('aria-selected', String(!processActive)); processTab.tabIndex = processActive ? 0 : -1; layoutTab.tabIndex = processActive ? -1 : 0; canvasTitle.textContent = processActive ? 'Process Flow — Operations' : 'Factory Layout — Resources, Structure & Annotations'; viewport.setAttribute('aria-label', `${processActive ? 'Process Flow' : 'Factory Layout'} engineering canvas. Use the mouse wheel to zoom and middle mouse or Space plus drag to pan.`); callbacks.onWorkspaceChange(workspaceId); callbacks.onStatusChange(`Workspace: ${processActive ? 'Process Flow' : 'Factory Layout'}`); requestRender();
   };
   const unsubscribeWorkspace = workspaceStore.subscribe(renderWorkspace); grid.setWorkspace(activeWorkspace); renderWorkspace(activeWorkspace);
   requestRender();
@@ -463,7 +510,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       resourceInteraction = null;
       rotationInteraction?.dispose(); rotationInteraction = null;
       resourceRenderer.dispose();
-      structureDrawing?.dispose(); structureDrawing = null; structureEditing?.dispose(); structureEditing = null; structureRenderer.dispose(); routeDrawing?.dispose(); routeDrawing = null; routeEditing?.dispose(); routeEditing = null; routeRenderer.dispose();
+      structureDrawing?.dispose(); structureDrawing = null; structureEditing?.dispose(); structureEditing = null; structureRenderer.dispose(); routeDrawing?.dispose(); routeDrawing = null; routeEditing?.dispose(); routeEditing = null; routeRenderer.dispose(); measurement?.dispose(); measurement = null; annotationDrawing?.dispose(); annotationDrawing = null; annotationGeometryUnsubscribers.forEach((unsubscribe) => unsubscribe()); annotationRenderer.dispose();
       operationInteraction?.dispose(); operationInteraction = null; operationRenderer.dispose();
       connectionInteraction?.dispose(); connectionInteraction = null; connectionRenderer.dispose();
       resizeInteraction?.dispose(); resizeInteraction = null; selectionOverlay?.dispose(); selectionOverlay = null; guides.dispose();
@@ -479,6 +526,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       document.removeEventListener(CONNECTION_REVEAL_EVENT, handleConnectionReveal);
       document.removeEventListener(RESOURCE_REVEAL_EVENT, handleResourceReveal);
       document.removeEventListener(FACTORY_ROUTE_REVEAL_EVENT, handleFactoryRouteReveal);
+      document.removeEventListener(FACTORY_ANNOTATION_REVEAL_EVENT, handleFactoryAnnotationReveal);
       viewport.removeEventListener('pointerdown', handleBackgroundSelection); viewport.removeEventListener('pointermove', handleMarqueeMove); viewport.removeEventListener('pointerup', finishMarquee); viewport.removeEventListener('pointercancel', handleMarqueeCancel); document.removeEventListener('keydown', handleObjectKeyDown);
       viewport.removeEventListener('contextmenu', handleEditingContextMenu); document.removeEventListener('pointerdown', handleEditingMenuOutside, true); document.removeEventListener('keydown', handleEditingMenuEscape); editingMenu.remove();
       if (renderFrame !== 0) cancelAnimationFrame(renderFrame);

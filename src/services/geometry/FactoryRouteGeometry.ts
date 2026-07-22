@@ -98,6 +98,22 @@ export function routeSegments(points: readonly GeometryPoint[]): readonly { read
   return points.slice(1).map((end, index) => ({ start: points[index], end, length: Math.abs(end.x - points[index].x) + Math.abs(end.y - points[index].y) }));
 }
 
+export function pointAlongRoute(points: readonly GeometryPoint[], fraction = 0.5): GeometryPoint | null {
+  if (!points.length) return null;
+  if (points.length === 1) return { ...points[0] };
+  const segments = routeSegments(points); const total = segments.reduce((sum, segment) => sum + segment.length, 0);
+  if (total <= FACTORY_ROUTE_TOLERANCE) return { ...points[0] };
+  let remaining = Math.max(0, Math.min(1, fraction)) * total;
+  for (const segment of segments) {
+    if (remaining <= segment.length) {
+      const ratio = segment.length <= FACTORY_ROUTE_TOLERANCE ? 0 : remaining / segment.length;
+      return { x: segment.start.x + (segment.end.x - segment.start.x) * ratio, y: segment.start.y + (segment.end.y - segment.start.y) * ratio };
+    }
+    remaining -= segment.length;
+  }
+  return { ...points.at(-1)! };
+}
+
 export function pointOnRoute(point: GeometryPoint, points: readonly GeometryPoint[], tolerance: number): boolean {
   return routeSegments(points).some((segment) => pointToSegmentDistance(point, segment.start, segment.end) <= tolerance + FACTORY_GEOMETRY_TOLERANCE);
 }

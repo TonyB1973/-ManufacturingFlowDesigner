@@ -3,7 +3,8 @@ import type { FactoryRouteStore } from '../../../services/FactoryRouteStore';
 import type { FactoryStructureStore } from '../../../services/FactoryStructureStore';
 import type { ResourceStore } from '../../../services/ResourceStore';
 import { validateFactoryRoutes } from '../../../services/FactoryRouteValidation';
-import { factoryRouteDistance, resolveFactoryRoutePolyline } from '../../../services/geometry/FactoryRouteGeometry';
+import { factoryRouteDistance, pointAlongRoute, resolveFactoryRoutePolyline } from '../../../services/geometry/FactoryRouteGeometry';
+import { estimateSvgTextWidth } from '../../../utilities/SvgTextFit';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const svg = <K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] => document.createElementNS(SVG_NAMESPACE, tag);
@@ -39,8 +40,13 @@ export class FactoryRouteRenderer {
       const end = svg('rect'); end.classList.add('factory-route__endpoint', 'factory-route__endpoint--target'); end.setAttribute('x', String(resolved.at(-1)!.x - 5)); end.setAttribute('y', String(resolved.at(-1)!.y - 5)); end.setAttribute('width', '10'); end.setAttribute('height', '10'); end.setAttribute('vector-effect', 'non-scaling-stroke');
       const title = svg('title'); title.textContent = `${route.id} — ${route.name} — ${route.routeType} — ${route.direction}\nDistance: ${factoryRouteDistance(route, resolver).toFixed(1)} project units${relatedIssues.length ? `\n${relatedIssues.map((issue) => issue.message).join('\n')}` : ''}`;
       group.append(hit, line, start, end, title);
-      if (this.visibility.labels) { const centre = resolved[Math.floor(resolved.length / 2)]; const label = svg('text'); label.classList.add('factory-route__label'); label.setAttribute('x', String(centre.x)); label.setAttribute('y', String(centre.y - 10)); label.setAttribute('text-anchor', 'middle'); label.textContent = `${route.id} · ${route.routeType} · ${factoryRouteDistance(route, resolver).toFixed(0)}`; group.append(label); }
-      if (relatedIssues.length) { const marker = svg('text'); marker.classList.add('factory-route__issue'); marker.setAttribute('x', String(resolved[Math.floor(resolved.length / 2)].x)); marker.setAttribute('y', String(resolved[Math.floor(resolved.length / 2)].y + 18)); marker.textContent = relatedIssues.some((issue) => issue.severity === 'error') ? '⛔' : '⚠'; group.append(marker); }
+      const centre = pointAlongRoute(resolved) ?? resolved[0];
+      if (this.visibility.labels) {
+        const value = `${route.id} · ${route.routeType} · ${factoryRouteDistance(route, resolver).toFixed(0)}`; const width = estimateSvgTextWidth(value, 10) + 10; const labelY = centre.y - 10;
+        const labelGroup = svg('g'); labelGroup.classList.add('factory-route__label-group'); const background = svg('rect'); background.classList.add('factory-route__label-background'); background.setAttribute('x', String(centre.x - width / 2)); background.setAttribute('y', String(labelY - 11)); background.setAttribute('width', String(width)); background.setAttribute('height', '15'); background.setAttribute('rx', '3');
+        const label = svg('text'); label.classList.add('factory-route__label'); label.setAttribute('x', String(centre.x)); label.setAttribute('y', String(labelY)); label.setAttribute('text-anchor', 'middle'); label.textContent = value; labelGroup.append(background, label); group.append(labelGroup);
+      }
+      if (relatedIssues.length) { const marker = svg('text'); marker.classList.add('factory-route__issue'); marker.setAttribute('x', String(centre.x)); marker.setAttribute('y', String(centre.y + 18)); marker.textContent = relatedIssues.some((issue) => issue.severity === 'error') ? '⛔' : '⚠'; group.append(marker); }
       const choose = (event: Event): void => { const pointer = event as PointerEvent; const ref = { kind: 'factoryRoute' as const, id: route.id }; if (pointer.ctrlKey || pointer.metaKey) this.selection.toggle(ref); else if (pointer.shiftKey) this.selection.add(ref); else this.selection.select(ref); event.stopPropagation(); };
       group.addEventListener('pointerdown', choose); group.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(event); } }); this.layer.append(group);
     }
