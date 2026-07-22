@@ -2,6 +2,22 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 3.1 scope
+
+Sprint 3.1 makes Standard Work operators explicit study participants. Every new study creates a persistent **Operator 1** with a stable `SWO` ID, and every entry references one operator in the same study. The active operator with the lowest display order, then stable ID, is the default for newly added or populated entries. Operators support names, roles, active state, notes, ordering, duplication, and an optional live link to a physical Resource Instance without copying physical-resource data.
+
+The Combination Chart now uses one cursor and one lane per operator. Manual, Walking, and Waiting entries advance only their assigned operator, so different operators can work in parallel even though entries retain deterministic global study order. Automatic work starts from its assigned operator's cursor, records that launch operator, remains on the lane selected by the operation's independent `assignedResourceId`, and does not advance an operator cursor. `OperationInstance.cycleTimeSeconds × occurrences` remains the only duration calculation.
+
+Each lane presents readable operator identity, role, active/inactive state, dependency idle, launch markers, and workload totals. Workload separates Manual, Walking, Waiting, occupied and productive time, dependency idle, sequence end, entry count, and Automatic launched time. Automatic time is excluded from occupied time. Chart cycle span is still the maximum overall operator end or latest Automatic end, never the sum of parallel lanes.
+
+Persistent `StandardWorkHandover` records use stable `SWH` IDs to express zero-duration, forward-only dependencies between entries. The target starts after the latest enabled inbound source completes, and any resulting gap is shown as **dependency idle**, not as a fabricated Waiting operation. Real transfer, communication, walking, or waiting work must be modelled explicitly. Self, backward, cross-study, duplicate, and cyclic handovers are rejected; a handover that becomes same-operator is preserved with a warning.
+
+The workspace provides operator creation, duplication, editing, ordering, entry assignment from the table or chart, keyboard-accessible assignment menus, handover creation/deletion, Project Explorer selection, and Properties editing. Chart blocks can be dragged vertically to another operator lane; Escape cancels an incomplete reassignment, and horizontal start-time dragging remains unavailable. Deleting an assigned operator requires a same-study replacement and reassigns entries atomically. Deleting an entry or operation removes attached handovers; deleting a linked physical resource clears only the operator link. Undo/Redo restores exact IDs, assignments, ordering, links, and handovers.
+
+Study duplication allocates new SW, SWO, SWE, and SWH IDs, remaps entry assignments and handover endpoints, and retains references to existing Process Flow operations and physical resources. `.mflow` schema `1.7.0` and application version `0.9.0` persist operators, assignments, handovers, and expanded chart settings. The explicit `1.6.0 → 1.7.0` migration creates one Operator 1 per legacy study, assigns every existing entry to it, and preserves the Sprint 3.0 single-operator schedule. Calculated schedules, cursors, workloads, idle totals, paths, geometry, selection, scroll, and zoom remain excluded.
+
+Current limitations intentionally exclude takt calculations, workload recommendations, Yamazumi charts, availability calendars, shifts, breaks, skills, automatic allocation, route-derived walking time, simulation, and authoritative resource-capacity validation. Sprint 3.2 is planned to add **takt time, capacity, and work-balance analysis**: available production time, required demand, takt calculation and chart line, operator workload comparison, Yamazumi-style visualisation, over/under-takt indicators, balance metrics, and bottleneck identification.
+
 ## Sprint 3.0 scope
 
 Sprint 3.0 adds a professional **Standard Work Combination Chart** beside the existing Entry Table, with Entry Table, Combination Chart, and responsive Split View modes. It calculates one deterministic operator timeline from current study order and current Process Flow operation data; chart start/end values, resource lanes, summaries, diagnostics, zoom, and SVG geometry remain derived rather than saved.
@@ -154,10 +170,10 @@ Manufacturing Flow Designer project files use:
 - extension: `.mflow`
 - media type: `application/vnd.manufacturing-flow-designer+json`
 - format identifier: `ManufacturingFlowDesigner`
-- current schema: `1.6.0`
-- current application version: `0.8.0`
+- current schema: `1.7.0`
+- current application version: `0.9.0`
 
-The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
+The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, Standard Work studies, operators, entries and handovers, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
 
 Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 10,000 Factory Annotations, 10 boundaries, 50,000 walls, 20,000 areas, 20,000 aisles, 30 nested levels, and bounded structural, route, and leader vertex counts. They are defensive limits rather than expected working sizes.
 
@@ -212,6 +228,7 @@ npm run test:routes
 npm run test:annotations
 npm run test:standard-work
 npm run test:standard-work-chart
+npm run test:standard-work-operators
 npm run build
 git diff --check
 ```
@@ -237,10 +254,11 @@ git diff --check
 - `FactoryRouteStore`, `FactoryRouteGeometry`, and `FactoryRouteValidation` own typed physical routes, derived orthogonal geometry, metrics, and engineering checks independently of Process Connections and SVG.
 - `FactoryAnnotationStore`, `AnnotationAnchorResolver`, `LinearDimensionGeometry`, and `LengthUnitService` own persistent annotations, associative geometry, deterministic measurement, and unit formatting independently of SVG.
 - `StandardWorkStore`, `StandardWorkOperationResolver`, `StandardWorkCalculationService`, `StandardWorkValidationService`, and `StandardWorkCommandFactory` keep persistent study data, live operation resolution, derived timing, validation, and history separate from the workspace DOM.
-- `StandardWorkChartScheduler` owns deterministic derived scheduling and automatic-resource lanes; `StandardWorkChartScale` owns engineering intervals and fit calculations; the chart renderer owns SVG only.
+- `StandardWorkOperatorStore`, `StandardWorkHandoverStore`, and their command factories own study participants, allocation, dependencies, and reversible lifecycle separately from the workspace DOM.
+- `StandardWorkChartScheduler` owns deterministic per-operator scheduling and automatic-resource lanes; `StandardWorkOperatorWorkloadService` owns derived workload totals; `StandardWorkChartScale` owns engineering intervals and fit calculations; the chart renderer owns SVG only.
 - Domain stores remain the runtime authorities for resources, operations, connections, factory structure, factory routes, factory annotations, Standard Work studies/entries, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for annotations and units, [ADR-0010](docs/architecture/ADR-0010-standard-work-timing-foundations.md) for Standard Work references, timing, ordering, lifecycle, and persistence, and [ADR-0011](docs/architecture/ADR-0011-standard-work-combination-chart.md) for chart scheduling, resource lanes, derived data, and settings persistence.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for annotations and units, [ADR-0010](docs/architecture/ADR-0010-standard-work-timing-foundations.md) for Standard Work references, timing, ordering, lifecycle, and persistence, [ADR-0011](docs/architecture/ADR-0011-standard-work-combination-chart.md) for chart scheduling, resource lanes, derived data, and settings persistence, and [ADR-0012](docs/architecture/ADR-0012-standard-work-operators-and-handovers.md) for study operators, assignments, parallel cursors, handovers, workload, and schema 1.7.0.
 
 ## Current limitations
 
@@ -250,8 +268,8 @@ Clipboard contents are session-only and cannot be exchanged with external applic
 
 Route travel-time estimates are nominal geometric calculations, not simulation. Annotation anchor editing is currently provided through typed creation, property editing, clipboard remapping, and referenced-entity geometry changes rather than a full CAD constraint solver.
 
-## Planned Sprint 3.1
+## Planned Sprint 3.2
 
-Sprint 3.1 is planned to add **operator lanes and work allocation**: multiple operator records, Standard Work entry operator assignment, separate operator timelines, operator handovers, and workload totals by operator. Sprint 3.0 deliberately remains a single-operator chart.
+Sprint 3.2 is planned to add **takt time, capacity, and work-balance analysis**, including available production time, required demand, takt-time calculation and chart line, operator workload comparison, Yamazumi-style visualisation, over/under-takt indicators, balance metrics, and bottleneck identification.
 
-Development for this sprint is performed on `feature/sprint-3.0-standard-work-chart`.
+Development for Sprint 3.1 is performed on `feature/sprint-3.1-operator-lanes`.

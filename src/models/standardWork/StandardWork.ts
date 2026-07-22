@@ -29,6 +29,7 @@ export interface StandardWorkEntry {
   readonly id: string;
   readonly studyId: string;
   readonly operationId: string;
+  assignedOperatorId: string;
   order: number;
   occurrences: number;
   enabled: boolean;
@@ -36,7 +37,7 @@ export interface StandardWorkEntry {
 }
 
 export type StandardWorkStudyPatch = Partial<Pick<StandardWorkStudy, 'name' | 'description' | 'productOrProcessName' | 'revision' | 'active' | 'notes' | 'modifiedUtc'>>;
-export type StandardWorkEntryPatch = Partial<Pick<StandardWorkEntry, 'order' | 'occurrences' | 'enabled' | 'notes'>>;
+export type StandardWorkEntryPatch = Partial<Pick<StandardWorkEntry, 'assignedOperatorId' | 'order' | 'occurrences' | 'enabled' | 'notes'>>;
 
 export const cloneStandardWorkStudy = (study: StandardWorkStudy): StandardWorkStudy => ({ ...study });
 export const cloneStandardWorkEntry = (entry: StandardWorkEntry): StandardWorkEntry => ({ ...entry });
@@ -56,6 +57,7 @@ export function isValidStandardWorkStudy(study: StandardWorkStudy): boolean {
 export function isValidStandardWorkEntry(entry: StandardWorkEntry): boolean {
   return /^SWE-\d+$/.test(entry.id) && /^SW-\d+$/.test(entry.studyId)
     && entry.operationId.trim().length > 0
+    && /^SWO-\d+$/.test(entry.assignedOperatorId)
     && Number.isInteger(entry.order) && entry.order > 0
     && Number.isInteger(entry.occurrences) && entry.occurrences > 0 && entry.occurrences <= STANDARD_WORK_LIMITS.occurrences
     && typeof entry.enabled === 'boolean' && entry.notes.length <= STANDARD_WORK_LIMITS.notes;

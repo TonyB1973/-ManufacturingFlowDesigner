@@ -13,6 +13,7 @@ export class ProjectMigrationService {
     this.register('1.3.0', '1.4.0', migrateFactoryAnnotations);
     this.register('1.4.0', '1.5.0', migrateStandardWork);
     this.register('1.5.0', '1.6.0', migrateStandardWorkChart);
+    this.register('1.6.0', '1.7.0', migrateStandardWorkOperators);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -42,6 +43,15 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateStandardWorkOperators(document: Record<string, unknown>): Record<string, unknown> {
+  const studies = Array.isArray(document.standardWorkStudies) ? document.standardWorkStudies.filter(isRecord).sort((a, b) => String(a.id).localeCompare(String(b.id))) : [];
+  const operatorByStudy = new Map<string, string>();
+  const standardWorkOperators = studies.map((study, index) => { const studyId = String(study.id); const id = `SWO-${String(index + 1).padStart(4, '0')}`; operatorByStudy.set(studyId, id); return { id, studyId, name: 'Operator 1', role: '', displayOrder: 10, active: true, linkedResourceId: null, notes: '' }; });
+  const standardWorkEntries = Array.isArray(document.standardWorkEntries) ? document.standardWorkEntries.map((candidate) => isRecord(candidate) ? { ...candidate, assignedOperatorId: operatorByStudy.get(String(candidate.studyId)) ?? '' } : candidate) : [];
+  const settings = isRecord(document.settings) ? document.settings : {}; const standardWork = isRecord(settings.standardWork) ? settings.standardWork : {}; const chart = isRecord(standardWork.chart) ? standardWork.chart : {};
+  return { ...document, applicationVersion: '0.9.0', standardWorkOperators, standardWorkEntries, standardWorkHandovers: [], settings: { ...settings, standardWork: { ...standardWork, chart: { ...DEFAULT_STANDARD_WORK_CHART_SETTINGS, ...chart } } } };
 }
 
 function migrateStandardWorkChart(document: Record<string, unknown>): Record<string, unknown> {

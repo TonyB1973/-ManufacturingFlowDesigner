@@ -70,7 +70,7 @@ history.undo(); assert(history.getState().atSavedCheckpoint && projectSettings.s
 const position = history.getState().currentPosition; selection.select({ kind: 'standardWorkEntry', id: 'SWE-D' }); assert(history.getState().currentPosition === position, 'Chart selection creates no history and no independent dirty action');
 
 const current = createDemoProject(); const schema15 = { ...current, schemaVersion: '1.5.0', applicationVersion: '0.7.0', settings: { ...current.settings, standardWork: { timeFormat: 'minutesSeconds' } } }; const migrated = deserializeProject(JSON.stringify(schema15));
-assert(migrated.migratedFrom === '1.5.0' && migrated.document.schemaVersion === '1.6.0' && migrated.document.settings.standardWork.timeFormat === 'minutesSeconds' && migrated.document.settings.standardWork.chart.showAutomaticLanes, 'Schema 1.5 migrates explicitly to validated chart settings while preserving Standard Work data');
+assert(migrated.migratedFrom === '1.5.0' && migrated.document.schemaVersion === '1.7.0' && migrated.document.settings.standardWork.timeFormat === 'minutesSeconds' && migrated.document.settings.standardWork.chart.showAutomaticLanes, 'Schema 1.5 migrates explicitly to operator-capable chart settings while preserving Standard Work data');
 const serialized = JSON.stringify(current); assert(!serialized.includes('chartCycleSpanSeconds') && !serialized.includes('operatorBlocks') && !serialized.includes('resourceLanes') && !serialized.includes('diagnostics'), 'Derived chart schedule, lanes, span, and diagnostics are excluded from persistence');
 
 console.log('Standard Work Combination Chart scheduler, scale, settings, and migration checks passed.');

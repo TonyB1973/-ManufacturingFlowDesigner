@@ -13,10 +13,12 @@ import type { FactoryAnnotation, FactoryAnnotationLayer } from '../factory/Facto
 import type { LengthUnit } from '../../services/units/LengthUnitService';
 import type { StandardWorkEntry, StandardWorkStudy, StandardWorkTimeFormat } from '../standardWork/StandardWork';
 import { DEFAULT_STANDARD_WORK_CHART_SETTINGS, type StandardWorkChartSettings } from '../standardWork/StandardWorkChartSettings';
+import type { StandardWorkOperator } from '../standardWork/StandardWorkOperator';
+import type { StandardWorkHandover } from '../standardWork/StandardWorkHandover';
 
 export const PROJECT_FORMAT = 'ManufacturingFlowDesigner' as const;
-export const PROJECT_SCHEMA_VERSION = '1.6.0' as const;
-export const APPLICATION_VERSION = '0.8.0' as const;
+export const PROJECT_SCHEMA_VERSION = '1.7.0' as const;
+export const APPLICATION_VERSION = '0.9.0' as const;
 export const PROJECT_MIME_TYPE = 'application/vnd.manufacturing-flow-designer+json' as const;
 export const PROJECT_FILE_EXTENSION = '.mflow' as const;
 
@@ -76,6 +78,8 @@ export interface ProjectDocument {
   readonly factoryAnnotations: readonly FactoryAnnotation[];
   readonly standardWorkStudies: readonly StandardWorkStudy[];
   readonly standardWorkEntries: readonly StandardWorkEntry[];
+  readonly standardWorkOperators: readonly StandardWorkOperator[];
+  readonly standardWorkHandovers: readonly StandardWorkHandover[];
   readonly workspaces: PersistedWorkspaces;
   readonly settings: ProjectSettings;
 }

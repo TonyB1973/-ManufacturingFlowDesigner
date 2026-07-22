@@ -26,9 +26,11 @@ import { FACTORY_ANNOTATION_LAYERS } from '../../models/factory/FactoryAnnotatio
 import { LENGTH_UNITS } from '../units/LengthUnitService';
 import { StandardWorkStore, type StandardWorkChange } from '../StandardWorkStore';
 import { StandardWorkSelectionStore } from '../standardWork/StandardWorkSelectionStore';
-import { StandardWorkEntryIdGenerator, StandardWorkStudyIdGenerator } from '../../utilities/StandardWorkIdGenerator';
+import { StandardWorkEntryIdGenerator, StandardWorkHandoverIdGenerator, StandardWorkOperatorIdGenerator, StandardWorkStudyIdGenerator } from '../../utilities/StandardWorkIdGenerator';
 import { STANDARD_WORK_TIME_FORMATS } from '../../models/standardWork/StandardWork';
 import { isValidStandardWorkChartSettings } from '../../models/standardWork/StandardWorkChartSettings';
+import { StandardWorkOperatorStore, type StandardWorkOperatorChange } from '../standardWork/StandardWorkOperatorStore';
+import { StandardWorkHandoverStore, type StandardWorkHandoverChange } from '../standardWork/StandardWorkHandoverStore';
 
 export interface ProjectSessionState {
   readonly metadata: ProjectMetadata;
@@ -38,6 +40,8 @@ export interface ProjectSessionState {
 }
 
 export class ProjectSessionService {
+  public readonly standardWorkOperators: StandardWorkOperatorStore;
+  public readonly standardWorkHandovers: StandardWorkHandoverStore;
   private metadata: ProjectMetadata;
   private settings: ProjectSettings = { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork, chart: { ...DEFAULT_PROJECT_SETTINGS.standardWork.chart } } };
   private fileName: string | null = null;
@@ -66,6 +70,9 @@ export class ProjectSessionService {
     private readonly standardWorkSelection: StandardWorkSelectionStore = new StandardWorkSelectionStore(),
     private readonly projectIds = new ProjectIdGenerator(),
   ) {
+    this.standardWorkOperators = new StandardWorkOperatorStore(new StandardWorkOperatorIdGenerator(), (id) => Boolean(this.standardWork.getStudy(id)), (id) => Boolean(this.resources.getResource(id)));
+    this.standardWorkHandovers = new StandardWorkHandoverStore(new StandardWorkHandoverIdGenerator(), (id) => this.standardWork.getEntry(id), (studyId) => this.standardWork.getEntries(studyId));
+    this.standardWork.setOperatorResolver((id) => this.standardWorkOperators.getOperator(id)?.studyId ?? null);
     this.metadata = this.createMetadata();
     this.unsubscribers = [
       resources.subscribe((change) => this.resourceChanged(change)),
@@ -75,6 +82,8 @@ export class ProjectSessionService {
       routes.subscribe((change) => this.routeChanged(change)),
       annotations.subscribe((change) => this.annotationChanged(change)),
       standardWork.subscribe((change) => this.standardWorkChanged(change)),
+      this.standardWorkOperators.subscribe((change) => this.standardWorkOperatorChanged(change)),
+      this.standardWorkHandovers.subscribe((change) => this.standardWorkHandoverChanged(change)),
       this.dirtyState.subscribe(() => this.notify()),
     ];
   }
@@ -108,7 +117,7 @@ export class ProjectSessionService {
     this.replace({
       format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: APPLICATION_VERSION, project: metadata,
       resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES,
-      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [],
+      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [], standardWorkOperators: [], standardWorkHandovers: [],
       workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
       settings: { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork, chart: { ...DEFAULT_PROJECT_SETTINGS.standardWork.chart } } },
     }, null);
@@ -136,6 +145,8 @@ export class ProjectSessionService {
       this.routes.replaceAll(document.factoryRoutes, false);
       this.annotations.replaceAll(document.factoryAnnotations, false);
       this.standardWork.replaceAll(document.standardWorkStudies, document.standardWorkEntries, false);
+      this.standardWorkOperators.replaceAll(document.standardWorkOperators, false);
+      this.standardWorkHandovers.replaceAll(document.standardWorkHandovers, false);
       this.workspaces.restore(document.workspaces.active, document.workspaces.processFlow, document.workspaces.factoryLayout, false);
       this.resourceIds.ensureAfter(resources.map((item) => item.id));
       this.operationIds.ensureAfter(operations.map((item) => item.id));
@@ -143,7 +154,7 @@ export class ProjectSessionService {
       this.routeIds.ensureAfter(document.factoryRoutes.map((item) => item.id));
       this.annotationIds.ensureAfter(document.factoryAnnotations.map((item) => item.id));
       this.projectIds.ensureAfter([document.project.id]);
-      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.annotations.publishReset(); this.standardWork.publishReset(); this.workspaces.publish();
+      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.annotations.publishReset(); this.standardWork.publishReset(); this.standardWorkOperators.publishReset(); this.standardWorkHandovers.publishReset(); this.workspaces.publish();
       if (this.history) this.history.clear(); else this.dirtyState.markClean();
     } finally { this.loading = false; }
     this.notify();
@@ -159,5 +170,7 @@ export class ProjectSessionService {
   private routeChanged(change: FactoryRouteChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private annotationChanged(change: FactoryAnnotationChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private standardWorkChanged(change: StandardWorkChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private standardWorkOperatorChanged(change: StandardWorkOperatorChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private standardWorkHandoverChanged(change: StandardWorkHandoverChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private notify(): void { const state = this.getState(); for (const listener of this.listeners) listener(state); }
 }
