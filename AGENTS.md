@@ -50,4 +50,12 @@
 48. Keep walls, areas, and aisles separate from Resource Instances. Resource placement policy belongs to areas, while wall and aisle obstruction is derived validation rather than persisted state.
 49. Route persistent factory-structure changes through reversible commands with stable typed IDs; transient drawing previews, layer visibility, and selections remain outside project persistence.
 50. Schema `1.2.0` owns the factory-structure collections and explicitly migrates `1.1.0` projects by adding empty collections without changing resources, clearances, operations, connections, or viewports.
+51. Factory Routes are authored Factory Layout entities and must remain separate from Process Connections; they never render, select, or expose tools in Process Flow.
+52. Factory Route endpoints are typed resource, area, or free endpoints. Attached endpoints store a perimeter side and normalized offset and follow the referenced entity's move, resize, and rotation.
+53. Keep Factory Route waypoints orthogonal and persist authored endpoints and waypoints only. Resolved endpoint coordinates, distance, travel time, validation, drawing previews, ports, edit handles, and route-layer visibility are derived or transient.
+54. Route creation, geometry/property edits, reversal, deletion, paste, and duplication must be reversible commands with stable `FRT` IDs. Locked routes reject direct geometry edits and direct deletion.
+55. Copying Factory Layout entities remaps route endpoints when their referenced resource or area is copied, preserves valid uncopied references, offsets free endpoints and waypoints, and inserts the complete selection as one history action.
+56. Deleting a Resource Instance or Area removes every attached Factory Route in the same reversible action. Resource deletion still clears operation assignments and never changes Process Connections.
+57. Route validation may use boundaries, walls, resources, clearances, areas, and aisles, but derived issues and summaries must not be stored in `.mflow`.
+58. Schema `1.3.0` owns `factoryRoutes` and explicitly migrates `1.2.0` projects by adding an empty collection without changing existing authored data or workspace viewports.
 

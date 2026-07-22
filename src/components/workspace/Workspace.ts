@@ -11,6 +11,8 @@ import type { GeometrySelectionService } from '../../services/geometry/GeometryS
 import type { GeometryEditingService } from '../../services/geometry/GeometryEditingService';
 import type { GeometryCommandFactory } from '../../services/history/GeometryCommandFactory';
 import type { FactoryStructureStore } from '../../services/FactoryStructureStore';
+import type { FactoryRouteStore } from '../../services/FactoryRouteStore';
+import type { FactoryRouteCommandFactory } from '../../services/history/FactoryRouteCommandFactory';
 
 export interface WorkspaceOptions {
   readonly application: HTMLElement;
@@ -19,11 +21,13 @@ export interface WorkspaceOptions {
   readonly operationStore: OperationStore;
   readonly connectionStore: ConnectionStore;
   readonly structureStore: FactoryStructureStore;
+  readonly routeStore: FactoryRouteStore;
   readonly selectionStore: SelectionController;
   readonly workspaceStore: WorkspaceStore;
   readonly requestResourceDeletion: (resourceId: string) => void;
   readonly onFocusModeChange: (active: boolean) => void;
   readonly commands: CommandFactory;
+  readonly routeCommands: FactoryRouteCommandFactory;
   readonly editing: ApplicationClipboardService;
   readonly geometrySelection: GeometrySelectionService;
   readonly geometryEditing: GeometryEditingService;
@@ -31,7 +35,7 @@ export interface WorkspaceOptions {
 }
 
 export function createWorkspace(options: WorkspaceOptions): CanvasViewportController {
-  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.workspaceStore, options.selectionStore, options.commands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, {
+  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, {
     onZoomChange: options.statusBar.setZoom,
     onGridVisibilityChange: options.statusBar.setGridVisible,
     onCoordinatesChange: options.statusBar.setCoordinates,

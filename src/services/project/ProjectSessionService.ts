@@ -18,6 +18,8 @@ import type { WorkspaceStore } from '../WorkspaceStore';
 import { DirtyStateService } from './DirtyStateService';
 import type { CommandHistoryService } from '../history/CommandHistoryService';
 import type { FactoryStructureStore, FactoryStructureChange } from '../FactoryStructureStore';
+import type { FactoryRouteStore, FactoryRouteChange } from '../FactoryRouteStore';
+import type { FactoryRouteIdGenerator } from '../../utilities/FactoryRouteIdGenerator';
 
 export interface ProjectSessionState {
   readonly metadata: ProjectMetadata;
@@ -42,11 +44,13 @@ export class ProjectSessionService {
     public readonly operations: OperationStore,
     public readonly connections: ConnectionStore,
     public readonly structure: FactoryStructureStore,
+    public readonly routes: FactoryRouteStore,
     public readonly workspaces: WorkspaceStore,
     private readonly selection: SelectionController,
     private readonly resourceIds: ResourceIdGenerator,
     private readonly operationIds: OperationIdGenerator,
     private readonly connectionIds: ConnectionIdGenerator,
+    private readonly routeIds: FactoryRouteIdGenerator,
     private readonly projectIds = new ProjectIdGenerator(),
   ) {
     this.metadata = this.createMetadata();
@@ -55,6 +59,7 @@ export class ProjectSessionService {
       operations.subscribe((change) => this.operationChanged(change)),
       connections.subscribe((change) => this.connectionChanged(change)),
       structure.subscribe((change) => this.structureChanged(change)),
+      routes.subscribe((change) => this.routeChanged(change)),
       this.dirtyState.subscribe(() => this.notify()),
     ];
   }
@@ -85,7 +90,7 @@ export class ProjectSessionService {
     this.replace({
       format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: APPLICATION_VERSION, project: metadata,
       resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES,
-      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [],
+      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [],
       workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
       settings: { ...DEFAULT_PROJECT_SETTINGS },
     }, null);
@@ -109,12 +114,14 @@ export class ProjectSessionService {
       this.operations.replaceAll(document.operationTemplates, operations, false);
       this.connections.replaceAll(connections, false);
       this.structure.replaceAll(document.layoutBoundaries, document.walls, document.areas, document.aisles, false);
+      this.routes.replaceAll(document.factoryRoutes, false);
       this.workspaces.restore(document.workspaces.active, document.workspaces.processFlow, document.workspaces.factoryLayout, false);
       this.resourceIds.ensureAfter(resources.map((item) => item.id));
       this.operationIds.ensureAfter(operations.map((item) => item.id));
       this.connectionIds.ensureAfter(connections.map((item) => item.id));
+      this.routeIds.ensureAfter(document.factoryRoutes.map((item) => item.id));
       this.projectIds.ensureAfter([document.project.id]);
-      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.workspaces.publish();
+      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.workspaces.publish();
       if (this.history) this.history.clear(); else this.dirtyState.markClean();
     } finally { this.loading = false; }
     this.notify();
@@ -127,5 +134,6 @@ export class ProjectSessionService {
   private operationChanged(change: OperationStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private connectionChanged(change: ConnectionStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private structureChanged(change: FactoryStructureChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private routeChanged(change: FactoryRouteChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private notify(): void { const state = this.getState(); for (const listener of this.listeners) listener(state); }
 }

@@ -5,12 +5,14 @@ import type { SelectionController } from '../../models/selection/Selection';
 import type { WorkspaceId } from '../../models/workspace/Workspace';
 import type { ProjectSessionService } from '../project/ProjectSessionService';
 import type { FactoryStructureStore } from '../FactoryStructureStore';
+import type { FactoryRouteStore } from '../FactoryRouteStore';
 
 export interface CommandExecutionContext {
   readonly resources: ResourceStore;
   readonly operations: OperationStore;
   readonly connections: ConnectionStore;
   readonly structure: FactoryStructureStore;
+  readonly routes: FactoryRouteStore;
   readonly project: ProjectSessionService;
   readonly selection: SelectionController;
 }

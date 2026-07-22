@@ -8,6 +8,7 @@ export class ProjectMigrationService {
   public constructor() {
     this.register('1.0.0', '1.1.0', migrateFactoryLayoutEngineering);
     this.register('1.1.0', '1.2.0', migrateFactoryStructure);
+    this.register('1.2.0', '1.3.0', migrateFactoryRoutes);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -37,6 +38,10 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateFactoryRoutes(document: Record<string, unknown>): Record<string, unknown> {
+  return { ...document, applicationVersion: '0.5.0', factoryRoutes: [] };
 }
 
 function migrateFactoryStructure(document: Record<string, unknown>): Record<string, unknown> {

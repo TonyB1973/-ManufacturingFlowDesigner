@@ -1,0 +1,33 @@
+import { loadTypeScriptModule as loadModule } from './load-typescript-module.mjs';
+const load = (path) => loadModule(path, import.meta.url);
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+const close = (actual, expected, message) => assert(Math.abs(actual - expected) < 1e-7, `${message}: expected ${expected}, received ${actual}`);
+
+const { FactoryRouteIdGenerator } = await load('../src/utilities/FactoryRouteIdGenerator.ts');
+const { FactoryRouteStore } = await load('../src/services/FactoryRouteStore.ts');
+const { FactoryStructureStore } = await load('../src/services/FactoryStructureStore.ts');
+const { FactoryStructureIdGenerator } = await load('../src/utilities/FactoryStructureIdGenerator.ts');
+const { resolveFactoryRouteEndpoint } = await load('../src/services/factoryRoutes/FactoryRouteEndpointResolver.ts');
+const routeGeometry = await load('../src/services/geometry/FactoryRouteGeometry.ts');
+const { validateFactoryRoutes } = await load('../src/services/FactoryRouteValidation.ts');
+
+const structure = new FactoryStructureStore(new FactoryStructureIdGenerator('BND'), new FactoryStructureIdGenerator('WALL'), new FactoryStructureIdGenerator('AREA'), new FactoryStructureIdGenerator('AISLE'));
+structure.createBoundary([{ x: 0, y: 0 }, { x: 2000, y: 0 }, { x: 2000, y: 1200 }, { x: 0, y: 1200 }]);
+const area = structure.createArea(1500, 600, 300, 200); const aisle = structure.createAisle([{ x: 400, y: 600 }, { x: 1500, y: 600 }], 160);
+assert(area && aisle, 'Factory test structure is created');
+const clearance = { enabled: false, left: 0, right: 0, top: 0, bottom: 0, category: 'general', note: '' };
+const resource = { id: 'RES-0001', templateId: 'TPL-1', name: 'Machine', resourceType: 'CNC Machine', layoutId: 'factory-layout-default', worldX: 300, worldY: 600, width: 200, depth: 100, rotationDegrees: 0, clearance, active: true, visible: true, locked: false, selected: false, capacity: 1 };
+const resources = new Map([[resource.id, resource]]); const resolver = { getResource: (id) => resources.get(id), getArea: (id) => structure.getArea(id) };
+const ids = new FactoryRouteIdGenerator(); const routes = new FactoryRouteStore(ids, { hasResource: (id) => resources.has(id), hasArea: (id) => Boolean(structure.getArea(id)) });
+const route = routes.createRoute({ kind: 'resource', resourceId: resource.id, anchorSide: 'right', anchorOffset: 0.5 }, { kind: 'area', areaId: area.id, anchorSide: 'left', anchorOffset: 0.5 }, [{ x: 400, y: 600 }, { x: 1350, y: 600 }], 'Material');
+assert(route?.id === 'FRT-0001', 'Factory routes receive a stable FRT identifier');
+const points = routeGeometry.resolveFactoryRoutePolyline(route, resolver); assert(points.length >= 2 && routeGeometry.validateResolvedRoute(points).length === 0, 'Resolved route geometry is orthogonal and valid');
+close(routeGeometry.factoryRouteDistance(route, resolver), 950, 'Attached route distance');
+routes.updateRoute(route.id, { nominalSpeed: 100 }); close(routeGeometry.estimatedTravelTimeSeconds(routes.getRoute(route.id), resolver), 9.5, 'Travel time uses nominal speed');
+const resolvedAnchor = resolveFactoryRouteEndpoint(route.source, resolver); assert(resolvedAnchor.x === 400 && resolvedAnchor.y === 600, 'Resource perimeter anchor resolves deterministically');
+const health = validateFactoryRoutes({ resources: [resource], structure, routes }); assert(health.total === 1 && health.enabled === 1 && health.countsByType.Material === 1 && health.errors === 0, 'Route validation and summaries are deterministic');
+const reversed = routes.reverseRoute(route.id); assert(reversed && routes.getRoute(route.id).source.kind === 'area', 'Reverse swaps endpoints');
+routes.updateRoute(route.id, { locked: true }); assert(!routes.deleteRoute(route.id), 'Locked routes resist direct deletion');
+const attached = routes.deleteAttachedToArea(area.id); assert(attached.length === 1 && routes.getCount() === 0, 'Deleting an endpoint removes attached routes even when locked');
+routes.replaceAll([{ ...attached[0], id: 'FRT-0099', locked: false }]); assert(ids.next() === 'FRT-0100', 'Route ID generation resumes after restored IDs');
+console.log('Factory route identity, anchors, geometry, metrics, validation, reversal, deletion, and restore checks passed.');

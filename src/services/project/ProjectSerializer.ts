@@ -7,6 +7,8 @@ import type { OperationStore } from '../OperationStore';
 import type { ResourceStore } from '../ResourceStore';
 import type { WorkspaceStore } from '../WorkspaceStore';
 import type { FactoryStructureStore } from '../FactoryStructureStore';
+import type { FactoryRouteStore } from '../FactoryRouteStore';
+import { cloneFactoryRoute } from '../../models/factory/FactoryRoute';
 
 export interface ProjectSerializationSource {
   readonly metadata: ProjectMetadata;
@@ -15,6 +17,7 @@ export interface ProjectSerializationSource {
   readonly operations: OperationStore;
   readonly connections: ConnectionStore;
   readonly structure: FactoryStructureStore;
+  readonly routes: FactoryRouteStore;
   readonly workspaces: WorkspaceStore;
 }
 
@@ -34,6 +37,7 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
     walls: byId(source.structure.getWalls()).map((item) => ({ ...item, start: { ...item.start }, end: { ...item.end } })),
     areas: byId(source.structure.getAreas()).map((item) => ({ ...item })),
     aisles: byId(source.structure.getAisles()).map((item) => ({ ...item, points: item.points.map((point) => ({ ...point })) })),
+    factoryRoutes: byId(source.routes.getRoutes()).map(cloneFactoryRoute),
     workspaces: {
       active: source.workspaces.getActive(),
       processFlow: source.workspaces.getViewport('processFlow'),

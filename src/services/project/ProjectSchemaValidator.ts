@@ -15,8 +15,9 @@ import { FACTORY_WALL_TYPES, type FactoryWall } from '../../models/factory/Facto
 import { FACTORY_AREA_TYPES, RESOURCE_PLACEMENT_POLICIES, type FactoryArea } from '../../models/factory/FactoryArea';
 import { FACTORY_AISLE_DIRECTIONS, FACTORY_AISLE_TYPES, type FactoryAisle } from '../../models/factory/FactoryAisle';
 import { validateOrthogonalPolygon, validateOrthogonalPolyline } from '../geometry/FactoryStructureGeometry';
+import { FACTORY_ROUTE_ANCHOR_SIDES, FACTORY_ROUTE_DIRECTIONS, FACTORY_ROUTE_TYPES, type FactoryRoute, type FactoryRouteEndpoint } from '../../models/factory/FactoryRoute';
 
-const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, boundaryVertices: 50000, aislePoints: 500000 } as const;
+const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000 } as const;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const ANCHOR_SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const CONNECTION_TYPES = new Set(['Standard', 'Rework', 'Alternate', 'Information']);
@@ -54,6 +55,7 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const walls = wallValues(root.walls, issues);
   const areas = areaValues(root.areas, issues);
   const aisles = aisleValues(root.aisles, issues);
+  const factoryRoutes = factoryRouteValues(root.factoryRoutes, issues);
   const workspaces = workspaceValues(root.workspaces, issues);
   const settings = settingsValue(root.settings, issues);
 
@@ -62,14 +64,15 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   uniqueIds('resource', resources, issues);
   uniqueIds('operation', operations, issues);
   uniqueIds('connection', connections, issues);
-  uniqueIds('boundary', layoutBoundaries, issues); uniqueIds('wall', walls, issues); uniqueIds('area', areas, issues); uniqueIds('aisle', aisles, issues);
+  uniqueIds('boundary', layoutBoundaries, issues); uniqueIds('wall', walls, issues); uniqueIds('area', areas, issues); uniqueIds('aisle', aisles, issues); uniqueIds('factory route', factoryRoutes, issues);
   if (layoutBoundaries.filter((item) => item.layoutId === DEFAULT_FACTORY_LAYOUT_ID).length > 1) issues.push('Only one active factory boundary is allowed per layout.');
   const entityIds = new Set<string>();
-  [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
+  [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles, ...factoryRoutes].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
   const resourceTemplateIds = new Set(resourceTemplates.map((item) => item.id));
   const operationTemplateIds = new Set(operationTemplates.map((item) => item.id));
   const resourceIds = new Set(resources.map((item) => item.id));
   const operationIds = new Set(operations.map((item) => item.id));
+  const areaIds = new Set(areas.map((item) => item.id));
   resources.forEach((item) => { if (!resourceTemplateIds.has(item.templateId)) issues.push(`Resource ${item.id} references missing template ${item.templateId}.`); });
   operations.forEach((item) => {
     if (!operationTemplateIds.has(item.templateId)) issues.push(`Operation ${item.id} references missing template ${item.templateId}.`);
@@ -85,10 +88,16 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
       standardPairs.add(pair);
     }
   });
+  factoryRoutes.forEach((route) => {
+    for (const endpoint of [route.source, route.target]) {
+      if (endpoint.kind === 'resource' && !resourceIds.has(endpoint.resourceId)) issues.push(`FactoryRoute ${route.id} references missing physical resource ${endpoint.resourceId}.`);
+      if (endpoint.kind === 'area' && !areaIds.has(endpoint.areaId)) issues.push(`FactoryRoute ${route.id} references missing factory area ${endpoint.areaId}.`);
+    }
+  });
   if (issues.length) throw new ProjectValidationError(issues);
   return {
     format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: root.applicationVersion as string,
-    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles,
+    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes,
     workspaces: workspaces!, settings: settings!,
   };
 }
@@ -175,6 +184,29 @@ function aisleValues(value: unknown, issues: string[]): FactoryAisle[] {
   let totalPoints = 0;
   const result = arrayValue(value, 'aisles', LIMITS.aisles, issues).flatMap((raw, index) => { const item = record(raw, `aisles[${index}]`, issues); if (!item) return []; const points = pointsValue(item.points, `aisles[${index}].points`, LIMITS.aislePoints, issues); totalPoints += points.length; const geometryIssues = validateOrthogonalPolyline(points); if (!validStructureCommon(item) || !positive(item.width) || !FACTORY_AISLE_TYPES.includes(item.aisleType as never) || !FACTORY_AISLE_DIRECTIONS.includes(item.direction as never) || geometryIssues.length) issues.push(`aisles[${index}] has invalid fields or geometry: ${geometryIssues.join(' ')}`); return [{ ...item, points } as unknown as FactoryAisle]; });
   if (totalPoints > LIMITS.aislePoints) issues.push(`Total aisle points exceed the safety limit of ${LIMITS.aislePoints}.`); return result;
+}
+function factoryRouteValues(value: unknown, issues: string[]): FactoryRoute[] {
+  let totalWaypoints = 0;
+  const result = arrayValue(value, 'factoryRoutes', LIMITS.routes, issues).flatMap((raw, index) => {
+    const item = record(raw, `factoryRoutes[${index}]`, issues); if (!item) return [];
+    const source = factoryRouteEndpointValue(item.source); const target = factoryRouteEndpointValue(item.target);
+    const waypoints = pointsValue(item.waypoints, `factoryRoutes[${index}].waypoints`, LIMITS.waypointsPerRoute, issues); totalWaypoints += waypoints.length;
+    const geometryIssues = waypoints.length > 1 ? validateOrthogonalPolyline(waypoints) : [];
+    const nominalSpeedValid = item.nominalSpeed === null || positive(item.nominalSpeed);
+    if (!nonEmpty(item.id) || !/^FRT-\d+$/.test(String(item.id)) || item.layoutId !== DEFAULT_FACTORY_LAYOUT_ID || !nonEmpty(item.name) || !boundedString(item.name, 200) || !FACTORY_ROUTE_TYPES.includes(item.routeType as never) || !FACTORY_ROUTE_DIRECTIONS.includes(item.direction as never) || !source || !target || geometryIssues.length || !bool(item.visible) || !bool(item.locked) || !bool(item.enabled) || !nominalSpeedValid || !boundedString(item.note)) issues.push(`factoryRoutes[${index}] has invalid fields or geometry${geometryIssues.length ? `: ${geometryIssues.join(' ')}` : '.'}`);
+    return source && target ? [{ ...item, source, target, waypoints } as unknown as FactoryRoute] : [];
+  });
+  if (totalWaypoints > LIMITS.routeWaypoints) issues.push(`Total FactoryRoute waypoints exceed the safety limit of ${LIMITS.routeWaypoints}.`);
+  return result;
+}
+function factoryRouteEndpointValue(value: unknown): FactoryRouteEndpoint | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  if (item.kind === 'free') { const point = pointValue(item.point); return point ? { kind: 'free', point } : null; }
+  if (!FACTORY_ROUTE_ANCHOR_SIDES.includes(item.anchorSide as never) || !finite(item.anchorOffset) || item.anchorOffset < 0 || item.anchorOffset > 1) return null;
+  if (item.kind === 'resource' && nonEmpty(item.resourceId)) return { kind: 'resource', resourceId: item.resourceId, anchorSide: item.anchorSide as Extract<FactoryRouteEndpoint, { kind: 'resource' }>['anchorSide'], anchorOffset: item.anchorOffset };
+  if (item.kind === 'area' && nonEmpty(item.areaId)) return { kind: 'area', areaId: item.areaId, anchorSide: item.anchorSide as Extract<FactoryRouteEndpoint, { kind: 'area' }>['anchorSide'], anchorOffset: item.anchorOffset };
+  return null;
 }
 function anchorValue(value: unknown): ProcessConnection['sourceAnchor'] | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
