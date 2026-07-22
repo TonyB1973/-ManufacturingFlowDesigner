@@ -1,4 +1,5 @@
-export type WorkspaceId = 'processFlow' | 'factoryLayout';
+export type CanvasWorkspaceId = 'processFlow' | 'factoryLayout';
+export type WorkspaceId = CanvasWorkspaceId | 'standardWork';
 
 export interface WorkspaceViewportState {
   panX: number;

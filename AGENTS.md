@@ -63,4 +63,9 @@
 61. Annotation creation, editing, deletion, clipboard insertion, and dependency cascades are reversible. Deleting a referenced entity removes dependent annotations atomically, including annotations attached to routes deleted by the same action.
 62. Keep model length units separate from display units. Conversion and formatting are pure domain services; drawing geometry remains in the model unit and unit changes never rescale authored geometry.
 63. Schema `1.4.0` owns `factoryAnnotations` and unit/annotation settings and explicitly migrates `1.3.0` projects without changing prior authored data or workspace viewports.
+64. Standard Work is a separate non-CAD workspace with its own transient typed selection; it references Process Flow `OperationInstance` IDs and never owns copied operation or physical-resource data.
+65. Keep one authoritative non-negative `cycleTimeSeconds` and one Manual, Automatic, Walking, or Waiting `timingCategory` on each operation. Standard Work entry durations are derived from operation time and occurrences and are never persisted.
+66. A study contains an operation at most once, uses occurrences for repetition, and owns an independently ordered entry list that does not mutate or silently follow Process Flow sequence after initial population.
+67. Deleting an operation atomically deletes attached Process Connections and affected Standard Work entries; Undo restores exact operation, connection, SW/SWE IDs, references, and entry order. Resource deletion still clears assignments without deleting Standard Work entries.
+68. Schema `1.5.0` owns Standard Work studies, entries, and display settings and explicitly migrates `1.4.0` projects without changing existing authored project data or canvas viewports.
 

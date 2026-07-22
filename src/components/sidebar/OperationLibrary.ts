@@ -39,7 +39,7 @@ export function createOperationLibrary(store: OperationStore): OperationLibraryC
     const node = element('article', 'operation-template-card');
     node.tabIndex = 0; node.setAttribute('role', 'button'); node.dataset.operationTemplateId = template.id;
     node.setAttribute('aria-label', `${template.name}, ${template.operationType}. Drag to place or press Enter to place at canvas centre.`);
-    const timingClass = template.timingCategory === 'Value Added' ? 'va' : template.timingCategory === 'Non-Value Added' ? 'nva' : 'rnva';
+    const timingClass = template.timingCategory;
     node.append(element('span', 'drag-handle', '⠿'), element('span', 'operation-template-card__icon', template.icon),
       element('strong', '', template.name), element('span', 'operation-template-card__type', template.operationType),
       element('span', `timing-badge timing-badge--${timingClass}`, template.timingCategory));

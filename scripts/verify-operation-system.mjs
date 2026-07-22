@@ -28,7 +28,8 @@ selection.setWorkspace('processFlow'); operations.selectOperation(first.id); ass
 
 assert(operations.updateOperation(first.id, { cycleTimeSeconds: 77.5, assignedResourceId: resource.id }), 'Cycle time and resource assignment update');
 assert(first.cycleTimeSeconds === 77.5 && first.assignedResourceId === resource.id, 'Operation properties persist');
-assert(!operations.updateOperation(first.id, { cycleTimeSeconds: 0 }), 'Invalid cycle time is rejected');
+assert(!operations.updateOperation(first.id, { cycleTimeSeconds: -1 }), 'Negative cycle time is rejected');
+assert(operations.updateOperation(first.id, { cycleTimeSeconds: 0 }) && operations.updateOperation(first.id, { cycleTimeSeconds: 77.5 }), 'Zero cycle time is accepted for warning-based analysis');
 assert(!operations.updateOperation(first.id, { sequence: 1.5 }), 'Non-integer sequence is rejected');
 assert(first.cycleTimeSeconds === 77.5 && first.sequence === 10, 'Rejected updates do not corrupt state');
 
@@ -40,8 +41,8 @@ validation = validateOperations(operations.getOperations(), (id) => resources.ge
 assert(validation.warnings === 1 && validation.errors === 0, 'Normalization clears duplicate warnings');
 
 const invalidValidation = validateOperations([{ ...first, name: '', sequence: 0, cycleTimeSeconds: 0, assignedResourceId: 'RES-9999', visible: false }], () => undefined);
-assert(invalidValidation.errors === 4, 'Invalid operation fields and broken assignments are deterministic errors');
-assert(invalidValidation.warnings === 1, 'Hidden operations are reported as a deterministic warning');
+assert(invalidValidation.errors === 3, 'Invalid operation fields and broken assignments are deterministic errors');
+assert(invalidValidation.warnings === 2, 'Zero-time and hidden operations are deterministic warnings');
 
 selection.setWorkspace('factoryLayout'); resources.selectResource(resource.id); assert(resources.deleteSelected() === 'deleted', 'Assigned resource can be deleted'); operations.handleResourceChange(resource.id, true);
 assert(first.assignedResourceId === null, 'Deleting a resource safely clears operation assignment');

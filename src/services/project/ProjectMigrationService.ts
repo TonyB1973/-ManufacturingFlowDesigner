@@ -10,6 +10,7 @@ export class ProjectMigrationService {
     this.register('1.1.0', '1.2.0', migrateFactoryStructure);
     this.register('1.2.0', '1.3.0', migrateFactoryRoutes);
     this.register('1.3.0', '1.4.0', migrateFactoryAnnotations);
+    this.register('1.4.0', '1.5.0', migrateStandardWork);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -39,6 +40,19 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateStandardWork(document: Record<string, unknown>): Record<string, unknown> {
+  const timingCategory = (candidate: Record<string, unknown>): 'manual' | 'automatic' | 'walking' | 'waiting' => {
+    const templateId = String(candidate.templateId ?? candidate.id ?? ''); const operationType = String(candidate.operationType ?? '');
+    if (templateId === 'op-machine' || templateId === 'op-test' || operationType === 'Machining') return 'automatic';
+    if (templateId === 'op-move' || operationType === 'Material Handling') return 'walking';
+    if (templateId === 'op-store' || operationType === 'Storage') return 'waiting';
+    return 'manual';
+  };
+  const migrateValues = (value: unknown): unknown => Array.isArray(value) ? value.map((candidate) => isRecord(candidate) ? { ...candidate, timingCategory: timingCategory(candidate) } : candidate) : value;
+  const settings = isRecord(document.settings) ? document.settings : {};
+  return { ...document, applicationVersion: '0.7.0', operationTemplates: migrateValues(document.operationTemplates), operations: migrateValues(document.operations), standardWorkStudies: [], standardWorkEntries: [], settings: { ...settings, standardWork: { timeFormat: 'seconds' } } };
 }
 
 function migrateFactoryAnnotations(document: Record<string, unknown>): Record<string, unknown> {

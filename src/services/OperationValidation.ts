@@ -30,7 +30,9 @@ export function validateOperations(
     sequenceCounts.set(operation.sequence, (sequenceCounts.get(operation.sequence) ?? 0) + 1);
     if (operation.name.trim().length === 0) issues.push(issue(operation.id, 'error', 'empty-name', 'Operation name is required.'));
     if (!Number.isInteger(operation.sequence) || operation.sequence <= 0) issues.push(issue(operation.id, 'error', 'invalid-sequence', 'Sequence must be a positive integer.'));
-    if (!Number.isFinite(operation.cycleTimeSeconds) || operation.cycleTimeSeconds <= 0) issues.push(issue(operation.id, 'error', 'invalid-cycle-time', 'Cycle time must be greater than zero.'));
+    if (!Number.isFinite(operation.cycleTimeSeconds) || operation.cycleTimeSeconds < 0) issues.push(issue(operation.id, 'error', 'invalid-cycle-time', 'Cycle time must be zero or greater.'));
+    else if (operation.cycleTimeSeconds === 0) issues.push(issue(operation.id, 'warning', 'zero-cycle-time', 'Cycle time is zero.'));
+    if (!['manual', 'automatic', 'walking', 'waiting'].includes(operation.timingCategory)) issues.push(issue(operation.id, 'error', 'invalid-timing-category', 'Timing category is not recognised.'));
     if (!operation.assignedResourceId) issues.push(issue(operation.id, 'warning', 'unassigned-resource', 'No resource is assigned.'));
     else if (!isValidPhysicalResourceId(operation.assignedResourceId)) issues.push(issue(operation.id, 'error', isTemplateId(operation.assignedResourceId) ? 'template-assignment' : 'invalid-resource-id', isTemplateId(operation.assignedResourceId) ? 'A Resource Template cannot be assigned to an operation.' : 'Assigned physical resource ID is invalid.'));
     else { const resource = getResource(operation.assignedResourceId); if (!resource) issues.push(issue(operation.id, 'error', 'missing-resource', 'Assigned physical resource no longer exists.')); else if (resource.layoutId !== DEFAULT_FACTORY_LAYOUT_ID) issues.push(issue(operation.id, 'error', 'resource-outside-layout', 'Assigned resource is outside Factory Layout.')); else if (!resource.active) issues.push(issue(operation.id, 'warning', 'inactive-resource', 'Assigned physical resource is inactive.')); }

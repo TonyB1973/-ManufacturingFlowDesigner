@@ -40,10 +40,11 @@ export interface WorkspaceOptions {
   readonly geometrySelection: GeometrySelectionService;
   readonly geometryEditing: GeometryEditingService;
   readonly geometryCommands: GeometryCommandFactory;
+  readonly standardWorkPanel: HTMLElement;
 }
 
 export function createWorkspace(options: WorkspaceOptions): CanvasViewportController {
-  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.annotationStore, options.annotationResolver, options.projectSession, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.annotationCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, {
+  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.annotationStore, options.annotationResolver, options.projectSession, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.annotationCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, options.standardWorkPanel, {
     onZoomChange: options.statusBar.setZoom,
     onGridVisibilityChange: options.statusBar.setGridVisible,
     onCoordinatesChange: options.statusBar.setCoordinates,
@@ -51,7 +52,7 @@ export function createWorkspace(options: WorkspaceOptions): CanvasViewportContro
     onStatusChange: options.statusBar.setMessage,
     onSnapChange: options.statusBar.setSnapEnabled,
     onToolChange: options.statusBar.setActiveTool,
-    onWorkspaceChange: (workspace) => options.statusBar.setWorkspace(workspace === 'processFlow' ? 'Process Flow' : 'Factory Layout'),
+    onWorkspaceChange: (workspace) => options.statusBar.setWorkspace(workspace === 'processFlow' ? 'Process Flow' : workspace === 'factoryLayout' ? 'Factory Layout' : 'Standard Work'),
     requestResourceDeletion: options.requestResourceDeletion,
   });
 }

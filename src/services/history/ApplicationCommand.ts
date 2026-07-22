@@ -7,6 +7,8 @@ import type { ProjectSessionService } from '../project/ProjectSessionService';
 import type { FactoryStructureStore } from '../FactoryStructureStore';
 import type { FactoryRouteStore } from '../FactoryRouteStore';
 import type { FactoryAnnotationStore } from '../FactoryAnnotationStore';
+import type { StandardWorkStore } from '../StandardWorkStore';
+import type { StandardWorkSelectionStore } from '../standardWork/StandardWorkSelectionStore';
 
 export interface CommandExecutionContext {
   readonly resources: ResourceStore;
@@ -15,6 +17,8 @@ export interface CommandExecutionContext {
   readonly structure: FactoryStructureStore;
   readonly routes: FactoryRouteStore;
   readonly annotations: FactoryAnnotationStore;
+  readonly standardWork: StandardWorkStore;
+  readonly standardWorkSelection: StandardWorkSelectionStore;
   readonly project: ProjectSessionService;
   readonly selection: SelectionController;
 }

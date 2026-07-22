@@ -50,7 +50,7 @@ export class OperationRenderer {
     node.detail.setAttribute('x', String(x + 12)); node.detail.setAttribute('y', String(y + 63)); fit(node.detail, operation.operationType, operation.width - 24, 10);
     const assigned = operation.assignedResourceId ? this.resources.getResource(operation.assignedResourceId)?.name ?? 'Missing resource' : 'Unassigned';
     node.assignment.setAttribute('x', String(x + 12)); node.assignment.setAttribute('y', String(-y - 10)); fit(node.assignment, `Resource: ${assigned}`, operation.width - 88, 9);
-    node.timing.setAttribute('x', String(-x - 10)); node.timing.setAttribute('y', String(-y - 10)); node.timing.textContent = operation.timingCategory === 'Value Added' ? 'VA' : operation.timingCategory === 'Non-Value Added' ? 'NVA' : 'RNVA';
+    node.timing.setAttribute('x', String(-x - 10)); node.timing.setAttribute('y', String(-y - 10)); node.timing.textContent = ({ manual: 'MAN', automatic: 'AUTO', walking: 'WALK', waiting: 'WAIT' })[operation.timingCategory];
     const issues = validateOperations(this.store.getOperations(), (id) => this.resources.getResource(id), (id) => Boolean(this.resources.getTemplate(id))).issues.filter((issue) => issue.operationId === operation.id);
     node.warning.setAttribute('x', String(x + 55)); node.warning.setAttribute('y', String(y + 18)); node.warning.setAttribute('display', issues.length ? 'inline' : 'none'); node.warning.setAttribute('aria-label', issues.map((issue) => issue.message).join(' '));
     node.lock.setAttribute('x', String(-x - 54)); node.lock.setAttribute('y', String(y - 6)); node.lock.setAttribute('display', operation.locked ? 'inline' : 'none');

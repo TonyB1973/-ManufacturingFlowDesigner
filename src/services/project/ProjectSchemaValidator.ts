@@ -18,8 +18,9 @@ import { validateOrthogonalPolygon, validateOrthogonalPolyline } from '../geomet
 import { FACTORY_ROUTE_ANCHOR_SIDES, FACTORY_ROUTE_DIRECTIONS, FACTORY_ROUTE_TYPES, type FactoryRoute, type FactoryRouteEndpoint } from '../../models/factory/FactoryRoute';
 import { FACTORY_ANNOTATION_LAYERS, LEADER_ARROW_STYLES, LINEAR_DIMENSION_KINDS, RECTANGLE_ANNOTATION_FEATURES, type AnnotationAnchor, type FactoryAnnotation } from '../../models/factory/FactoryAnnotation';
 import { LENGTH_UNITS } from '../units/LengthUnitService';
+import { STANDARD_WORK_LIMITS, STANDARD_WORK_TIME_FORMATS, isValidStandardWorkEntry, isValidStandardWorkStudy, type StandardWorkEntry, type StandardWorkStudy } from '../../models/standardWork/StandardWork';
 
-const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
+const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, studies: 10000, standardWorkEntries: 500000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const ANCHOR_SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const CONNECTION_TYPES = new Set(['Standard', 'Rework', 'Alternate', 'Information']);
@@ -27,7 +28,7 @@ const RESOURCE_CATEGORIES = new Set(['Machines', 'Manual Process', 'Quality', 'P
 const RESOURCE_TYPES = new Set(['CNC Machine', 'Manual Workstation', 'Inspection', 'Load / Unload', 'Operator', 'Walking', 'Material Buffer', 'Tooling', 'Document', 'Generic Equipment']);
 const RESOURCE_ICONS = new Set(['cnc', 'workstation', 'inspection', 'handling', 'operator', 'walking', 'buffer', 'tooling', 'document', 'equipment']);
 const OPERATION_TYPES = new Set(['Machining', 'Fabrication', 'Assembly', 'Inspection', 'Material Handling', 'Finishing', 'Packaging', 'Maintenance', 'Storage', 'Administrative']);
-const TIMING_CATEGORIES = new Set(['Value Added', 'Non-Value Added', 'Required Non-Value Added']);
+const TIMING_CATEGORIES = new Set(['manual', 'automatic', 'walking', 'waiting']);
 const OPERATION_CATEGORIES = new Set(['Production', 'Quality', 'Logistics', 'Support', 'Finishing', 'Assembly', 'Material Flow', 'Storage', 'Planning']);
 const CLEARANCE_CATEGORIES = new Set(['operational', 'maintenance', 'safety', 'loading', 'access', 'general']);
 
@@ -59,6 +60,8 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const aisles = aisleValues(root.aisles, issues);
   const factoryRoutes = factoryRouteValues(root.factoryRoutes, issues);
   const factoryAnnotations = factoryAnnotationValues(root.factoryAnnotations, issues);
+  const standardWorkStudies = standardWorkStudyValues(root.standardWorkStudies, issues);
+  const standardWorkEntries = standardWorkEntryValues(root.standardWorkEntries, issues);
   const workspaces = workspaceValues(root.workspaces, issues);
   const settings = settingsValue(root.settings, issues);
 
@@ -68,13 +71,15 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   uniqueIds('operation', operations, issues);
   uniqueIds('connection', connections, issues);
   uniqueIds('boundary', layoutBoundaries, issues); uniqueIds('wall', walls, issues); uniqueIds('area', areas, issues); uniqueIds('aisle', aisles, issues); uniqueIds('factory route', factoryRoutes, issues); uniqueIds('factory annotation', factoryAnnotations, issues);
+  uniqueIds('Standard Work study', standardWorkStudies, issues); uniqueIds('Standard Work entry', standardWorkEntries, issues);
   if (layoutBoundaries.filter((item) => item.layoutId === DEFAULT_FACTORY_LAYOUT_ID).length > 1) issues.push('Only one active factory boundary is allowed per layout.');
   const entityIds = new Set<string>();
-  [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles, ...factoryRoutes, ...factoryAnnotations].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
+  [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles, ...factoryRoutes, ...factoryAnnotations, ...standardWorkStudies, ...standardWorkEntries].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
   const resourceTemplateIds = new Set(resourceTemplates.map((item) => item.id));
   const operationTemplateIds = new Set(operationTemplates.map((item) => item.id));
   const resourceIds = new Set(resources.map((item) => item.id));
   const operationIds = new Set(operations.map((item) => item.id));
+  const studyIds = new Set(standardWorkStudies.map((item) => item.id));
   const areaIds = new Set(areas.map((item) => item.id));
   const boundaryIds = new Set(layoutBoundaries.map((item) => item.id)); const wallIds = new Set(walls.map((item) => item.id)); const aisleIds = new Set(aisles.map((item) => item.id)); const routeIds = new Set(factoryRoutes.map((item) => item.id));
   resources.forEach((item) => { if (!resourceTemplateIds.has(item.templateId)) issues.push(`Resource ${item.id} references missing template ${item.templateId}.`); });
@@ -92,6 +97,9 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
       standardPairs.add(pair);
     }
   });
+  const standardWorkPairs = new Set<string>(); const standardWorkCounts = new Map<string, number>();
+  standardWorkEntries.forEach((entry) => { if (!studyIds.has(entry.studyId)) issues.push(`Standard Work entry ${entry.id} references missing study ${entry.studyId}.`); if (!operationIds.has(entry.operationId)) issues.push(`Standard Work entry ${entry.id} references missing operation ${entry.operationId}.`); const pair = `${entry.studyId}\u0000${entry.operationId}`; if (standardWorkPairs.has(pair)) issues.push(`Standard Work study ${entry.studyId} contains duplicate operation ${entry.operationId}.`); standardWorkPairs.add(pair); standardWorkCounts.set(entry.studyId, (standardWorkCounts.get(entry.studyId) ?? 0) + 1); });
+  standardWorkCounts.forEach((count, studyId) => { if (count > STANDARD_WORK_LIMITS.entriesPerStudy) issues.push(`Standard Work study ${studyId} exceeds ${STANDARD_WORK_LIMITS.entriesPerStudy} entries.`); });
   factoryRoutes.forEach((route) => {
     for (const endpoint of [route.source, route.target]) {
       if (endpoint.kind === 'resource' && !resourceIds.has(endpoint.resourceId)) issues.push(`FactoryRoute ${route.id} references missing physical resource ${endpoint.resourceId}.`);
@@ -115,7 +123,7 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   if (issues.length) throw new ProjectValidationError(issues);
   return {
     format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: root.applicationVersion as string,
-    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations,
+    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations, standardWorkStudies, standardWorkEntries,
     workspaces: workspaces!, settings: settings!,
   };
 }
@@ -172,7 +180,7 @@ function resourceValues(value: unknown, issues: string[]): Omit<ResourceInstance
 function operationValues(value: unknown, issues: string[]): Omit<OperationInstance, 'selected'>[] {
   return arrayValue(value, 'operations', LIMITS.operations, issues).flatMap((raw, index) => {
     const item = record(raw, `operations[${index}]`, issues); if (!item) return [];
-    if (!nonEmpty(item.id) || !nonEmpty(item.templateId) || !nonEmpty(item.name) || !OPERATION_TYPES.has(String(item.operationType)) || !TIMING_CATEGORIES.has(String(item.timingCategory)) || !positive(item.cycleTimeSeconds) || !Number.isInteger(item.sequence) || (item.sequence as number) <= 0 || !(item.assignedResourceId === null || nonEmpty(item.assignedResourceId)) || !boundedString(item.notes) || !finite(item.worldX) || !finite(item.worldY) || !finite(item.width) || item.width < 150 || !finite(item.height) || item.height < 82 || !bool(item.visible) || !bool(item.locked)) issues.push(`operations[${index}] has invalid fields.`);
+    if (!nonEmpty(item.id) || !nonEmpty(item.templateId) || !nonEmpty(item.name) || !OPERATION_TYPES.has(String(item.operationType)) || !TIMING_CATEGORIES.has(String(item.timingCategory)) || !finite(item.cycleTimeSeconds) || item.cycleTimeSeconds < 0 || !Number.isInteger(item.sequence) || (item.sequence as number) <= 0 || !(item.assignedResourceId === null || nonEmpty(item.assignedResourceId)) || !boundedString(item.notes) || !finite(item.worldX) || !finite(item.worldY) || !finite(item.width) || item.width < 150 || !finite(item.height) || item.height < 82 || !bool(item.visible) || !bool(item.locked)) issues.push(`operations[${index}] has invalid fields.`);
     return [item as unknown as Omit<OperationInstance, 'selected'>];
   });
 }
@@ -253,6 +261,12 @@ function factoryAnnotationValues(value: unknown, issues: string[]): FactoryAnnot
   });
   if (leaderPoints > LIMITS.leaderPoints) issues.push(`Total leader points exceed the safety limit of ${LIMITS.leaderPoints}.`); return result;
 }
+function standardWorkStudyValues(value: unknown, issues: string[]): StandardWorkStudy[] {
+  return arrayValue(value, 'standardWorkStudies', LIMITS.studies, issues).flatMap((raw, index) => { const item = record(raw, `standardWorkStudies[${index}]`, issues); if (!item) return []; const study = item as unknown as StandardWorkStudy; if (!isValidStandardWorkStudy(study)) issues.push(`standardWorkStudies[${index}] has invalid fields.`); return [study]; });
+}
+function standardWorkEntryValues(value: unknown, issues: string[]): StandardWorkEntry[] {
+  return arrayValue(value, 'standardWorkEntries', LIMITS.standardWorkEntries, issues).flatMap((raw, index) => { const item = record(raw, `standardWorkEntries[${index}]`, issues); if (!item) return []; const entry = item as unknown as StandardWorkEntry; if (!isValidStandardWorkEntry(entry)) issues.push(`standardWorkEntries[${index}] has invalid fields.`); return [entry]; });
+}
 function anchorValue(value: unknown): ProcessConnection['sourceAnchor'] | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
@@ -262,7 +276,7 @@ function workspaceValues(value: unknown, issues: string[]): PersistedWorkspaces 
   const item = record(value, 'workspaces', issues); if (!item) return null;
   const processFlow = viewportValue(item.processFlow); const factoryLayout = viewportValue(item.factoryLayout);
   const active = item.active === undefined ? 'processFlow' : item.active;
-  if (active !== 'processFlow' && active !== 'factoryLayout') issues.push('workspaces.active is invalid.');
+  if (active !== 'processFlow' && active !== 'factoryLayout' && active !== 'standardWork') issues.push('workspaces.active is invalid.');
   if (!processFlow || !factoryLayout) issues.push('Workspace viewport state is invalid.');
   return processFlow && factoryLayout ? { active: active as PersistedWorkspaces['active'], processFlow, factoryLayout } : null;
 }
@@ -280,7 +294,8 @@ function settingsValue(value: unknown, issues: string[]): ProjectSettings | null
   const item = record(value, 'settings', issues); if (!item) return null;
   const units = record(item.units, 'settings.units', issues);
   const validUnits = units && LENGTH_UNITS.includes(units.modelLengthUnit as never) && LENGTH_UNITS.includes(units.displayLengthUnit as never) && Number.isInteger(units.displayPrecision) && Number(units.displayPrecision) >= 0 && Number(units.displayPrecision) <= 6 && bool(units.showTrailingZeros);
-  if (!positive(item.gridBaseInterval) || !finite(item.routingClearance) || item.routingClearance < 0 || item.unitSystem !== 'metric' || !finite(item.displayPrecision) || !Number.isInteger(item.displayPrecision) || item.displayPrecision < 0 || item.displayPrecision > 6 || !validUnits || !positive(item.dimensionTextScale) || !positive(item.annotationTextSize) || !positive(item.defaultDimensionOffset) || !FACTORY_ANNOTATION_LAYERS.includes(item.defaultDimensionLayer as never)) issues.push('settings has invalid fields.');
+  const standardWork = record(item.standardWork, 'settings.standardWork', issues); const validStandardWork = standardWork && STANDARD_WORK_TIME_FORMATS.includes(standardWork.timeFormat as never);
+  if (!positive(item.gridBaseInterval) || !finite(item.routingClearance) || item.routingClearance < 0 || item.unitSystem !== 'metric' || !finite(item.displayPrecision) || !Number.isInteger(item.displayPrecision) || item.displayPrecision < 0 || item.displayPrecision > 6 || !validUnits || !validStandardWork || !positive(item.dimensionTextScale) || !positive(item.annotationTextSize) || !positive(item.defaultDimensionOffset) || !FACTORY_ANNOTATION_LAYERS.includes(item.defaultDimensionLayer as never)) issues.push('settings has invalid fields.');
   return item as unknown as ProjectSettings;
 }
 function uniqueIds(label: string, items: readonly { readonly id: string }[], issues: string[]): void {
@@ -290,7 +305,7 @@ function scanSafety(value: unknown, issues: string[]): void {
   const queue: { value: unknown; depth: number }[] = [{ value, depth: 0 }]; let count = 0;
   while (queue.length) {
     const current = queue.pop()!; count += 1;
-    if (count > 200000) { issues.push('Project contains too many nested values.'); return; }
+    if (count > 2000000) { issues.push('Project contains too many nested values.'); return; }
     if (current.depth > 30) { issues.push('Project nesting exceeds the safety limit.'); return; }
     if (!current.value || typeof current.value !== 'object') continue;
     for (const key of Object.keys(current.value)) {
