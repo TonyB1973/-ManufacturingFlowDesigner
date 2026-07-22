@@ -41,4 +41,8 @@
 39. Keep geometry calculations, transient SVG overlays, pointer interactions, and reversible model commands separate. Selection bounds, resize handles, guide caches, and gesture state are never persisted or added to history.
 40. Explicit alignment, distribution, equal-gap, and sizing results are mathematically exact and must not receive a second grid-snap pass. During pointer gestures, alignment-guide snap has priority over grid snap, and Alt bypasses both.
 41. Locked selected objects may contribute to displayed selection bounds but are skipped by geometry mutations. Hidden and inactive-workspace objects are never eligible.
+42. Factory Layout resource `worldX` and `worldY` are the centre of its physical footprint; use `width` and `depth` for physical dimensions and reserve operation `height` for Process Flow cards.
+43. Normalize persisted resource rotation to `[0, 360)`. Rotation, clearance, and footprint edits are Factory Layout-only, respect locks, and are reversible commands; cancelled gestures restore without history.
+44. Clearance belongs to each Resource Instance, rotates with its footprint, is deeply cloned, and remains distinct from the physical footprint in validation and summaries.
+45. Derive footprint and clearance overlap with rotated-polygon geometry, AABB broad phase, positive-penetration tolerance, and one result per unordered pair. Hidden resources are excluded and inactive footprint overlap is not a hard error.
 

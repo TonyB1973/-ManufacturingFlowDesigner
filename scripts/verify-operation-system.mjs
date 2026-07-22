@@ -15,7 +15,7 @@ assert(OPERATION_TEMPLATES.length === 12, 'Starter operation library is complete
 assert(new Set(OPERATION_TEMPLATES.map((template) => template.operationType)).size === 10, 'Operation library covers ten manufacturing types');
 const ids = new OperationIdGenerator(); assert(ids.next() === 'operation-0001', 'First operation ID is deterministic'); assert(ids.next() === 'operation-0002', 'Operation IDs are sequential');
 
-const resourceTemplate = { id: 'resource-test', name: 'Test Cell', description: 'Test', category: 'Machines', resourceType: 'CNC Machine', icon: 'cnc', defaultWidth: 180, defaultHeight: 80, tags: [], isFavourite: false };
+const resourceTemplate = { id: 'resource-test', name: 'Test Cell', description: 'Test', category: 'Machines', resourceType: 'CNC Machine', icon: 'cnc', defaultWidth: 180, defaultDepth: 80, tags: [], isFavourite: false };
 const selection = new SelectionStore();
 const resources = new ResourceStore([resourceTemplate], new ResourceIdGenerator(), selection);
 const operations = new OperationStore(OPERATION_TEMPLATES, new OperationIdGenerator(), selection);

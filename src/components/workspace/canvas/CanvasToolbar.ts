@@ -1,7 +1,7 @@
 import type { CanvasTool } from '../../../models/canvas/CanvasState';
 import { actionButton, element } from '../../../ui/dom';
 
-export type CanvasToolbarCommand = 'select' | 'pan' | 'connect' | 'delete-link' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'grid' | 'origin' | 'snap' | 'copy' | 'paste' | 'duplicate' | 'delete-selection' | 'clear-selection' | 'focus';
+export type CanvasToolbarCommand = 'select' | 'pan' | 'connect' | 'delete-link' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'toggle-clearance' | 'grid' | 'origin' | 'snap' | 'copy' | 'paste' | 'duplicate' | 'delete-selection' | 'clear-selection' | 'focus';
 
 export interface CanvasToolbarController {
   readonly element: HTMLElement;
@@ -12,6 +12,8 @@ export interface CanvasToolbarController {
   setSnapEnabled(enabled: boolean): void;
   setFocusMode(active: boolean): void;
   setConnectionToolsEnabled(enabled: boolean): void;
+  setFactoryToolsEnabled(enabled: boolean): void;
+  setClearanceVisible(visible: boolean): void;
 }
 
 interface CommandDefinition {
@@ -29,7 +31,8 @@ const COMMANDS: readonly CommandDefinition[] = [
   { command: 'zoom-in', label: '+', title: 'Zoom in (+)' },
   { command: 'zoom-out', label: '−', title: 'Zoom out (-)' },
   { command: 'actual-size', label: '100%', title: 'Reset zoom to 100% (0)' },
-  { command: 'fit', label: 'Fit', title: 'Fit origin in viewport (F)' },
+  { command: 'fit', label: 'Fit', title: 'Fit visible engineering geometry (F)' },
+  { command: 'toggle-clearance', label: 'Clearance', title: 'Show or hide factory clearance envelopes', toggle: true },
   { command: 'grid', label: 'Grid', title: 'Toggle engineering grid', toggle: true },
   { command: 'origin', label: 'Origin', title: 'Toggle origin and axes', toggle: true },
   { command: 'snap', label: 'Snap', title: 'Toggle Snap to Grid', toggle: true },
@@ -86,6 +89,8 @@ export function createCanvasToolbar(onCommand: (command: CanvasToolbarCommand) =
         if (button) button.disabled = !enabled;
       }
     },
+    setFactoryToolsEnabled: (enabled) => { const button = buttons.get('toggle-clearance'); if (button) button.disabled = !enabled; },
+    setClearanceVisible: (visible) => setPressed('toggle-clearance', visible),
     setFocusMode: (active) => {
       setPressed('focus', active);
       const button = buttons.get('focus');

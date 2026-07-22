@@ -13,12 +13,12 @@ import type { SelectionItem } from '../../models/selection/Selection';
 type MetadataPatch = Partial<Pick<ProjectMetadata, 'name' | 'description' | 'author' | 'company'>>;
 export interface PositionChange { readonly id: string; readonly before: { readonly x: number; readonly y: number }; readonly after: { readonly x: number; readonly y: number }; }
 
-const cloneResource = (resource: PlacedResource): PlacedResource => ({ ...resource, selected: false });
+const cloneResource = (resource: PlacedResource): PlacedResource => ({ ...resource, clearance: { ...resource.clearance }, selected: false });
 const cloneOperation = (operation: OperationInstance): OperationInstance => ({ ...operation, selected: false });
 const cloneConnection = (connection: ProcessConnection): ProcessConnection => ({ ...connection, sourceAnchor: { ...connection.sourceAnchor }, targetAnchor: { ...connection.targetAnchor }, routePoints: connection.routePoints.map((point) => ({ ...point })), selected: false });
-const same = (left: unknown, right: unknown): boolean => Object.is(left, right);
+const same = (left: unknown, right: unknown): boolean => Object.is(left, right) || (typeof left === 'object' && left !== null && typeof right === 'object' && right !== null && JSON.stringify(left) === JSON.stringify(right));
 const changedPatch = <T extends object>(source: T, patch: Partial<T>): Partial<T> => Object.fromEntries(Object.entries(patch).filter(([key, value]) => !same(source[key as keyof T], value))) as Partial<T>;
-const beforePatch = <T extends object>(source: T, patch: Partial<T>): Partial<T> => Object.fromEntries(Object.keys(patch).map((key) => [key, source[key as keyof T]])) as Partial<T>;
+const beforePatch = <T extends object>(source: T, patch: Partial<T>): Partial<T> => Object.fromEntries(Object.keys(patch).map((key) => { const value = source[key as keyof T]; return [key, typeof value === 'object' && value !== null ? { ...value } : value]; })) as Partial<T>;
 
 export class CommandFactory {
   public constructor(private readonly history: CommandHistoryService, private readonly context: CommandExecutionContext) {}
@@ -68,6 +68,13 @@ export class CommandFactory {
     return this.run(new ReversibleCommand(`Move resource ${resourceId}`, [resourceId], 'factoryLayout',
       ({ resources }) => { if (!resources.moveResource(resourceId, after.x, after.y)) throw new Error('Resource move was rejected.'); },
       ({ resources }) => { if (!resources.moveResource(resourceId, before.x, before.y)) throw new Error('Resource move could not be undone.'); }));
+  }
+
+  public commitResourceRotation(resourceId: string, before: number, after: number): boolean {
+    if (same(before, after)) return false;
+    return this.run(new ReversibleCommand(`Rotate resource ${resourceId}`, [resourceId], 'factoryLayout',
+      ({ resources }) => { if (!resources.updateResource(resourceId, { rotationDegrees: after })) throw new Error('Resource rotation was rejected.'); },
+      ({ resources }) => { if (!resources.updateResource(resourceId, { rotationDegrees: before })) throw new Error('Resource rotation could not be undone.'); }));
   }
 
   public commitResourceGroupMove(changes: readonly PositionChange[]): boolean {
@@ -203,7 +210,7 @@ export class CommandFactory {
 
   private run(command: ReversibleCommand): boolean { try { return this.history.execute(command); } catch { return false; } }
   private resourceDescription(id: string, patch: PlacedResourcePatch): string {
-    if (patch.name !== undefined) return `Rename resource ${id}`; if (patch.worldX !== undefined || patch.worldY !== undefined) return `Move resource ${id}`; if (patch.width !== undefined || patch.height !== undefined) return `Resize resource ${id}`; if (patch.capacity !== undefined) return `Change capacity for ${id}`; if (patch.rotationDegrees !== undefined) return `Rotate resource ${id}`; if (patch.active !== undefined) return `${patch.active ? 'Activate' : 'Deactivate'} resource ${id}`; if (patch.visible !== undefined) return `${patch.visible ? 'Show' : 'Hide'} resource ${id}`; if (patch.locked !== undefined) return `${patch.locked ? 'Lock' : 'Unlock'} resource ${id}`; return `Edit resource ${id}`;
+    if (patch.name !== undefined) return `Rename resource ${id}`; if (patch.worldX !== undefined || patch.worldY !== undefined) return `Move resource ${id}`; if (patch.width !== undefined || patch.depth !== undefined) return `Resize resource ${id}`; if (patch.clearance !== undefined) return `Edit clearance for ${id}`; if (patch.capacity !== undefined) return `Change capacity for ${id}`; if (patch.rotationDegrees !== undefined) return `Rotate resource ${id}`; if (patch.active !== undefined) return `${patch.active ? 'Activate' : 'Deactivate'} resource ${id}`; if (patch.visible !== undefined) return `${patch.visible ? 'Show' : 'Hide'} resource ${id}`; if (patch.locked !== undefined) return `${patch.locked ? 'Lock' : 'Unlock'} resource ${id}`; return `Edit resource ${id}`;
   }
   private operationDescription(operation: OperationInstance, patch: OperationInstancePatch): string {
     const label = `OP-${String(operation.sequence).padStart(4, '0')}`; if (patch.name !== undefined) return `Rename operation ${label}`; if (patch.worldX !== undefined || patch.worldY !== undefined) return `Move operation ${label}`; if (patch.width !== undefined || patch.height !== undefined) return `Resize operation ${label}`; if (patch.assignedResourceId !== undefined) return patch.assignedResourceId ? `Assign ${label} to ${patch.assignedResourceId}` : `Unassign ${label}`; if (patch.cycleTimeSeconds !== undefined) return `Change cycle time for ${label}`; if (patch.sequence !== undefined) return `Change sequence for ${label}`; if (patch.operationType !== undefined) return `Change operation type for ${label}`; if (patch.timingCategory !== undefined) return `Change timing category for ${label}`; if (patch.notes !== undefined) return `Edit notes for ${label}`; if (patch.locked !== undefined) return `${patch.locked ? 'Lock' : 'Unlock'} operation ${label}`; if (patch.visible !== undefined) return `${patch.visible ? 'Show' : 'Hide'} operation ${label}`; return `Edit operation ${label}`;

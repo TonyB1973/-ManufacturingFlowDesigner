@@ -2,6 +2,18 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 2.5 scope
+
+Sprint 2.5 turns Factory Layout resources into engineering footprints. Every Resource Instance has centre-based `worldX`/`worldY` coordinates, physical width and depth, normalized rotation, and an independently owned optional clearance envelope with left, right, top, and bottom distances, category, and note.
+
+Select one unlocked Factory Layout resource to use the pointer rotation handle. Rotation snaps to 5° by default, 15° with `Shift`, and is free with `Alt`; Escape restores the starting angle without adding history. The `[` and `]` shortcuts rotate by 5°, `Shift` changes the step to 15°, and `Ctrl`/`Command` changes it to 90°. Properties and the Resources ribbon also provide exact values, ±90°, reset, equal clearance, clear, and common presets. Locked resources cannot move, resize, rotate, or change clearance. For reliability, on-canvas resize handles are available at 0°; Properties can resize a resource at any rotation.
+
+Clearance envelopes render behind physical footprints and can be hidden without changing project data. Fit View includes enabled clearance in Factory Layout; Fit Layout uses physical footprints only, while Fit Including Clearance is explicit. Rotated footprints use polygon geometry with AABB broad-phase filtering. Positive physical penetration between visible active resources is an error; touching edges are allowed. Clearance-to-footprint and clearance-to-clearance intersections are separate warnings. Hidden resources are excluded, and inactive resources do not create hard footprint errors.
+
+The Inspector, validation list, canvas markers, accessible descriptions, Project Explorer, and selection summaries expose footprint dimensions, rotation, clearance, related resources, layout extents, active footprint area, and overlap counts. Process Flow operations and connections retain their previous model and never expose these Factory Layout tools.
+
+The `.mflow` schema is `1.1.0`. Opening schema `1.0.0` explicitly migrates resource `height` to `depth`, preserves operation `height`, supplies missing rotation and clearance defaults, and leaves identifiers, positions, assignments, connections, and independent workspace viewports intact. Migrated projects open clean.
+
 ## Sprint 2.4 scope
 
 Sprint 2.4 adds professional canvas geometry editing to the workspace-aware multi-selection foundation. The Arrange ribbon and eligible multi-selection menus provide left, horizontal-centre, right, top, vertical-centre, and bottom alignment; horizontal and vertical centre distribution; equal horizontal and vertical gaps; and Match Width, Match Height, and Match Size.
@@ -70,8 +82,8 @@ Manufacturing Flow Designer project files use:
 - extension: `.mflow`
 - media type: `application/vnd.manufacturing-flow-designer+json`
 - format identifier: `ManufacturingFlowDesigner`
-- current schema: `1.0.0`
-- current application version: `0.2.0`
+- current schema: `1.1.0`
+- current application version: `0.3.0`
 
 The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, Process Flow operations and connections, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
 
@@ -122,6 +134,7 @@ npm run test:persistence
 npm run test:history
 npm run test:editing
 npm run test:canvas
+npm run test:factory
 npm run build
 git diff --check
 ```
@@ -142,16 +155,17 @@ git diff --check
 - `ArrangementService`, `GeometryBounds`, and `ResizeGeometry` contain deterministic, testable geometry calculations.
 - `GeometryCommandFactory` commits complete multi-object geometry changes as one reversible action.
 - `AlignmentGuideService`, `AlignmentGuideController`, `SelectionOverlayRenderer`, and `ResizeInteractionController` isolate transient canvas guidance and pointer interaction from the domain model.
+- `FactoryFootprintGeometry` owns rotated corners, AABBs, point rotation, clearance envelopes, and SAT intersection; `FactoryLayoutValidation` derives engineering issues and summaries from resource state.
 - Domain stores remain the runtime authorities for resources, operations, connections, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, and [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, and [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis.
 
 ## Current limitations
 
 The candidate-based router is not a general maze solver, reverse-direction links can overlap, one default Factory Layout is available, and there is no persistent/collaborative history, autosave/recovery, cloud sync, scenario comparison, custom-template editor, walls/dimensions, concurrency simulation, or WPF history implementation yet. Browser download fallback cannot overwrite an existing file silently.
 
-Clipboard contents are session-only and cannot be exchanged with external applications. Multi-selection supports the current single Factory Layout. Nudge command coalescing, symmetric centre resize, keyboard resize, permanent grouping, rotation handles, rulers, dimensions, walls, manual waypoints, and cross-workspace conversion are not implemented.
+Clipboard contents are session-only and cannot be exchanged with external applications. Multi-selection supports the current single Factory Layout. Nudge command coalescing, symmetric centre resize, keyboard resize, arbitrary-angle on-canvas resize, permanent grouping, rulers, manual waypoints, and cross-workspace conversion are not implemented.
 
-Sprint 2.5 is planned to add Factory Layout engineering tools, physical dimensions, rotation, and clearance zones.
+Sprint 2.6 is planned to add Factory walls, areas, aisles and layout boundaries.
 
-Development for this sprint is performed on `feature/sprint-2.4-canvas-editing-tools`.
+Development for this sprint is performed on `feature/sprint-2.5-factory-layout-engineering`.

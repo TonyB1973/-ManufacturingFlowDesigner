@@ -3,7 +3,7 @@ import { RESOURCE_TEMPLATES } from '../../core/constants/resourceTemplates';
 import type { ProcessConnection } from '../../models/connections/ProcessConnection';
 import type { OperationInstance } from '../../models/operations/OperationInstance';
 import {
-  DEFAULT_PROJECT_SETTINGS, defaultViewport, type ProjectDocument, type ProjectMetadata, type ProjectSettings,
+  APPLICATION_VERSION, DEFAULT_PROJECT_SETTINGS, PROJECT_FORMAT, PROJECT_SCHEMA_VERSION, defaultViewport, type ProjectDocument, type ProjectMetadata, type ProjectSettings,
 } from '../../models/project/ProjectDocument';
 import type { ResourceInstance } from '../../models/resources/ResourceInstance';
 import type { SelectionController } from '../../models/selection/Selection';
@@ -80,7 +80,7 @@ export class ProjectSessionService {
   public newProject(now = new Date().toISOString()): void {
     const metadata = this.createMetadata(now);
     this.replace({
-      format: 'ManufacturingFlowDesigner', schemaVersion: '1.0.0', applicationVersion: '0.2.0', project: metadata,
+      format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: APPLICATION_VERSION, project: metadata,
       resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES,
       resources: [], operations: [], connections: [],
       workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
@@ -96,7 +96,7 @@ export class ProjectSessionService {
     this.loading = true;
     try {
       this.selection.clear();
-      const resources: ResourceInstance[] = document.resources.map((item) => ({ ...item, selected: false }));
+      const resources: ResourceInstance[] = document.resources.map((item) => ({ ...item, clearance: { ...item.clearance }, selected: false }));
       const operations: OperationInstance[] = document.operations.map((item) => ({ ...item, selected: false }));
       const connections: ProcessConnection[] = document.connections.map((item) => ({ ...item, sourceAnchor: { ...item.sourceAnchor }, targetAnchor: { ...item.targetAnchor }, routePoints: [], routeStatus: 'clear', selected: false }));
       this.metadata = { ...document.project };

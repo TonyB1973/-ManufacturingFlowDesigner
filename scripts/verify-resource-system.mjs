@@ -25,14 +25,14 @@ const template = {
   resourceType: 'CNC Machine',
   icon: 'cnc',
   defaultWidth: 180,
-  defaultHeight: 80,
+  defaultDepth: 80,
   tags: ['test'],
   isFavourite: false,
 };
 
 assert(RESOURCE_TEMPLATES.length === 13, 'Starter resource library remains complete');
 assert(RESOURCE_TEMPLATES.every((item) => item.defaultWidth === 180), 'Every starter resource has a usable default width');
-assert(RESOURCE_TEMPLATES.every((item) => item.defaultHeight === 80), 'Every starter resource has a usable default height');
+assert(RESOURCE_TEMPLATES.every((item) => item.defaultDepth === 80), 'Every starter resource has a usable default depth');
 
 const ids = new ResourceIdGenerator();
 assert(ids.next() === 'RES-0001', 'First resource ID is stable');
@@ -42,12 +42,14 @@ const store = new ResourceStore([template], new ResourceIdGenerator());
 const placed = store.addResource(template.id, 100, 60);
 assert(placed?.id === 'RES-0001', 'Placed resource receives a generated ID');
 assert(placed.layoutId === 'factory-layout-default' && placed.active && placed.capacity === 1 && placed.rotationDegrees === 0, 'Physical resource defaults are explicit');
+assert(placed.depth === 80 && !placed.clearance.enabled && placed.clearance.category === 'general', 'Footprint depth and clearance defaults are explicit');
 assert(store.getSelectedResourceId() === placed.id, 'Created resource becomes selected');
 
 assert(store.updateResource(placed.id, { locked: true }), 'Resource can be locked');
 assert(store.getAssignableResources().some((resource) => resource.id === placed.id), 'Locked physical resources remain assignable');
 assert(!store.moveResource(placed.id, 200, 200), 'Locked resource cannot move');
 assert(!store.updateResource(placed.id, { worldX: 200 }), 'Locked resource cannot move through properties');
+assert(!store.updateResource(placed.id, { rotationDegrees: 90 }), 'Locked resource cannot rotate');
 assert(placed.worldX === 100 && placed.worldY === 60, 'Locked movement does not corrupt coordinates');
 assert(store.deleteSelected() === 'locked', 'Locked resource cannot be deleted');
 assert(store.getSelectedResourceId() === placed.id, 'Locked delete preserves selection');
@@ -58,10 +60,11 @@ assert(store.updateResource(placed.id, { active: false }) && !store.getAssignabl
 assert(!store.updateResource(placed.id, { width: 2 }), 'Invalid size is rejected');
 assert(placed.width === 180, 'Invalid property input does not corrupt the model');
 assert(!store.updateResource(placed.id, { width: 99 }), 'Widths below the engineering minimum are rejected');
-assert(!store.updateResource(placed.id, { height: 59 }), 'Heights below the engineering minimum are rejected');
+assert(!store.updateResource(placed.id, { depth: 59 }), 'Depths below the engineering minimum are rejected');
+assert(store.updateResource(placed.id, { rotationDegrees: -90 }) && placed.rotationDegrees === 270, 'Negative rotations normalize into the canonical range');
 assert(!store.updateResource(placed.id, { worldX: Number.NaN }), 'Non-finite positions are rejected');
 assert(!store.updateResource(placed.id, { capacity: 0 }), 'Invalid capacity is rejected');
-const duplicate = store.duplicateResource(placed.id); assert(duplicate.id === 'RES-0002' && duplicate.templateId === placed.templateId, 'Duplicate receives independent identity and keeps template'); assert(duplicate.worldX === placed.worldX + 20 && duplicate.worldY === placed.worldY + 20, 'Duplicate receives a visible offset'); assert(store.getSelectedResourceId() === duplicate.id, 'Duplicate becomes selected'); store.updateResource(duplicate.id, { name: 'Independent machine' }); assert(placed.name !== duplicate.name, 'Duplicate edits are independent'); store.deleteResource(duplicate.id); store.selectResource(placed.id);
+store.updateResource(placed.id, { clearance: { enabled: true, left: 10, right: 20, top: 30, bottom: 40, category: 'maintenance', note: 'Service' } }); const duplicate = store.duplicateResource(placed.id); assert(duplicate.id === 'RES-0002' && duplicate.templateId === placed.templateId, 'Duplicate receives independent identity and keeps template'); assert(duplicate.worldX === placed.worldX + 20 && duplicate.worldY === placed.worldY + 20, 'Duplicate receives a visible offset'); assert(store.getSelectedResourceId() === duplicate.id, 'Duplicate becomes selected'); duplicate.clearance.left = 99; assert(placed.clearance.left === 10, 'Duplicate clearance is deeply owned'); store.updateResource(duplicate.id, { name: 'Independent machine' }); assert(placed.name !== duplicate.name, 'Duplicate edits are independent'); store.deleteResource(duplicate.id); store.selectResource(placed.id);
 
 const longName = 'Incoming Material Inspection and Verification';
 const availableTextWidth = 122;

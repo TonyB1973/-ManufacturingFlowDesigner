@@ -31,7 +31,7 @@ export interface ApplicationClipboard {
 
 export interface EditingResult { readonly ok: boolean; readonly message: string; readonly count: number; }
 
-const cloneResource = (value: PlacedResource): PlacedResource => ({ ...value, selected: false });
+const cloneResource = (value: PlacedResource): PlacedResource => ({ ...value, clearance: { ...value.clearance }, selected: false });
 const cloneOperation = (value: OperationInstance): OperationInstance => ({ ...value, selected: false });
 const cloneConnection = (value: ProcessConnection): ProcessConnection => ({ ...value, sourceAnchor: { ...value.sourceAnchor }, targetAnchor: { ...value.targetAnchor }, routePoints: value.routePoints.map((point) => ({ ...point })), selected: false });
 
@@ -97,7 +97,10 @@ export class ApplicationClipboardService {
     const connections = workspace === 'processFlow' ? this.connections.getConnections().filter((item) => (!skipLocked || !item.locked) && operationIds.has(item.sourceOperationId) && operationIds.has(item.targetOperationId) && (explicitlySelected.has(item.id) || operationIds.size > 0)) : [];
     if (!resources.length && !operations.length && !connections.length) return { message: skipLocked ? 'No unlocked items selected' : 'Nothing selected to copy' };
     if (resources.length > CLIPBOARD_LIMITS.resources || operations.length > CLIPBOARD_LIMITS.operations || connections.length > CLIPBOARD_LIMITS.connections) return { message: 'Selection exceeds the application clipboard safety limit' };
-    const boxes = [...resources, ...operations].map((item) => ({ minX: item.worldX - item.width / 2, minY: item.worldY - item.height / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.height / 2 }));
+    const boxes = [
+      ...resources.map((item) => ({ minX: item.worldX - item.width / 2, minY: item.worldY - item.depth / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.depth / 2 })),
+      ...operations.map((item) => ({ minX: item.worldX - item.width / 2, minY: item.worldY - item.height / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.height / 2 })),
+    ];
     const bounds = boxes.length ? { minX: Math.min(...boxes.map((box) => box.minX)), minY: Math.min(...boxes.map((box) => box.minY)), maxX: Math.max(...boxes.map((box) => box.maxX)), maxY: Math.max(...boxes.map((box) => box.maxY)) } : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
     return { sourceWorkspace: workspace, resources: resources.map((value) => ({ sourceId: value.id, value: cloneResource(value) })), operations: operations.map((value) => ({ sourceId: value.id, value: cloneOperation(value) })), connections: connections.map((value) => ({ sourceId: value.id, value: { ...cloneConnection(value), routePoints: [], routeStatus: 'clear' } })), bounds, copiedAt: Date.now(), pasteCount: 0 };
   }
