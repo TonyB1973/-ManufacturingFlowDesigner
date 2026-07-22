@@ -1,4 +1,5 @@
 import { PROJECT_SCHEMA_VERSION } from '../../models/project/ProjectDocument';
+import { DEFAULT_STANDARD_WORK_CHART_SETTINGS } from '../../models/standardWork/StandardWorkChartSettings';
 
 export type ProjectMigration = (document: Record<string, unknown>) => Record<string, unknown>;
 
@@ -11,6 +12,7 @@ export class ProjectMigrationService {
     this.register('1.2.0', '1.3.0', migrateFactoryRoutes);
     this.register('1.3.0', '1.4.0', migrateFactoryAnnotations);
     this.register('1.4.0', '1.5.0', migrateStandardWork);
+    this.register('1.5.0', '1.6.0', migrateStandardWorkChart);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -40,6 +42,16 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateStandardWorkChart(document: Record<string, unknown>): Record<string, unknown> {
+  const settings = isRecord(document.settings) ? document.settings : {};
+  const standardWork = isRecord(settings.standardWork) ? settings.standardWork : {};
+  return {
+    ...document,
+    applicationVersion: '0.8.0',
+    settings: { ...settings, standardWork: { ...standardWork, timeFormat: standardWork.timeFormat ?? 'seconds', chart: { ...DEFAULT_STANDARD_WORK_CHART_SETTINGS } } },
+  };
 }
 
 function migrateStandardWork(document: Record<string, unknown>): Record<string, unknown> {

@@ -28,6 +28,7 @@ import { StandardWorkStore, type StandardWorkChange } from '../StandardWorkStore
 import { StandardWorkSelectionStore } from '../standardWork/StandardWorkSelectionStore';
 import { StandardWorkEntryIdGenerator, StandardWorkStudyIdGenerator } from '../../utilities/StandardWorkIdGenerator';
 import { STANDARD_WORK_TIME_FORMATS } from '../../models/standardWork/StandardWork';
+import { isValidStandardWorkChartSettings } from '../../models/standardWork/StandardWorkChartSettings';
 
 export interface ProjectSessionState {
   readonly metadata: ProjectMetadata;
@@ -38,7 +39,7 @@ export interface ProjectSessionState {
 
 export class ProjectSessionService {
   private metadata: ProjectMetadata;
-  private settings: ProjectSettings = { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units } };
+  private settings: ProjectSettings = { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork, chart: { ...DEFAULT_PROJECT_SETTINGS.standardWork.chart } } };
   private fileName: string | null = null;
   private loading = false;
   private readonly listeners = new Set<(state: ProjectSessionState) => void>();
@@ -80,7 +81,7 @@ export class ProjectSessionService {
 
   public getState(): ProjectSessionState { return { metadata: { ...this.metadata }, settings: this.getSettings(), fileName: this.fileName, dirty: this.dirtyState.isDirty() }; }
   public getMetadata(): ProjectMetadata { return { ...this.metadata }; }
-  public getSettings(): ProjectSettings { return { ...this.settings, units: { ...this.settings.units }, standardWork: { ...this.settings.standardWork } }; }
+  public getSettings(): ProjectSettings { return { ...this.settings, units: { ...this.settings.units }, standardWork: { ...this.settings.standardWork, chart: { ...this.settings.standardWork.chart } } }; }
   public isDirty(): boolean { return this.dirtyState.isDirty(); }
   public subscribe(listener: (state: ProjectSessionState) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
 
@@ -90,11 +91,11 @@ export class ProjectSessionService {
     this.metadata = next; this.notify(); return true;
   }
   public applySettings(patch: Partial<ProjectSettings>): boolean {
-    const next = { ...this.settings, ...patch, units: { ...this.settings.units, ...patch.units }, standardWork: { ...this.settings.standardWork, ...patch.standardWork } };
+    const next = { ...this.settings, ...patch, units: { ...this.settings.units, ...patch.units }, standardWork: { ...this.settings.standardWork, ...patch.standardWork, chart: { ...this.settings.standardWork.chart, ...patch.standardWork?.chart } } };
     if (!Number.isFinite(next.gridBaseInterval) || next.gridBaseInterval <= 0 || !Number.isFinite(next.routingClearance) || next.routingClearance < 0 || next.unitSystem !== 'metric' || !Number.isInteger(next.displayPrecision) || next.displayPrecision < 0 || next.displayPrecision > 6) return false;
     if (!LENGTH_UNITS.includes(next.units.modelLengthUnit) || !LENGTH_UNITS.includes(next.units.displayLengthUnit) || !Number.isInteger(next.units.displayPrecision) || next.units.displayPrecision < 0 || next.units.displayPrecision > 6 || typeof next.units.showTrailingZeros !== 'boolean') return false;
     if (![next.dimensionTextScale, next.annotationTextSize, next.defaultDimensionOffset].every((value) => Number.isFinite(value) && value > 0) || !FACTORY_ANNOTATION_LAYERS.includes(next.defaultDimensionLayer)) return false;
-    if (!STANDARD_WORK_TIME_FORMATS.includes(next.standardWork.timeFormat)) return false;
+    if (!STANDARD_WORK_TIME_FORMATS.includes(next.standardWork.timeFormat) || !isValidStandardWorkChartSettings(next.standardWork.chart)) return false;
     this.settings = next; if (patch.routingClearance !== undefined) this.connections.recalculateAll(); this.notify(); return true;
   }
 
@@ -109,7 +110,7 @@ export class ProjectSessionService {
       resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES,
       resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [],
       workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
-      settings: { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units } },
+      settings: { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork, chart: { ...DEFAULT_PROJECT_SETTINGS.standardWork.chart } } },
     }, null);
   }
 
@@ -126,7 +127,7 @@ export class ProjectSessionService {
       const operations: OperationInstance[] = document.operations.map((item) => ({ ...item, selected: false }));
       const connections: ProcessConnection[] = document.connections.map((item) => ({ ...item, sourceAnchor: { ...item.sourceAnchor }, targetAnchor: { ...item.targetAnchor }, routePoints: [], routeStatus: 'clear', selected: false }));
       this.metadata = { ...document.project };
-      this.settings = { ...document.settings, units: { ...document.settings.units }, standardWork: { ...document.settings.standardWork } };
+      this.settings = { ...document.settings, units: { ...document.settings.units }, standardWork: { ...document.settings.standardWork, chart: { ...document.settings.standardWork.chart } } };
       this.fileName = fileName;
       this.resources.replaceAll(document.resourceTemplates, resources, false);
       this.operations.replaceAll(document.operationTemplates, operations, false);

@@ -19,6 +19,7 @@ import { FACTORY_ROUTE_ANCHOR_SIDES, FACTORY_ROUTE_DIRECTIONS, FACTORY_ROUTE_TYP
 import { FACTORY_ANNOTATION_LAYERS, LEADER_ARROW_STYLES, LINEAR_DIMENSION_KINDS, RECTANGLE_ANNOTATION_FEATURES, type AnnotationAnchor, type FactoryAnnotation } from '../../models/factory/FactoryAnnotation';
 import { LENGTH_UNITS } from '../units/LengthUnitService';
 import { STANDARD_WORK_LIMITS, STANDARD_WORK_TIME_FORMATS, isValidStandardWorkEntry, isValidStandardWorkStudy, type StandardWorkEntry, type StandardWorkStudy } from '../../models/standardWork/StandardWork';
+import { isValidStandardWorkChartSettings } from '../../models/standardWork/StandardWorkChartSettings';
 
 const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, studies: 10000, standardWorkEntries: 500000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
@@ -294,7 +295,7 @@ function settingsValue(value: unknown, issues: string[]): ProjectSettings | null
   const item = record(value, 'settings', issues); if (!item) return null;
   const units = record(item.units, 'settings.units', issues);
   const validUnits = units && LENGTH_UNITS.includes(units.modelLengthUnit as never) && LENGTH_UNITS.includes(units.displayLengthUnit as never) && Number.isInteger(units.displayPrecision) && Number(units.displayPrecision) >= 0 && Number(units.displayPrecision) <= 6 && bool(units.showTrailingZeros);
-  const standardWork = record(item.standardWork, 'settings.standardWork', issues); const validStandardWork = standardWork && STANDARD_WORK_TIME_FORMATS.includes(standardWork.timeFormat as never);
+  const standardWork = record(item.standardWork, 'settings.standardWork', issues); const validStandardWork = standardWork && STANDARD_WORK_TIME_FORMATS.includes(standardWork.timeFormat as never) && isValidStandardWorkChartSettings(standardWork.chart);
   if (!positive(item.gridBaseInterval) || !finite(item.routingClearance) || item.routingClearance < 0 || item.unitSystem !== 'metric' || !finite(item.displayPrecision) || !Number.isInteger(item.displayPrecision) || item.displayPrecision < 0 || item.displayPrecision > 6 || !validUnits || !validStandardWork || !positive(item.dimensionTextScale) || !positive(item.annotationTextSize) || !positive(item.defaultDimensionOffset) || !FACTORY_ANNOTATION_LAYERS.includes(item.defaultDimensionLayer as never)) issues.push('settings has invalid fields.');
   return item as unknown as ProjectSettings;
 }

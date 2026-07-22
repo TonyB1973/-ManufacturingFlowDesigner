@@ -99,7 +99,7 @@ export function createAppShell(): AppShellResult {
   const right = createRightSidebar(resourceStore, operationStore, connectionStore, structureStore, routeStore, annotationStore, annotationResolver, workspaceStore, selectionStore, requestResourceDeletion, projectSession, commands, routeCommands, annotationCommands, editing, geometrySelection, geometryEditing);
   const leftToggle = actionButton('Hide project and resource panels', 'panel-toggle panel-toggle--left');
   const rightToggle = actionButton('Hide inspector panels', 'panel-toggle panel-toggle--right');
-  const standardWorkWorkspace = createStandardWorkWorkspace(standardWorkStore, operationStore, standardWorkResolver, standardWorkSelection, standardWorkCommands, commands, projectSession, workspaceStore, selectionStore);
+  const standardWorkWorkspace = createStandardWorkWorkspace(standardWorkStore, operationStore, resourceStore, standardWorkResolver, standardWorkSelection, standardWorkCommands, commands, projectSession, workspaceStore, selectionStore);
 
   leftToggle.textContent = '‹';
   rightToggle.textContent = '›';

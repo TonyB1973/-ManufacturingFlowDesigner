@@ -2,6 +2,26 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 3.0 scope
+
+Sprint 3.0 adds a professional **Standard Work Combination Chart** beside the existing Entry Table, with Entry Table, Combination Chart, and responsive Split View modes. It calculates one deterministic operator timeline from current study order and current Process Flow operation data; chart start/end values, resource lanes, summaries, diagnostics, zoom, and SVG geometry remain derived rather than saved.
+
+The operator cursor starts at zero. Manual, Walking, and explicit Waiting entries start at the cursor and advance it. Automatic entries start at the current cursor on an automatic-resource lane and do not advance it, allowing following operator work to overlap the machine cycle. Machine loading, starting, checking, and unloading must be modelled as separate Manual operations—Automatic entries contain no invented operator launch time.
+
+Automatic lanes use stable physical Resource Instance IDs and resolve live resource names. An Automatic operation without an assignment appears in **Unassigned Automatic**. Hidden Factory Layout resources still have lanes; inactive and missing resources receive diagnostics. Same-resource overlaps are stacked so no block disappears and are labelled as potential overlap only: authoritative resource-capacity and double-booking validation remains planned for Sprint 3.6.
+
+**Chart cycle span** is the later of operator sequence end and latest Automatic completion. **Automatic overrun** is the positive Automatic tail after the operator sequence ends; it is not called operator waiting unless a Waiting operation explicitly exists. The summary separately reports Manual, Walking, Waiting, Automatic total, operator occupied/productive time, overlap count, zero-time count, validation, and chart span. Automatic total is a sum of block durations and may differ from the span because Automatic blocks can overlap.
+
+The time axis supports automatic engineering intervals, validated fixed intervals, minor subdivisions, Seconds/mm:ss/hh:mm:ss formatting, 25%–800% practical zoom, Ctrl/Cmd+wheel zoom, Shift+wheel horizontal pan, Fit Chart, Reset Zoom, Home/End, and capped grid density. Blocks use category-specific colour plus border/pattern treatment, accessible descriptions, focus, safe label suppression, minimum hit targets, zero-time markers, tooltips, and timing details.
+
+Selecting a block selects the matching entry, table row, Properties view, and Project Explorer row. Table and Explorer selection reveal the chart block. Context actions locate the referenced operation in Process Flow or assigned resource in Factory Layout while Standard Work retains its chart state. Selection, hover, zoom, pan, Fit Chart, and view switching do not create history or dirty state.
+
+Chart Settings persist interval mode, grid and label choices, launch markers, lane IDs, automatic/disabled-entry visibility, and lane density. They use normal Undo/Redo and saved checkpoints. The `.mflow` schema is `1.6.0` and application version is `0.8.0`; explicit `1.5.0 → 1.6.0` migration adds validated chart defaults without changing studies, entries, operations, resources, factory data, IDs, or viewports. Calculated blocks, lanes, span, overrun, diagnostics, selection, scroll, and zoom are never persisted.
+
+Keyboard chart controls include Left/Right block navigation, Home/End scroll, Plus/Minus zoom, `0` Fit Chart, Enter focus/details, Delete removal through existing Standard Work behaviour, and normal Undo/Redo shortcuts. Editable controls retain native keyboard behaviour.
+
+Current chart scope is intentionally one operator. Multiple operators, entry operator assignment, separate operator timelines, handovers, and workload totals are planned for Sprint 3.1. Takt and balance analysis remain planned for Sprint 3.2.
+
 ## Sprint 2.9 scope
 
 Sprint 2.9 introduces **Standard Work** as a third principal workspace beside Process Flow and Factory Layout. It uses a professional study/list/table layout rather than either CAD canvas, keeps a separate transient selection, and preserves the independent Process Flow and Factory Layout viewports while workspace changes safely cancel incomplete canvas gestures.
@@ -16,7 +36,7 @@ Study and entry edits, populate, ordering, occurrence and enabled changes, displ
 
 Keyboard controls include `Insert` to add the selected available operation, `Delete` to remove the selected entry or confirmed study, `Ctrl`/`Cmd+D` to duplicate a study, `Alt+Up/Down` to reorder, `Ctrl`/`Cmd+Home/End` to move to an end, and `Escape` to clear Standard Work selection. Normal Undo/Redo shortcuts continue to apply and editable controls retain native key handling.
 
-The `.mflow` schema is now `1.5.0` and application version is `0.7.0`. Schema `1.4.0` migrates explicitly to empty Standard Work collections, a Seconds display setting, and the new timing-category vocabulary while preserving metadata, physical resources, factory engineering data, operations, connections, assignments, IDs, units, and workspace state. Derived durations, summaries, percentages, validation, selection, and table scroll are never persisted.
+Sprint 2.9 introduced `.mflow` schema `1.5.0` and application version `0.7.0`. Schema `1.4.0` migrates explicitly to empty Standard Work collections, a Seconds display setting, and the new timing-category vocabulary while preserving metadata, physical resources, factory engineering data, operations, connections, assignments, IDs, units, and workspace state. Derived durations, summaries, percentages, validation, selection, and table scroll are never persisted.
 
 ## Sprint 2.8 scope
 
@@ -134,8 +154,8 @@ Manufacturing Flow Designer project files use:
 - extension: `.mflow`
 - media type: `application/vnd.manufacturing-flow-designer+json`
 - format identifier: `ManufacturingFlowDesigner`
-- current schema: `1.4.0`
-- current application version: `0.6.0`
+- current schema: `1.6.0`
+- current application version: `0.8.0`
 
 The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
 
@@ -191,6 +211,7 @@ npm run test:structure
 npm run test:routes
 npm run test:annotations
 npm run test:standard-work
+npm run test:standard-work-chart
 npm run build
 git diff --check
 ```
@@ -216,9 +237,10 @@ git diff --check
 - `FactoryRouteStore`, `FactoryRouteGeometry`, and `FactoryRouteValidation` own typed physical routes, derived orthogonal geometry, metrics, and engineering checks independently of Process Connections and SVG.
 - `FactoryAnnotationStore`, `AnnotationAnchorResolver`, `LinearDimensionGeometry`, and `LengthUnitService` own persistent annotations, associative geometry, deterministic measurement, and unit formatting independently of SVG.
 - `StandardWorkStore`, `StandardWorkOperationResolver`, `StandardWorkCalculationService`, `StandardWorkValidationService`, and `StandardWorkCommandFactory` keep persistent study data, live operation resolution, derived timing, validation, and history separate from the workspace DOM.
+- `StandardWorkChartScheduler` owns deterministic derived scheduling and automatic-resource lanes; `StandardWorkChartScale` owns engineering intervals and fit calculations; the chart renderer owns SVG only.
 - Domain stores remain the runtime authorities for resources, operations, connections, factory structure, factory routes, factory annotations, Standard Work studies/entries, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for annotations and units, and [ADR-0010](docs/architecture/ADR-0010-standard-work-timing-foundations.md) for Standard Work references, timing, ordering, lifecycle, and persistence.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for annotations and units, [ADR-0010](docs/architecture/ADR-0010-standard-work-timing-foundations.md) for Standard Work references, timing, ordering, lifecycle, and persistence, and [ADR-0011](docs/architecture/ADR-0011-standard-work-combination-chart.md) for chart scheduling, resource lanes, derived data, and settings persistence.
 
 ## Current limitations
 
@@ -228,8 +250,8 @@ Clipboard contents are session-only and cannot be exchanged with external applic
 
 Route travel-time estimates are nominal geometric calculations, not simulation. Annotation anchor editing is currently provided through typed creation, property editing, clipboard remapping, and referenced-entity geometry changes rather than a full CAD constraint solver.
 
-## Planned Sprint 3.0
+## Planned Sprint 3.1
 
-Sprint 3.0 is planned to add the **Standard Work Combination Chart**, building its visual timeline on the persistent Standard Work timing foundations created in Sprint 2.9. Operator lanes remain deferred to Sprint 3.1, with takt and balance analysis deferred to Sprint 3.2.
+Sprint 3.1 is planned to add **operator lanes and work allocation**: multiple operator records, Standard Work entry operator assignment, separate operator timelines, operator handovers, and workload totals by operator. Sprint 3.0 deliberately remains a single-operator chart.
 
-Development for this sprint is performed on `feature/sprint-2.9-standard-work-foundations`.
+Development for this sprint is performed on `feature/sprint-3.0-standard-work-chart`.
