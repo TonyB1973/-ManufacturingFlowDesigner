@@ -4,9 +4,10 @@ import type { ResourceIdProvider } from '../utilities/ResourceIdGenerator';
 import type { SelectionController } from '../models/selection/Selection';
 import { SelectionStore } from './SelectionStore';
 import { DEFAULT_FACTORY_LAYOUT_ID } from '../models/workspace/Workspace';
+import { CLEARANCE_CATEGORIES, cloneClearance, createDefaultClearance } from '../models/resources/ResourceClearance';
 
 export const MIN_RESOURCE_WIDTH = 100;
-export const MIN_RESOURCE_HEIGHT = 60;
+export const MIN_RESOURCE_DEPTH = 60;
 
 export type ResourceStoreChange =
   | { readonly kind: 'created'; readonly resource: PlacedResource }
@@ -73,8 +74,9 @@ export class ResourceStore {
       worldX,
       worldY,
       width: template.defaultWidth,
-      height: template.defaultHeight,
+      depth: template.defaultDepth,
       rotationDegrees: 0,
+      clearance: createDefaultClearance(),
       active: true,
       selected: false,
       locked: false,
@@ -90,13 +92,13 @@ export class ResourceStore {
   public duplicateResource(resourceId: string, offset = 20): PlacedResource | null {
     const original = this.resources.get(resourceId); if (!original) return null;
     const base = original.name.replace(/\s+#\d+$/, ''); const siblings = [...this.resources.values()].filter((resource) => resource.templateId === original.templateId);
-    const duplicate: PlacedResource = { ...original, id: this.idProvider.next(), name: `${base} #${siblings.length + 1}`, worldX: original.worldX + offset, worldY: original.worldY + offset, selected: false, locked: false };
+    const duplicate: PlacedResource = { ...original, clearance: cloneClearance(original.clearance), id: this.idProvider.next(), name: `${base} #${siblings.length + 1}`, worldX: original.worldX + offset, worldY: original.worldY + offset, selected: false, locked: false };
     this.resources.set(duplicate.id, duplicate); this.notify({ kind: 'created', resource: duplicate }); this.selection.select({ kind: 'resource', id: duplicate.id }); return duplicate;
   }
 
   public restoreResource(resource: PlacedResource): boolean {
     if (this.resources.has(resource.id) || !this.templateMap.has(resource.templateId) || !this.isValidPatch(resource)) return false;
-    const restored = { ...resource, selected: false };
+    const restored = { ...resource, rotationDegrees: normalizeAngle(resource.rotationDegrees), clearance: cloneClearance(resource.clearance), selected: false };
     this.resources.set(restored.id, restored); this.notify({ kind: 'created', resource: restored }); return true;
   }
 
@@ -122,9 +124,9 @@ export class ResourceStore {
 
   public updateResource(resourceId: string, patch: PlacedResourcePatch): boolean {
     const resource = this.resources.get(resourceId);
-    const changesPosition = patch.worldX !== undefined || patch.worldY !== undefined;
-    if (!resource || (resource.locked && changesPosition) || !this.isValidPatch(patch)) return false;
-    Object.assign(resource, patch);
+    const changesGeometry = patch.worldX !== undefined || patch.worldY !== undefined || patch.width !== undefined || patch.depth !== undefined || patch.rotationDegrees !== undefined || patch.clearance !== undefined;
+    if (!resource || (resource.locked && changesGeometry) || !this.isValidPatch(patch)) return false;
+    Object.assign(resource, patch, patch.rotationDegrees === undefined ? {} : { rotationDegrees: normalizeAngle(patch.rotationDegrees) }, patch.clearance === undefined ? {} : { clearance: cloneClearance(patch.clearance) });
     this.notify({ kind: 'updated', resource });
     return true;
   }
@@ -154,7 +156,7 @@ export class ResourceStore {
     this.templateMap.clear();
     templates.forEach((template) => this.templateMap.set(template.id, { ...template, tags: [...template.tags] }));
     this.resources.clear();
-    resources.forEach((resource) => this.resources.set(resource.id, { ...resource, selected: false }));
+    resources.forEach((resource) => this.resources.set(resource.id, { ...resource, rotationDegrees: normalizeAngle(resource.rotationDegrees), clearance: cloneClearance(resource.clearance), selected: false }));
     if (notify) this.publishReset();
   }
 
@@ -174,8 +176,13 @@ export class ResourceStore {
       if (value !== undefined && !Number.isFinite(value)) return false;
     }
     if (patch.width !== undefined && (!Number.isFinite(patch.width) || patch.width < MIN_RESOURCE_WIDTH)) return false;
-    if (patch.height !== undefined && (!Number.isFinite(patch.height) || patch.height < MIN_RESOURCE_HEIGHT)) return false;
+    if (patch.depth !== undefined && (!Number.isFinite(patch.depth) || patch.depth < MIN_RESOURCE_DEPTH)) return false;
     if (patch.rotationDegrees !== undefined && !Number.isFinite(patch.rotationDegrees)) return false;
+    if (patch.clearance !== undefined) {
+      const value = patch.clearance;
+      if (typeof value.enabled !== 'boolean' || !CLEARANCE_CATEGORIES.includes(value.category) || value.note.length > 1000) return false;
+      if ([value.left, value.right, value.top, value.bottom].some((distance) => !Number.isFinite(distance) || distance < 0)) return false;
+    }
     if (patch.capacity !== undefined && (!Number.isInteger(patch.capacity) || patch.capacity < 1)) return false;
     if (patch.layoutId !== undefined && !patch.layoutId.trim()) return false;
     return true;
@@ -185,3 +192,5 @@ export class ResourceStore {
     for (const listener of this.listeners) listener(change);
   }
 }
+
+export const normalizeAngle = (value: number): number => ((value % 360) + 360) % 360;

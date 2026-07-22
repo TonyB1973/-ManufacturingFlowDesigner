@@ -21,6 +21,7 @@ const RESOURCE_ICONS = new Set(['cnc', 'workstation', 'inspection', 'handling', 
 const OPERATION_TYPES = new Set(['Machining', 'Fabrication', 'Assembly', 'Inspection', 'Material Handling', 'Finishing', 'Packaging', 'Maintenance', 'Storage', 'Administrative']);
 const TIMING_CATEGORIES = new Set(['Value Added', 'Non-Value Added', 'Required Non-Value Added']);
 const OPERATION_CATEGORIES = new Set(['Production', 'Quality', 'Logistics', 'Support', 'Finishing', 'Assembly', 'Material Flow', 'Storage', 'Planning']);
+const CLEARANCE_CATEGORIES = new Set(['operational', 'maintenance', 'safety', 'loading', 'access', 'general']);
 
 export class ProjectValidationError extends Error {
   public constructor(public readonly issues: readonly string[]) {
@@ -110,7 +111,7 @@ function metadataValue(value: unknown, issues: string[]): ProjectMetadata | null
 function resourceTemplateValues(value: unknown, issues: string[]): ResourceTemplate[] {
   return arrayValue(value, 'resourceTemplates', LIMITS.templates, issues).flatMap((raw, index) => {
     const item = record(raw, `resourceTemplates[${index}]`, issues); if (!item) return [];
-    if (!nonEmpty(item.id) || !nonEmpty(item.name) || !boundedString(item.description) || !RESOURCE_CATEGORIES.has(String(item.category)) || !RESOURCE_TYPES.has(String(item.resourceType)) || !RESOURCE_ICONS.has(String(item.icon)) || !positive(item.defaultWidth) || !positive(item.defaultHeight) || !stringArray(item.tags) || !bool(item.isFavourite)) issues.push(`resourceTemplates[${index}] has invalid fields.`);
+    if (!nonEmpty(item.id) || !nonEmpty(item.name) || !boundedString(item.description) || !RESOURCE_CATEGORIES.has(String(item.category)) || !RESOURCE_TYPES.has(String(item.resourceType)) || !RESOURCE_ICONS.has(String(item.icon)) || !positive(item.defaultWidth) || !positive(item.defaultDepth) || !stringArray(item.tags) || !bool(item.isFavourite)) issues.push(`resourceTemplates[${index}] has invalid fields.`);
     return [item as unknown as ResourceTemplate];
   });
 }
@@ -124,7 +125,9 @@ function operationTemplateValues(value: unknown, issues: string[]): OperationTem
 function resourceValues(value: unknown, issues: string[]): Omit<ResourceInstance, 'selected'>[] {
   return arrayValue(value, 'resources', LIMITS.resources, issues).flatMap((raw, index) => {
     const item = record(raw, `resources[${index}]`, issues); if (!item) return [];
-    if (!nonEmpty(item.id) || !nonEmpty(item.templateId) || !nonEmpty(item.name) || !RESOURCE_TYPES.has(String(item.resourceType)) || item.layoutId !== DEFAULT_FACTORY_LAYOUT_ID || !finite(item.worldX) || !finite(item.worldY) || !finite(item.width) || item.width < 100 || !finite(item.height) || item.height < 60 || !finite(item.rotationDegrees) || !bool(item.active) || !bool(item.visible) || !bool(item.locked) || !Number.isInteger(item.capacity) || (item.capacity as number) < 1) issues.push(`resources[${index}] has invalid fields.`);
+    const clearance = record(item.clearance, `resources[${index}].clearance`, issues);
+    const validClearance = clearance && bool(clearance.enabled) && [clearance.left, clearance.right, clearance.top, clearance.bottom].every((distance) => finite(distance) && distance >= 0) && CLEARANCE_CATEGORIES.has(String(clearance.category)) && boundedString(clearance.note, 1000);
+    if (!nonEmpty(item.id) || !nonEmpty(item.templateId) || !nonEmpty(item.name) || !RESOURCE_TYPES.has(String(item.resourceType)) || item.layoutId !== DEFAULT_FACTORY_LAYOUT_ID || !finite(item.worldX) || !finite(item.worldY) || !finite(item.width) || item.width < 100 || !finite(item.depth) || item.depth < 60 || !finite(item.rotationDegrees) || item.rotationDegrees < 0 || item.rotationDegrees >= 360 || !validClearance || !bool(item.active) || !bool(item.visible) || !bool(item.locked) || !Number.isInteger(item.capacity) || (item.capacity as number) < 1) issues.push(`resources[${index}] has invalid fields.`);
     return [item as unknown as Omit<ResourceInstance, 'selected'>];
   });
 }

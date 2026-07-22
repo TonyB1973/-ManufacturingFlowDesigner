@@ -1,4 +1,5 @@
 import type { ResourceType } from './ResourceTemplate';
+import type { ResourceClearance } from './ResourceClearance';
 
 export interface ResourceInstance {
   readonly id: string;
@@ -9,8 +10,9 @@ export interface ResourceInstance {
   worldX: number;
   worldY: number;
   width: number;
-  height: number;
+  depth: number;
   rotationDegrees: number;
+  clearance: ResourceClearance;
   active: boolean;
   visible: boolean;
   locked: boolean;
@@ -19,6 +21,6 @@ export interface ResourceInstance {
 }
 
 export type ResourceInstancePatch = Partial<Pick<ResourceInstance,
-  'name' | 'layoutId' | 'worldX' | 'worldY' | 'width' | 'height' | 'rotationDegrees'
+  'name' | 'layoutId' | 'worldX' | 'worldY' | 'width' | 'depth' | 'rotationDegrees' | 'clearance'
   | 'active' | 'visible' | 'locked' | 'capacity'
 >>;

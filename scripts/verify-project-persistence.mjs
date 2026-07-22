@@ -19,9 +19,9 @@ const { ProjectSessionService } = await load('../src/services/project/ProjectSes
 const { DirtyStateService } = await load('../src/services/project/DirtyStateService.ts');
 const { safeFileName } = await load('../src/services/project/ProjectFileService.ts');
 
-const resourceTemplate = { id: 'TPL-CNC-001', name: 'Machine', description: 'Machine', category: 'Machines', resourceType: 'CNC Machine', icon: 'cnc', defaultWidth: 180, defaultHeight: 80, tags: ['cnc'], isFavourite: true };
+const resourceTemplate = { id: 'TPL-CNC-001', name: 'Machine', description: 'Machine', category: 'Machines', resourceType: 'CNC Machine', icon: 'cnc', defaultWidth: 180, defaultDepth: 80, tags: ['cnc'], isFavourite: true };
 const operationTemplate = { id: 'op-cut', name: 'Cut', operationType: 'Fabrication', timingCategory: 'Value Added', category: 'Production', icon: 'CUT', defaultCycleTimeSeconds: 45, tags: ['cut'] };
-const resource = { id: 'RES-0042', templateId: resourceTemplate.id, name: 'Machine 42', resourceType: 'CNC Machine', layoutId: 'factory-layout-default', worldX: 340.25, worldY: -15, width: 180, height: 80, rotationDegrees: 90, active: true, visible: true, locked: false, capacity: 1 };
+const resource = { id: 'RES-0042', templateId: resourceTemplate.id, name: 'Machine 42', resourceType: 'CNC Machine', layoutId: 'factory-layout-default', worldX: 340.25, worldY: -15, width: 180, depth: 80, rotationDegrees: 90, clearance: { enabled: true, left: 10, right: 20, top: 30, bottom: 40, category: 'maintenance', note: 'Service access' }, active: true, visible: true, locked: false, capacity: 1 };
 const resourceTwo = { ...resource, id: 'RES-0043', name: 'Machine 43', worldX: 600, locked: true };
 const inspection = { ...resource, id: 'RES-0044', name: 'Inspection Resource', worldX: 820, visible: false };
 const operationA = { id: 'operation-0071', templateId: operationTemplate.id, name: 'Cut A', operationType: 'Fabrication', timingCategory: 'Value Added', cycleTimeSeconds: 45, sequence: 10, assignedResourceId: resource.id, notes: 'First', worldX: 100, worldY: 200, width: 210, height: 100, locked: false, visible: true };
@@ -32,13 +32,15 @@ const connection = { id: 'CON-0099', sourceOperationId: operationA.id, targetOpe
 const connectionTwo = { ...connection, id: 'CON-0100', sourceOperationId: operationB.id, targetOperationId: operationC.id, label: 'Inspect', connectionType: 'Information' };
 const connectionThree = { ...connection, id: 'CON-0101', sourceOperationId: operationC.id, targetOperationId: operationD.id, label: 'Finish', locked: true };
 const viewport = { panX: 5, panY: -10, zoom: 1.25, gridVisible: true, originVisible: false, snapEnabled: true };
-const fixture = { format: 'ManufacturingFlowDesigner', schemaVersion: '1.0.0', applicationVersion: '0.2.0', project: { id: 'PRJ-0047', name: 'Persistence Test', description: 'Round trip', author: 'Engineer', company: 'Factory', createdUtc: '2026-01-01T00:00:00.000Z', modifiedUtc: '2026-01-02T00:00:00.000Z' }, resourceTemplates: [resourceTemplate], operationTemplates: [operationTemplate], resources: [resource, resourceTwo, inspection], operations: [operationA, operationB, operationC, operationD], connections: [connection, connectionTwo, connectionThree], workspaces: { active: 'factoryLayout', processFlow: viewport, factoryLayout: { ...viewport, panX: -500, zoom: 0.75 } }, settings: { gridBaseInterval: 20, routingClearance: 16, unitSystem: 'metric', displayPrecision: 2 } };
+const fixture = { format: 'ManufacturingFlowDesigner', schemaVersion: '1.1.0', applicationVersion: '0.3.0', project: { id: 'PRJ-0047', name: 'Persistence Test', description: 'Round trip', author: 'Engineer', company: 'Factory', createdUtc: '2026-01-01T00:00:00.000Z', modifiedUtc: '2026-01-02T00:00:00.000Z' }, resourceTemplates: [resourceTemplate], operationTemplates: [operationTemplate], resources: [resource, resourceTwo, inspection], operations: [operationA, operationB, operationC, operationD], connections: [connection, connectionTwo, connectionThree], workspaces: { active: 'factoryLayout', processFlow: viewport, factoryLayout: { ...viewport, panX: -500, zoom: 0.75 } }, settings: { gridBaseInterval: 20, routingClearance: 16, unitSystem: 'metric', displayPrecision: 2 } };
 
 const valid = validateProjectDocument(structuredClone(fixture));
 assert(valid.project.id === 'PRJ-0047' && valid.resources.length === 3 && valid.operations.length === 4 && valid.connections.length === 3, 'Valid representative document loads');
 const parsed = deserializeProject(`${JSON.stringify(fixture, null, 2)}\n`);
 assert(parsed.document.workspaces.active === 'factoryLayout', 'Active workspace round trips');
 assert(parsed.document.workspaces.processFlow.zoom === 1.25 && parsed.document.workspaces.factoryLayout.zoom === 0.75, 'Independent viewports round trip');
+const legacyFixture = { ...structuredClone(fixture), schemaVersion: '1.0.0', applicationVersion: '0.2.0', resourceTemplates: fixture.resourceTemplates.map(({ defaultDepth, ...template }) => ({ ...template, defaultHeight: defaultDepth })), resources: fixture.resources.map(({ depth, clearance, ...item }) => ({ ...item, height: depth, rotationDegrees: item.id === 'RES-0042' ? -90 : undefined })) };
+const legacy = deserializeProject(JSON.stringify(legacyFixture)); assert(legacy.migratedFrom === '1.0.0' && legacy.document.schemaVersion === '1.1.0', 'Schema 1.0 projects migrate explicitly to 1.1'); assert(legacy.document.resources[0].depth === 80 && legacy.document.resources[0].rotationDegrees === 270 && legacy.document.resources[0].clearance.category === 'general', 'Migration preserves footprint geometry and adds normalized rotation and clearance defaults'); assert(legacy.document.operations[0].height === 100, 'Migration does not alter operation height');
 
 const selection = new SelectionStore(); const resourceIds = new ResourceIdGenerator(); const operationIds = new OperationIdGenerator(); const connectionIds = new ConnectionIdGenerator();
 const resources = new ResourceStore([], resourceIds, selection); const operations = new OperationStore([], operationIds, selection); const workspaces = new WorkspaceStore();
@@ -80,13 +82,13 @@ const invalidCases = [
 for (const [label, candidate] of invalidCases) rejects(() => validateProjectDocument(candidate), `${label} must be rejected`);
 assert(validateProjectDocument({ ...fixture, workspaces: { ...fixture.workspaces, processFlow: { ...viewport, zoom: 999 } } }).workspaces.processFlow.zoom === 4, 'Unsafe finite zoom is clamped');
 assert(validateProjectDocument({ ...fixture, workspaces: { active: 'processFlow' } }).workspaces.factoryLayout.zoom === 1, 'Missing optional viewport state uses defaults');
-rejects(() => validateProjectDocument(JSON.parse('{"format":"ManufacturingFlowDesigner","schemaVersion":"1.0.0","__proto__":{}}')), 'Prototype-pollution keys are rejected');
+rejects(() => validateProjectDocument(JSON.parse('{"format":"ManufacturingFlowDesigner","schemaVersion":"1.1.0","__proto__":{}}')), 'Prototype-pollution keys are rejected');
 rejects(() => deserializeProject(JSON.stringify({ ...fixture, schemaVersion: '2.0.0' })), 'Newer major schemas are rejected');
 rejects(() => deserializeProject(JSON.stringify({ ...fixture, schemaVersion: '0.8.0' })), 'Unknown older schemas are rejected without an explicit migration');
 
-const migrations = new ProjectMigrationService(); migrations.register('0.9.0', '1.0.0', (document) => ({ ...document, settings: fixture.settings }));
-const migrated = deserializeProject(JSON.stringify({ ...fixture, schemaVersion: '0.9.0', settings: undefined }), migrations);
-assert(migrated.migratedFrom === '0.9.0' && migrated.document.schemaVersion === '1.0.0', 'Registered older schema migrations are applied');
+const migrations = new ProjectMigrationService(); migrations.register('0.9.0', '1.0.0', (document) => ({ ...legacyFixture, ...document, resourceTemplates: legacyFixture.resourceTemplates, resources: legacyFixture.resources, settings: fixture.settings }));
+const migrated = deserializeProject(JSON.stringify({ ...legacyFixture, schemaVersion: '0.9.0', settings: undefined }), migrations);
+assert(migrated.migratedFrom === '0.9.0' && migrated.document.schemaVersion === '1.1.0', 'Registered older schema migrations chain into the current schema');
 
 session.newProject('2026-02-01T00:00:00.000Z'); assert(!session.isDirty() && resources.getResourceCount() === 0 && operations.getOperationCount() === 0 && connections.getConnectionCount() === 0 && workspaces.getActive() === 'processFlow', 'New project is clean and resets all domain and workspace state');
 const emptyOutput = serializeProject({ metadata: session.getMetadata(), settings: session.getSettings(), resources, operations, connections, workspaces }); assert(emptyOutput.document.resources.length === 0 && emptyOutput.document.operations.length === 0 && emptyOutput.document.connections.length === 0, 'Empty project serializes completely');

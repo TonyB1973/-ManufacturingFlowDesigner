@@ -160,6 +160,11 @@
 .resource-instance-properties .property-field:nth-child(-n+4), .resource-instance-properties .property-help, .resource-property-actions { grid-column: 1 / -1; }
 .property-help { margin: 0; padding: 7px; color: var(--text-muted); background: #181d21; border-left: 2px solid var(--accent); font-size: 10px; line-height: 1.4; }
 .resource-property-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.clearance-properties { display: grid; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 7px; margin: 4px 0; padding: 9px; border: 1px solid #45515a; }
+.clearance-properties legend { color: #b9c5cc; font-size: 11px; font-weight: 700; }
+.clearance-properties > .property-toggle, .clearance-properties > .resource-property-actions { grid-column: 1 / -1; }
+.resource-layout-issues { grid-column: 1 / -1; display: grid; gap: 4px; padding: 7px; background: #181d21; }
+.resource-layout-issues p { margin: 0; font-size: 10px; line-height: 1.35; }
 .resource-delete-button { color: #f2a3a3; border-color: #643737; }
 .placed-resource--inactive { opacity: .58; }
 .resource-context-menu { position: absolute; z-index: 20; display: grid; width: 180px; padding: 4px; background: #1c2227; border: 1px solid var(--border-strong); box-shadow: 0 8px 25px #000b; }
@@ -188,6 +193,13 @@
 .placed-resource--locked { cursor: not-allowed; }
 .placed-resource--moving { cursor: grabbing; opacity: .88; }
 .placed-resource__body { fill: #252b31; stroke: #67717b; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.placed-resource__clearance { fill: #4ab5d014; stroke: #56bed5; stroke-width: 1.5; stroke-dasharray: 8 5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.placed-resource__clearance[data-category="safety"] { fill: #f05b5b20; stroke: #f26a6a; }
+.placed-resource__clearance[data-category="maintenance"] { fill: #f2b84b1f; stroke: #f2b84b; }
+.placed-resource__clearance[data-category="loading"] { fill: #8d7bea20; stroke: #9d8df2; }
+.placed-resource__clearance[data-category="access"] { fill: #66ca7f1f; stroke: #68cf83; }
+.placed-resource--overlap .placed-resource__body { stroke: #ff5757; stroke-width: 3; }
+.placed-resource--clearance-warning:not(.placed-resource--overlap) .placed-resource__body { stroke: #f3bf55; stroke-width: 2; }
 .placed-resource__accent { fill: var(--accent); }
 .placed-resource__icon { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
 .placed-resource__name { fill: #e0e4e8; font: 600 11px "Segoe UI", sans-serif; pointer-events: none; }
@@ -198,6 +210,9 @@
 .placed-resource--selected:not(.placed-resource--primary) .placed-resource__selection { opacity: .58; stroke-width: 1.5; }
 .placed-resource--primary .placed-resource__selection { stroke-width: 3; stroke-dasharray: none; }
 .placed-resource__lock-label { fill: #efb85e; font: 700 8px "Segoe UI", sans-serif; text-anchor: end; letter-spacing: .5px; pointer-events: none; }
+.placed-resource__orientation { fill: none; stroke: #e9d467; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.placed-resource__dimensions { fill: #91a1ad; font: 8px Consolas, monospace; pointer-events: none; }
+.placed-resource__warning { fill: #17120a; stroke: #f4c158; stroke-width: 5; paint-order: stroke fill; font: 800 11px "Segoe UI", sans-serif; text-anchor: middle; pointer-events: none; vector-effect: non-scaling-stroke; }
 .placed-operation { cursor: move; pointer-events: all; }
 .placed-operation--locked { cursor: not-allowed; }
 .placed-operation--moving { cursor: grabbing; opacity: .88; }
@@ -273,6 +288,11 @@
 .resize-handle[data-resize-handle="top"], .resize-handle[data-resize-handle="bottom"] { cursor: ns-resize; }
 .resize-handle[data-resize-handle="top-left"], .resize-handle[data-resize-handle="bottom-right"] { cursor: nwse-resize; }
 .resize-handle[data-resize-handle="top-right"], .resize-handle[data-resize-handle="bottom-left"] { cursor: nesw-resize; }
+.rotation-handle { pointer-events: all; }
+.rotation-handle__stem { stroke: #ffe16a; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.rotation-handle__hit { fill: transparent; pointer-events: all; cursor: grab; }
+.rotation-handle__visible { fill: #ffe16a; stroke: #101419; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.canvas-viewport--resizing .rotation-handle { display: none; }
 .alignment-guide { stroke: #4fd6ff; stroke-width: 1.5; stroke-dasharray: 5 3; pointer-events: none; vector-effect: non-scaling-stroke; }
 .multi-selection-properties { display: grid; gap: 8px; padding: 11px; }
 .multi-selection-properties h3, .multi-selection-properties p { margin: 0; }

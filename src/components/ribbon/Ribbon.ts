@@ -49,7 +49,7 @@ export function createRibbon(workspaceStore?: WorkspaceStore, geometryEditing?: 
     updateWorkspaceCommands();
   };
 
-  const updateWorkspaceCommands = (): void => { const workspace = workspaceStore?.getActive() ?? 'processFlow'; const history = historyCommands?.getState(); content.querySelectorAll<HTMLButtonElement>('[data-command-name]').forEach((button) => { const command = button.dataset.commandName; const geometryCommand = command ? geometryCommandNames.get(command) : undefined; button.disabled = (fileBusy && Boolean(command && fileCommandNames.has(command))) || (command === 'Undo' && !history?.canUndo) || (command === 'Redo' && !history?.canRedo) || Boolean(geometryCommand && !geometryEditing?.isAvailable(geometryCommand)) || ((command === 'Add Operation' || command === 'Connect' || command === 'Delete Link') && workspace !== 'processFlow') || (command === 'Add Resource' && workspace !== 'factoryLayout'); if (command === 'Undo') { const label = history?.undoDescription ? `Undo ${history.undoDescription}` : 'Nothing to undo'; button.title = `${label} (Ctrl+Z)`; button.setAttribute('aria-label', label); } else if (command === 'Redo') { const label = history?.redoDescription ? `Redo ${history.redoDescription}` : 'Nothing to redo'; button.title = `${label} (Ctrl+Y or Ctrl+Shift+Z)`; button.setAttribute('aria-label', label); } }); };
+  const updateWorkspaceCommands = (): void => { const workspace = workspaceStore?.getActive() ?? 'processFlow'; const history = historyCommands?.getState(); content.querySelectorAll<HTMLButtonElement>('[data-command-name]').forEach((button) => { const command = button.dataset.commandName; const geometryCommand = command ? geometryCommandNames.get(command) : undefined; const factoryOnly = ['Add Resource', 'Rotate Left', 'Rotate Right', 'Reset Rotation', 'Clearance Envelopes', 'Fit Layout', 'Fit Including Clearance'].includes(command ?? ''); button.disabled = (fileBusy && Boolean(command && fileCommandNames.has(command))) || (command === 'Undo' && !history?.canUndo) || (command === 'Redo' && !history?.canRedo) || Boolean(geometryCommand && !geometryEditing?.isAvailable(geometryCommand)) || ((command === 'Add Operation' || command === 'Connect' || command === 'Delete Link') && workspace !== 'processFlow') || (factoryOnly && workspace !== 'factoryLayout'); if (command === 'Undo') { const label = history?.undoDescription ? `Undo ${history.undoDescription}` : 'Nothing to undo'; button.title = `${label} (Ctrl+Z)`; button.setAttribute('aria-label', label); } else if (command === 'Redo') { const label = history?.redoDescription ? `Redo ${history.redoDescription}` : 'Nothing to redo'; button.title = `${label} (Ctrl+Y or Ctrl+Shift+Z)`; button.setAttribute('aria-label', label); } }); };
 
   RIBBON_TABS.forEach((tab, index) => {
     const button = actionButton(tab.name, 'ribbon-tab');
@@ -71,6 +71,12 @@ const canvasCommands = new Map<string, CanvasCommand>([
   ['Zoom In', 'zoom-in'],
   ['Zoom Out', 'zoom-out'],
   ['Fit View', 'fit'],
+  ['Fit Layout', 'fit-layout'],
+  ['Fit Including Clearance', 'fit-clearance'],
+  ['Clearance Envelopes', 'toggle-clearance'],
+  ['Rotate Left', 'rotate-left'],
+  ['Rotate Right', 'rotate-right'],
+  ['Reset Rotation', 'rotation-reset'],
   ['Grid', 'grid'],
   ['Canvas Focus', 'focus'],
   ['Delete', 'delete-selection'],

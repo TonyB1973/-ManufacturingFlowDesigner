@@ -42,6 +42,8 @@ import type { GeometryCommandFactory } from '../../../services/history/GeometryC
 import { AlignmentGuideController } from './AlignmentGuideController';
 import { SelectionOverlayRenderer } from './SelectionOverlayRenderer';
 import { ResizeInteractionController } from './ResizeInteractionController';
+import { ResourceRotationController } from '../resources/ResourceRotationController';
+import { clearancePolygon, footprintPolygon, polygonAabb } from '../../../services/geometry/FactoryFootprintGeometry';
 
 const arrangementCommands = new Set<CanvasCommand>(['align-left', 'align-centre-x', 'align-right', 'align-top', 'align-centre-y', 'align-bottom', 'distribute-x', 'distribute-y', 'equal-gaps-x', 'equal-gaps-y', 'match-width', 'match-height', 'match-size']);
 const isGeometryCommand = (command: CanvasToolbarCommand | CanvasCommand): command is GeometryCommand => arrangementCommands.has(command as CanvasCommand);
@@ -88,6 +90,8 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   let activeWorkspace: WorkspaceId = workspaceStore.getActive();
   let selectionOverlay: SelectionOverlayRenderer | null = null;
   let resizeInteraction: ResizeInteractionController | null = null;
+  let rotationInteraction: ResourceRotationController | null = null;
+  let clearanceVisible = true;
 
   const saveViewport = (): void => workspaceStore.updateViewport(activeWorkspace, { panX: state.panX, panY: state.panY, zoom: state.zoom, gridVisible: state.gridVisible, originVisible: state.originVisible, snapEnabled: snap.enabled });
   const loadViewport = (workspaceId: WorkspaceId): void => { const stored = workspaceStore.getViewport(workspaceId); Object.assign(state, { panX: stored.panX, panY: stored.panY, zoom: stored.zoom, gridVisible: stored.gridVisible, originVisible: stored.originVisible, tool: 'select' }); snap.enabled = stored.snapEnabled; };
@@ -103,6 +107,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       toolbar.setOriginVisible(state.originVisible);
       toolbar.setSnapEnabled(snap.enabled);
       toolbar.setFocusMode(focusMode);
+      toolbar.setClearanceVisible(clearanceVisible);
       connectionInteraction?.viewportChanged();
       selectionOverlay?.setTool(state.tool);
       selectionOverlay?.viewportChanged();
@@ -152,9 +157,23 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
         callbacks.onStatusChange('Canvas reset to 100%');
         break;
       case 'fit':
-        fitActiveWorkspace();
+        fitActiveWorkspace(true);
         callbacks.onStatusChange(`${activeWorkspace === 'processFlow' ? 'Process Flow' : 'Factory Layout'} fitted to viewport`);
         break;
+      case 'fit-layout':
+        if (activeWorkspace !== 'factoryLayout') { callbacks.onStatusChange('Fit Layout is available only in Factory Layout'); break; }
+        fitActiveWorkspace(false); callbacks.onStatusChange('Factory footprints fitted to viewport'); break;
+      case 'fit-clearance':
+        if (activeWorkspace !== 'factoryLayout') { callbacks.onStatusChange('Fit Including Clearance is available only in Factory Layout'); break; }
+        fitActiveWorkspace(true); callbacks.onStatusChange('Factory footprints and clearance fitted to viewport'); break;
+      case 'toggle-clearance':
+        if (activeWorkspace !== 'factoryLayout') { callbacks.onStatusChange('Clearance envelopes are available only in Factory Layout'); break; }
+        clearanceVisible = !clearanceVisible; resourceRenderer.setClearanceVisible(clearanceVisible); callbacks.onStatusChange(`Clearance envelopes ${clearanceVisible ? 'shown' : 'hidden'}`); break;
+      case 'rotate-left': case 'rotate-right': case 'rotation-reset': {
+        if (activeWorkspace !== 'factoryLayout') { callbacks.onStatusChange('Resource rotation is available only in Factory Layout'); break; }
+        const resource = resourceStore.getSelectedResource(); if (!resource) { callbacks.onStatusChange('Select one resource to rotate'); break; } if (resource.locked) { callbacks.onStatusChange('Resource is locked'); break; }
+        const rotationDegrees = command === 'rotation-reset' ? 0 : resource.rotationDegrees + (command === 'rotate-left' ? -90 : 90); commands.updateResource(resource.id, { rotationDegrees }, `Rotate resource ${resource.id}`); callbacks.onStatusChange(`Resource rotated to ${resourceStore.getResource(resource.id)?.rotationDegrees ?? rotationDegrees}°`); break;
+      }
       case 'grid':
         state.gridVisible = !state.gridVisible;
         callbacks.onStatusChange(`Grid ${state.gridVisible ? 'enabled' : 'disabled'}`);
@@ -216,6 +235,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     guides,
     geometryEditing,
   );
+  rotationInteraction = new ResourceRotationController(viewport, state, resourceStore, commands, callbacks.onStatusChange);
   let operationInteraction: OperationInteractionController | null = new OperationInteractionController(viewport, state, operationStore, snap, callbacks.onStatusChange, commands, selectionStore, guides);
   const previewRoute = (sourceId: string, targetId: string, sourceAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor, targetAnchor: import('../../../models/connections/ProcessConnection').OperationAnchor) => {
     const source = operationStore.getOperation(sourceId); const target = operationStore.getOperation(targetId); if (!source || !target) return { points: [], status: 'fallback' as const };
@@ -246,12 +266,12 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     onKeyboardCommand: runCommand,
   });
 
-  function fitActiveWorkspace(): void {
+  function fitActiveWorkspace(includeClearance = true): void {
     const points: Point[] = [];
     if (activeWorkspace === 'processFlow') {
       operationStore.getOperations().filter((item) => item.visible).forEach((item) => points.push({ x: item.worldX - item.width / 2, y: item.worldY - item.height / 2 }, { x: item.worldX + item.width / 2, y: item.worldY + item.height / 2 }));
       connectionStore.getConnections().filter((connection) => connection.visible).forEach((connection) => points.push(...connection.routePoints));
-    } else resourceStore.getPlacedResources().filter((item) => item.visible).forEach((item) => points.push({ x: item.worldX - item.width / 2, y: item.worldY - item.height / 2 }, { x: item.worldX + item.width / 2, y: item.worldY + item.height / 2 }));
+    } else resourceStore.getPlacedResources().filter((item) => item.visible).forEach((item) => points.push(...(includeClearance && item.clearance.enabled ? clearancePolygon(item) : footprintPolygon(item))));
     if (!points.length) { centreOrigin(state, size, 1); return; } const minX = Math.min(...points.map((p) => p.x)); const maxX = Math.max(...points.map((p) => p.x)); const minY = Math.min(...points.map((p) => p.y)); const maxY = Math.max(...points.map((p) => p.y)); const padding = 60; state.zoom = Math.min(state.maxZoom, Math.max(state.minZoom, Math.min((size.width - padding * 2) / Math.max(1, maxX - minX), (size.height - padding * 2) / Math.max(1, maxY - minY)))); state.panX = size.width / 2 - (minX + maxX) / 2 * state.zoom; state.panY = size.height / 2 - (minY + maxY) / 2 * state.zoom;
   }
 
@@ -325,7 +345,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     if (!active.moved) { if (!active.additive && !active.subtractive) selectionStore.clear(); return; }
     const rectangle = normalizeRectangle(screenToWorld(active.start, state), screenToWorld(viewportPoint(event), state));
     const hits = activeWorkspace === 'factoryLayout'
-      ? resourceStore.getPlacedResources().filter((item) => item.visible && rectanglesIntersect(rectangle, { minX: item.worldX - item.width / 2, minY: item.worldY - item.height / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.height / 2 })).map((item) => ({ kind: 'resource' as const, id: item.id }))
+      ? resourceStore.getPlacedResources().filter((item) => item.visible && rectanglesIntersect(rectangle, polygonAabb(footprintPolygon(item)))).map((item) => ({ kind: 'resource' as const, id: item.id }))
       : [...operationStore.getOperations().filter((item) => item.visible && rectanglesIntersect(rectangle, { minX: item.worldX - item.width / 2, minY: item.worldY - item.height / 2, maxX: item.worldX + item.width / 2, maxY: item.worldY + item.height / 2 })).map((item) => ({ kind: 'operation' as const, id: item.id })), ...connectionStore.getConnections().filter((item) => item.visible && polylineIntersectsRectangle(item.routePoints, rectangle)).map((item) => ({ kind: 'connection' as const, id: item.id }))];
     if (active.subtractive) hits.forEach((item) => selectionStore.remove(item)); else if (active.additive) hits.forEach((item) => selectionStore.add(item)); else selectionStore.set(hits, hits.at(-1)); callbacks.onStatusChange(`Selected ${selectionStore.getState().items.length} items`);
   };
@@ -336,6 +356,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
     if (isTyping(event.target) || !application.contains(document.activeElement)) return;
     const commandKey = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
     if (commandKey && ['c', 'x', 'v', 'd', 'a'].includes(key)) { event.preventDefault(); const result = key === 'c' ? editing.copy() : key === 'x' ? editing.cut((message) => window.confirm(message)) : key === 'v' ? editing.paste() : key === 'd' ? editing.duplicate() : editing.selectAll(); callbacks.onStatusChange(result.message); return; }
+    if (activeWorkspace === 'factoryLayout' && ['[', ']', '{', '}'].includes(event.key)) { const resource = resourceStore.getSelectedResource(); if (!resource || resource.locked) { callbacks.onStatusChange(resource?.locked ? 'Resource is locked' : 'Select one resource to rotate'); return; } event.preventDefault(); const step = commandKey ? 90 : event.shiftKey ? 15 : 5; const rotatesLeft = event.key === '[' || event.key === '{'; commands.updateResource(resource.id, { rotationDegrees: resource.rotationDegrees + (rotatesLeft ? -step : step) }, `Rotate resource ${resource.id}`); callbacks.onStatusChange(`Resource rotated to ${resourceStore.getResource(resource.id)?.rotationDegrees}°`); requestRender(); return; }
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { const step = commandKey ? geometryEditing.gridInterval() : event.shiftKey ? 10 : 1; const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0; const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0; const result = geometryEditing.nudge(dx, dy); if (result.ok) event.preventDefault(); callbacks.onStatusChange(result.message); requestRender(); return; }
     if (event.key === 'Delete' || event.key === 'Backspace') { if (selectionStore.getState().items.length) event.preventDefault(); runCommand('delete-selection'); return; }
     if (event.key === 'Escape' && marqueeState) { cancelMarquee(); callbacks.onStatusChange('Marquee selection cancelled'); return; }
@@ -366,11 +387,11 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
   document.addEventListener(CANVAS_COMMAND_EVENT, handleGlobalCommand);
   const activateWorkspace = (workspaceId: WorkspaceId): void => workspaceStore.activate(workspaceId);
   processTab.addEventListener('click', () => activateWorkspace('processFlow')); layoutTab.addEventListener('click', () => activateWorkspace('factoryLayout'));
-  const cancelActiveInteractions = (): void => { cancelMarquee(); resizeInteraction?.cancel(); guides.clear(); resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool === 'connect' || state.tool === 'delete-link') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
+  const cancelActiveInteractions = (): void => { cancelMarquee(); resizeInteraction?.cancel(); rotationInteraction?.cancel(); guides.clear(); resourceInteraction?.cancelActiveDrag(); operationInteraction?.cancelActiveDrag(); connectionInteraction?.cancelCreation(); document.dispatchEvent(new Event(CANCEL_ACTIVE_INTERACTIONS_EVENT)); if (state.tool === 'connect' || state.tool === 'delete-link') { state.tool = 'select'; connectionInteraction?.toolChanged(); requestRender(); } };
   const renderWorkspace = (workspaceId: WorkspaceId): void => {
     if (workspaceId !== activeWorkspace) cancelActiveInteractions();
     saveViewport(); activeWorkspace = workspaceId; loadViewport(workspaceId); selectionStore.setWorkspace(workspaceId); grid.setWorkspace(workspaceId); connectionInteraction?.toolChanged();
-    const processActive = workspaceId === 'processFlow'; toolbar.setConnectionToolsEnabled(processActive); processTab.setAttribute('aria-selected', String(processActive)); layoutTab.setAttribute('aria-selected', String(!processActive)); processTab.tabIndex = processActive ? 0 : -1; layoutTab.tabIndex = processActive ? -1 : 0; canvasTitle.textContent = processActive ? 'Process Flow — Operations' : 'Factory Layout — Physical Resources'; viewport.setAttribute('aria-label', `${processActive ? 'Process Flow' : 'Factory Layout'} engineering canvas. Use the mouse wheel to zoom and middle mouse or Space plus drag to pan.`); callbacks.onWorkspaceChange(workspaceId); callbacks.onStatusChange(`Workspace: ${processActive ? 'Process Flow' : 'Factory Layout'}`); requestRender();
+    const processActive = workspaceId === 'processFlow'; toolbar.setConnectionToolsEnabled(processActive); toolbar.setFactoryToolsEnabled(!processActive); processTab.setAttribute('aria-selected', String(processActive)); layoutTab.setAttribute('aria-selected', String(!processActive)); processTab.tabIndex = processActive ? 0 : -1; layoutTab.tabIndex = processActive ? -1 : 0; canvasTitle.textContent = processActive ? 'Process Flow — Operations' : 'Factory Layout — Physical Resources'; viewport.setAttribute('aria-label', `${processActive ? 'Process Flow' : 'Factory Layout'} engineering canvas. Use the mouse wheel to zoom and middle mouse or Space plus drag to pan.`); callbacks.onWorkspaceChange(workspaceId); callbacks.onStatusChange(`Workspace: ${processActive ? 'Process Flow' : 'Factory Layout'}`); requestRender();
   };
   const unsubscribeWorkspace = workspaceStore.subscribe(renderWorkspace); grid.setWorkspace(activeWorkspace); renderWorkspace(activeWorkspace);
   requestRender();
@@ -382,6 +403,7 @@ export function createCanvasViewport(application: HTMLElement, resourceStore: Re
       interaction.dispose();
       resourceInteraction?.dispose();
       resourceInteraction = null;
+      rotationInteraction?.dispose(); rotationInteraction = null;
       resourceRenderer.dispose();
       operationInteraction?.dispose(); operationInteraction = null; operationRenderer.dispose();
       connectionInteraction?.dispose(); connectionInteraction = null; connectionRenderer.dispose();

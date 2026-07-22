@@ -32,7 +32,7 @@ export interface ResourceTemplate {
   readonly resourceType: ResourceType;
   readonly icon: ResourceIcon;
   readonly defaultWidth: number;
-  readonly defaultHeight: number;
+  readonly defaultDepth: number;
   readonly tags: readonly string[];
   isFavourite: boolean;
 }

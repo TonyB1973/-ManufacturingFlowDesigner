@@ -25,7 +25,7 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
     project: { ...source.metadata, modifiedUtc },
     resourceTemplates: byId(source.resources.getTemplates()).map((item) => ({ ...item, tags: [...item.tags] })),
     operationTemplates: byId(source.operations.getTemplates()).map((item) => ({ ...item, tags: [...item.tags] })),
-    resources: byId(source.resources.getPlacedResources()).map(({ selected: _selected, ...item }) => ({ ...item })),
+    resources: byId(source.resources.getPlacedResources()).map(({ selected: _selected, ...item }) => ({ ...item, clearance: { ...item.clearance } })),
     operations: byId(source.operations.getOperations()).map(({ selected: _selected, ...item }) => ({ ...item })),
     connections: byId(source.connections.getConnections()).map(({ selected: _selected, routePoints: _points, routeStatus: _status, ...item }) => ({ ...item, sourceAnchor: { ...item.sourceAnchor }, targetAnchor: { ...item.targetAnchor } })),
     workspaces: {

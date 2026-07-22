@@ -5,6 +5,10 @@ export type ProjectMigration = (document: Record<string, unknown>) => Record<str
 export class ProjectMigrationService {
   private readonly migrations = new Map<string, { readonly to: string; readonly migrate: ProjectMigration }>();
 
+  public constructor() {
+    this.register('1.0.0', '1.1.0', migrateFactoryLayoutEngineering);
+  }
+
   public register(from: string, to: string, migrate: ProjectMigration): void {
     this.migrations.set(from, { to, migrate });
   }
@@ -33,6 +37,41 @@ export class ProjectMigrationService {
     return { value, migratedFrom };
   }
 }
+
+function migrateFactoryLayoutEngineering(document: Record<string, unknown>): Record<string, unknown> {
+  const resources = Array.isArray(document.resources) ? document.resources.map((candidate) => {
+    if (!isRecord(candidate)) return candidate;
+    const { height: legacyHeight, ...resource } = candidate;
+    return {
+      ...resource,
+      depth: typeof resource.depth === 'number' ? resource.depth : legacyHeight,
+      rotationDegrees: normalizeAngle(typeof resource.rotationDegrees === 'number' ? resource.rotationDegrees : 0),
+      clearance: migrateClearance(resource.clearance),
+    };
+  }) : document.resources;
+  const resourceTemplates = Array.isArray(document.resourceTemplates) ? document.resourceTemplates.map((candidate) => {
+    if (!isRecord(candidate)) return candidate;
+    const { defaultHeight: legacyHeight, ...template } = candidate;
+    return { ...template, defaultDepth: typeof template.defaultDepth === 'number' ? template.defaultDepth : legacyHeight };
+  }) : document.resourceTemplates;
+  return { ...document, applicationVersion: '0.3.0', resources, resourceTemplates };
+}
+
+function migrateClearance(value: unknown): Record<string, unknown> {
+  const source = isRecord(value) ? value : {};
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : false,
+    left: nonNegative(source.left),
+    right: nonNegative(source.right),
+    top: nonNegative(source.top),
+    bottom: nonNegative(source.bottom),
+    category: typeof source.category === 'string' ? source.category.toLowerCase() : 'general',
+    note: typeof source.note === 'string' ? source.note : '',
+  };
+}
+
+const nonNegative = (value: unknown): number => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+const normalizeAngle = (value: number): number => ((value % 360) + 360) % 360;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

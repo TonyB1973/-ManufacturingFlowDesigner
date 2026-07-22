@@ -6,8 +6,8 @@ import type { ResourceTemplate } from '../resources/ResourceTemplate';
 import type { WorkspaceId, WorkspaceViewportState } from '../workspace/Workspace';
 
 export const PROJECT_FORMAT = 'ManufacturingFlowDesigner' as const;
-export const PROJECT_SCHEMA_VERSION = '1.0.0' as const;
-export const APPLICATION_VERSION = '0.2.0' as const;
+export const PROJECT_SCHEMA_VERSION = '1.1.0' as const;
+export const APPLICATION_VERSION = '0.3.0' as const;
 export const PROJECT_MIME_TYPE = 'application/vnd.manufacturing-flow-designer+json' as const;
 export const PROJECT_FILE_EXTENSION = '.mflow' as const;
 
