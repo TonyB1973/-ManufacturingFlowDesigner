@@ -9,6 +9,8 @@ import type { FactoryRouteStore } from '../FactoryRouteStore';
 import type { FactoryAnnotationStore } from '../FactoryAnnotationStore';
 import type { StandardWorkStore } from '../StandardWorkStore';
 import type { StandardWorkSelectionStore } from '../standardWork/StandardWorkSelectionStore';
+import type { StandardWorkOperatorStore } from '../standardWork/StandardWorkOperatorStore';
+import type { StandardWorkHandoverStore } from '../standardWork/StandardWorkHandoverStore';
 
 export interface CommandExecutionContext {
   readonly resources: ResourceStore;
@@ -18,6 +20,8 @@ export interface CommandExecutionContext {
   readonly routes: FactoryRouteStore;
   readonly annotations: FactoryAnnotationStore;
   readonly standardWork: StandardWorkStore;
+  readonly standardWorkOperators: StandardWorkOperatorStore;
+  readonly standardWorkHandovers: StandardWorkHandoverStore;
   readonly standardWorkSelection: StandardWorkSelectionStore;
   readonly project: ProjectSessionService;
   readonly selection: SelectionController;

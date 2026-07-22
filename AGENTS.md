@@ -73,4 +73,10 @@
 71. Keep `OperationInstance.cycleTimeSeconds` authoritative. Never persist chart block times, calculated lanes, span, overrun, diagnostics, SVG geometry, chart selection, zoom, or scroll.
 72. Automatic lanes use physical Resource Instance IDs, resolve names dynamically, and retain an Unassigned Automatic lane. Same-resource overlap is preliminary chart information until authoritative capacity validation in Sprint 3.6.
 73. Schema `1.6.0` owns validated persistent Standard Work chart-display settings and explicitly migrates `1.5.0`; chart settings are undoable, while calculation, selection, zoom, pan, and Fit Chart are not history actions.
+74. Standard Work operators are study-specific participants with stable `SWO` IDs; entry assignments reference an operator in the same study, while an optional physical-resource link remains informational and stores no copied resource data.
+75. Every study has at least one operator. Study creation includes `Operator 1` atomically, and the active operator with lowest display order then stable ID is the deterministic default for new entries.
+76. Multi-operator scheduling uses one cursor per operator. Manual, Walking, and Waiting advance only the assigned cursor; Automatic starts from its assigned operator cursor, records that launch operator, and advances no operator cursor.
+77. Standard Work handovers are stable `SWH` zero-duration forward dependencies. Dependency idle is derived and distinct from explicit Waiting; model real transfer or waiting work as an operation.
+78. Operator deletion with assigned entries requires same-study reassignment and preserves handovers. Entry and operation deletion cascade attached handovers; physical-resource deletion clears only operator links and operation assignments.
+79. Schema `1.7.0` owns operators, entry assignments, handovers, and their chart settings. Operator cursors, workloads, schedules, dependency idle, and handover geometry remain derived and excluded from persistence.
 

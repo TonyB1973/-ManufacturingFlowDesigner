@@ -3,7 +3,9 @@ const load = (path) => loadModule(path, import.meta.url);
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 
 const { StandardWorkStore } = await load('../src/services/StandardWorkStore.ts');
-const { StandardWorkStudyIdGenerator, StandardWorkEntryIdGenerator } = await load('../src/utilities/StandardWorkIdGenerator.ts');
+const { StandardWorkStudyIdGenerator, StandardWorkEntryIdGenerator, StandardWorkOperatorIdGenerator, StandardWorkHandoverIdGenerator } = await load('../src/utilities/StandardWorkIdGenerator.ts');
+const { StandardWorkOperatorStore } = await load('../src/services/standardWork/StandardWorkOperatorStore.ts');
+const { StandardWorkHandoverStore } = await load('../src/services/standardWork/StandardWorkHandoverStore.ts');
 const { StandardWorkSelectionStore } = await load('../src/services/standardWork/StandardWorkSelectionStore.ts');
 const { StandardWorkOperationResolver } = await load('../src/services/standardWork/StandardWorkOperationResolver.ts');
 const { calculateStandardWorkSummary } = await load('../src/services/standardWork/StandardWorkCalculationService.ts');
@@ -27,8 +29,11 @@ const { deserializeProject } = await load('../src/services/project/ProjectDeseri
 const canvasSelection = new SelectionStore(); const operations = new OperationStore(OPERATION_TEMPLATES, new OperationIdGenerator(), canvasSelection); const resources = new ResourceStore(RESOURCE_TEMPLATES, new ResourceIdGenerator(), canvasSelection);
 const connectionIds = new ConnectionIdGenerator(); const connections = new ConnectionStore(connectionIds, (id) => operations.getOperation(id), () => ({ points: [], status: 'clear' }), canvasSelection);
 const standardSelection = new StandardWorkSelectionStore(); const standardWork = new StandardWorkStore(new StandardWorkStudyIdGenerator(), new StandardWorkEntryIdGenerator(), (id) => Boolean(operations.getOperation(id)));
+const standardWorkOperators = new StandardWorkOperatorStore(new StandardWorkOperatorIdGenerator(), (id) => Boolean(standardWork.getStudy(id)), (id) => Boolean(resources.getResource(id)));
+standardWork.setOperatorResolver((id) => standardWorkOperators.getOperator(id)?.studyId ?? null);
+const standardWorkHandovers = new StandardWorkHandoverStore(new StandardWorkHandoverIdGenerator(), (id) => standardWork.getEntry(id), (studyId) => standardWork.getEntries(studyId));
 const project = { getMetadata: () => ({ id: 'PRJ-TEST' }), getSettings: () => ({ standardWork: { timeFormat: 'seconds', chart: {} } }), applyMetadata: () => true, applySettings: () => true };
-const noopStore = {}; const context = { resources, operations, connections, structure: noopStore, routes: noopStore, annotations: noopStore, standardWork, standardWorkSelection: standardSelection, project, selection: canvasSelection };
+const noopStore = {}; const context = { resources, operations, connections, structure: noopStore, routes: noopStore, annotations: noopStore, standardWork, standardWorkOperators, standardWorkHandovers, standardWorkSelection: standardSelection, project, selection: canvasSelection };
 const history = new CommandHistoryService(context, 200); const commands = new CommandFactory(history, context); const standardCommands = new StandardWorkCommandFactory(history, context); const resolver = new StandardWorkOperationResolver(operations, resources);
 
 const cut = operations.addOperation('op-cut', 0, 0); const machine = operations.addOperation('op-machine', 250, 0); const move = operations.addOperation('op-move', 500, 0); assert(cut && machine && move, 'Process Flow operations are available');
@@ -48,7 +53,7 @@ connections.createConnection(machine.id, move.id, { side: 'right', offset: .5 },
 operations.updateOperation(cut.id, { cycleTimeSeconds: 0 }); const validation = validateStandardWork(standardWork.getStudies(), standardWork.getEntries(), operations); assert(validation.issues.some((issue) => issue.code === 'zero-cycle-time' && issue.severity === 'warning'), 'Zero operation time is permitted with a warning');
 assert(formatDuration(65, 'seconds') === '65 s' && formatDuration(65, 'minutesSeconds') === '01:05' && formatDuration(3665, 'minutesSeconds') === '61:05' && formatDuration(3665, 'hoursMinutesSeconds') === '01:01:05', 'Duration formats change display without changing seconds');
 const persistedEntry = standardWork.getEntries(study.id)[0]; assert(!('cycleTimeSeconds' in persistedEntry) && !('timingCategory' in persistedEntry) && !('name' in persistedEntry), 'Entry model contains no duplicated operation timing or name');
-const legacy = createDemoProject(); const legacyDocument = { ...legacy, schemaVersion: '1.4.0', applicationVersion: '0.6.0', operationTemplates: legacy.operationTemplates.map((item) => ({ ...item, timingCategory: 'Value Added' })), operations: legacy.operations.map((item) => ({ ...item, timingCategory: 'Value Added' })) }; delete legacyDocument.standardWorkStudies; delete legacyDocument.standardWorkEntries; const migrated = deserializeProject(JSON.stringify(legacyDocument)); assert(migrated.migratedFrom === '1.4.0' && migrated.document.schemaVersion === '1.6.0' && migrated.document.standardWorkStudies.length === 0 && migrated.document.settings.standardWork.timeFormat === 'seconds' && migrated.document.settings.standardWork.chart.showAutomaticLanes, 'Schema 1.4 migrates explicitly through chart-capable Standard Work defaults');
+const legacy = createDemoProject(); const legacyDocument = { ...legacy, schemaVersion: '1.4.0', applicationVersion: '0.6.0', operationTemplates: legacy.operationTemplates.map((item) => ({ ...item, timingCategory: 'Value Added' })), operations: legacy.operations.map((item) => ({ ...item, timingCategory: 'Value Added' })) }; delete legacyDocument.standardWorkStudies; delete legacyDocument.standardWorkEntries; delete legacyDocument.standardWorkOperators; delete legacyDocument.standardWorkHandovers; const migrated = deserializeProject(JSON.stringify(legacyDocument)); assert(migrated.migratedFrom === '1.4.0' && migrated.document.schemaVersion === '1.7.0' && migrated.document.standardWorkStudies.length === 0 && migrated.document.settings.standardWork.timeFormat === 'seconds' && migrated.document.settings.standardWork.chart.showAutomaticLanes, 'Schema 1.4 migrates explicitly through operator-capable Standard Work defaults');
 
 connections.dispose(); operations.dispose(); resources.dispose();
 console.log('Standard Work timing foundation checks passed.');

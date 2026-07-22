@@ -20,8 +20,11 @@ import { FACTORY_ANNOTATION_LAYERS, LEADER_ARROW_STYLES, LINEAR_DIMENSION_KINDS,
 import { LENGTH_UNITS } from '../units/LengthUnitService';
 import { STANDARD_WORK_LIMITS, STANDARD_WORK_TIME_FORMATS, isValidStandardWorkEntry, isValidStandardWorkStudy, type StandardWorkEntry, type StandardWorkStudy } from '../../models/standardWork/StandardWork';
 import { isValidStandardWorkChartSettings } from '../../models/standardWork/StandardWorkChartSettings';
+import { STANDARD_WORK_OPERATOR_LIMITS, isValidStandardWorkOperator, type StandardWorkOperator } from '../../models/standardWork/StandardWorkOperator';
+import { STANDARD_WORK_HANDOVER_LIMITS, isValidStandardWorkHandover, type StandardWorkHandover } from '../../models/standardWork/StandardWorkHandover';
+import { validateHandoverGraph } from '../standardWork/StandardWorkDependencyGraph';
 
-const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, studies: 10000, standardWorkEntries: 500000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
+const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, studies: 10000, standardWorkEntries: 500000, standardWorkOperators: 100000, standardWorkHandovers: 1000000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const ANCHOR_SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const CONNECTION_TYPES = new Set(['Standard', 'Rework', 'Alternate', 'Information']);
@@ -63,6 +66,8 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const factoryAnnotations = factoryAnnotationValues(root.factoryAnnotations, issues);
   const standardWorkStudies = standardWorkStudyValues(root.standardWorkStudies, issues);
   const standardWorkEntries = standardWorkEntryValues(root.standardWorkEntries, issues);
+  const standardWorkOperators = standardWorkOperatorValues(root.standardWorkOperators, issues);
+  const standardWorkHandovers = standardWorkHandoverValues(root.standardWorkHandovers, issues);
   const workspaces = workspaceValues(root.workspaces, issues);
   const settings = settingsValue(root.settings, issues);
 
@@ -72,15 +77,16 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   uniqueIds('operation', operations, issues);
   uniqueIds('connection', connections, issues);
   uniqueIds('boundary', layoutBoundaries, issues); uniqueIds('wall', walls, issues); uniqueIds('area', areas, issues); uniqueIds('aisle', aisles, issues); uniqueIds('factory route', factoryRoutes, issues); uniqueIds('factory annotation', factoryAnnotations, issues);
-  uniqueIds('Standard Work study', standardWorkStudies, issues); uniqueIds('Standard Work entry', standardWorkEntries, issues);
+  uniqueIds('Standard Work study', standardWorkStudies, issues); uniqueIds('Standard Work entry', standardWorkEntries, issues); uniqueIds('Standard Work operator', standardWorkOperators, issues); uniqueIds('Standard Work handover', standardWorkHandovers, issues);
   if (layoutBoundaries.filter((item) => item.layoutId === DEFAULT_FACTORY_LAYOUT_ID).length > 1) issues.push('Only one active factory boundary is allowed per layout.');
   const entityIds = new Set<string>();
-  [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles, ...factoryRoutes, ...factoryAnnotations, ...standardWorkStudies, ...standardWorkEntries].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
+  [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles, ...factoryRoutes, ...factoryAnnotations, ...standardWorkStudies, ...standardWorkEntries, ...standardWorkOperators, ...standardWorkHandovers].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
   const resourceTemplateIds = new Set(resourceTemplates.map((item) => item.id));
   const operationTemplateIds = new Set(operationTemplates.map((item) => item.id));
   const resourceIds = new Set(resources.map((item) => item.id));
   const operationIds = new Set(operations.map((item) => item.id));
   const studyIds = new Set(standardWorkStudies.map((item) => item.id));
+  const operatorIds = new Set(standardWorkOperators.map((item) => item.id));
   const areaIds = new Set(areas.map((item) => item.id));
   const boundaryIds = new Set(layoutBoundaries.map((item) => item.id)); const wallIds = new Set(walls.map((item) => item.id)); const aisleIds = new Set(aisles.map((item) => item.id)); const routeIds = new Set(factoryRoutes.map((item) => item.id));
   resources.forEach((item) => { if (!resourceTemplateIds.has(item.templateId)) issues.push(`Resource ${item.id} references missing template ${item.templateId}.`); });
@@ -99,8 +105,12 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
     }
   });
   const standardWorkPairs = new Set<string>(); const standardWorkCounts = new Map<string, number>();
-  standardWorkEntries.forEach((entry) => { if (!studyIds.has(entry.studyId)) issues.push(`Standard Work entry ${entry.id} references missing study ${entry.studyId}.`); if (!operationIds.has(entry.operationId)) issues.push(`Standard Work entry ${entry.id} references missing operation ${entry.operationId}.`); const pair = `${entry.studyId}\u0000${entry.operationId}`; if (standardWorkPairs.has(pair)) issues.push(`Standard Work study ${entry.studyId} contains duplicate operation ${entry.operationId}.`); standardWorkPairs.add(pair); standardWorkCounts.set(entry.studyId, (standardWorkCounts.get(entry.studyId) ?? 0) + 1); });
+  standardWorkEntries.forEach((entry) => { if (!studyIds.has(entry.studyId)) issues.push(`Standard Work entry ${entry.id} references missing study ${entry.studyId}.`); if (!operationIds.has(entry.operationId)) issues.push(`Standard Work entry ${entry.id} references missing operation ${entry.operationId}.`); const operator = standardWorkOperators.find((item) => item.id === entry.assignedOperatorId); if (!operatorIds.has(entry.assignedOperatorId)) issues.push(`Standard Work entry ${entry.id} references missing operator ${entry.assignedOperatorId}.`); else if (operator?.studyId !== entry.studyId) issues.push(`Standard Work entry ${entry.id} references an operator from another study.`); const pair = `${entry.studyId}\u0000${entry.operationId}`; if (standardWorkPairs.has(pair)) issues.push(`Standard Work study ${entry.studyId} contains duplicate operation ${entry.operationId}.`); standardWorkPairs.add(pair); standardWorkCounts.set(entry.studyId, (standardWorkCounts.get(entry.studyId) ?? 0) + 1); });
   standardWorkCounts.forEach((count, studyId) => { if (count > STANDARD_WORK_LIMITS.entriesPerStudy) issues.push(`Standard Work study ${studyId} exceeds ${STANDARD_WORK_LIMITS.entriesPerStudy} entries.`); });
+  const operatorCounts = new Map<string, number>(); standardWorkOperators.forEach((operator) => { if (!studyIds.has(operator.studyId)) issues.push(`Standard Work operator ${operator.id} references missing study ${operator.studyId}.`); if (operator.linkedResourceId !== null && !resourceIds.has(operator.linkedResourceId)) issues.push(`Standard Work operator ${operator.id} references missing physical resource ${operator.linkedResourceId}.`); operatorCounts.set(operator.studyId, (operatorCounts.get(operator.studyId) ?? 0) + 1); });
+  for (const study of standardWorkStudies) if (!(operatorCounts.get(study.id) ?? 0)) issues.push(`Standard Work study ${study.id} requires at least one operator.`); operatorCounts.forEach((count, studyId) => { if (count > STANDARD_WORK_OPERATOR_LIMITS.perStudy) issues.push(`Standard Work study ${studyId} exceeds the operator safety limit.`); });
+  const handoverCounts = new Map<string, number>(); standardWorkHandovers.forEach((handover) => { if (!studyIds.has(handover.studyId)) issues.push(`Standard Work handover ${handover.id} references missing study ${handover.studyId}.`); handoverCounts.set(handover.studyId, (handoverCounts.get(handover.studyId) ?? 0) + 1); }); handoverCounts.forEach((count, studyId) => { if (count > STANDARD_WORK_HANDOVER_LIMITS.perStudy) issues.push(`Standard Work study ${studyId} exceeds the handover safety limit.`); });
+  for (const study of standardWorkStudies) for (const issue of validateHandoverGraph(standardWorkEntries.filter((entry) => entry.studyId === study.id), standardWorkHandovers.filter((item) => item.studyId === study.id))) issues.push(issue.message);
   factoryRoutes.forEach((route) => {
     for (const endpoint of [route.source, route.target]) {
       if (endpoint.kind === 'resource' && !resourceIds.has(endpoint.resourceId)) issues.push(`FactoryRoute ${route.id} references missing physical resource ${endpoint.resourceId}.`);
@@ -124,7 +134,7 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   if (issues.length) throw new ProjectValidationError(issues);
   return {
     format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: root.applicationVersion as string,
-    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations, standardWorkStudies, standardWorkEntries,
+    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations, standardWorkStudies, standardWorkEntries, standardWorkOperators, standardWorkHandovers,
     workspaces: workspaces!, settings: settings!,
   };
 }
@@ -267,6 +277,12 @@ function standardWorkStudyValues(value: unknown, issues: string[]): StandardWork
 }
 function standardWorkEntryValues(value: unknown, issues: string[]): StandardWorkEntry[] {
   return arrayValue(value, 'standardWorkEntries', LIMITS.standardWorkEntries, issues).flatMap((raw, index) => { const item = record(raw, `standardWorkEntries[${index}]`, issues); if (!item) return []; const entry = item as unknown as StandardWorkEntry; if (!isValidStandardWorkEntry(entry)) issues.push(`standardWorkEntries[${index}] has invalid fields.`); return [entry]; });
+}
+function standardWorkOperatorValues(value: unknown, issues: string[]): StandardWorkOperator[] {
+  return arrayValue(value, 'standardWorkOperators', LIMITS.standardWorkOperators, issues).flatMap((raw, index) => { const item = record(raw, `standardWorkOperators[${index}]`, issues); if (!item) return []; const operator = item as unknown as StandardWorkOperator; if (!isValidStandardWorkOperator(operator)) issues.push(`standardWorkOperators[${index}] has invalid fields.`); return [operator]; });
+}
+function standardWorkHandoverValues(value: unknown, issues: string[]): StandardWorkHandover[] {
+  return arrayValue(value, 'standardWorkHandovers', LIMITS.standardWorkHandovers, issues).flatMap((raw, index) => { const item = record(raw, `standardWorkHandovers[${index}]`, issues); if (!item) return []; const handover = item as unknown as StandardWorkHandover; if (!isValidStandardWorkHandover(handover)) issues.push(`standardWorkHandovers[${index}] has invalid fields.`); return [handover]; });
 }
 function anchorValue(value: unknown): ProcessConnection['sourceAnchor'] | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;

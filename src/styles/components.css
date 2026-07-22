@@ -507,6 +507,14 @@
 .standard-work-chart-block:focus { outline: none; }
 .standard-work-chart-block:focus .standard-work-chart-geometry { stroke: var(--focus); stroke-width: 3; }
 .standard-work-chart-zero { stroke-width: 3; }
+.standard-work-dependency-idle { fill: rgb(235 180 70 / .12); stroke: #b98b38; stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.standard-work-handover-link { fill: none; stroke: #69d0ff; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: pointer; pointer-events: stroke; }
+.standard-work-handover-arrow { fill: #69d0ff; pointer-events: none; }
+.standard-work-chart-block { cursor: ns-resize; }
+.standard-work-handover-link:hover, .standard-work-handover-link:focus, .standard-work-handover-link--selected { stroke: #fff; stroke-width: 4; outline: none; filter: drop-shadow(0 0 3px #51c9ff); }
+.standard-work-handover-link--disabled { stroke: #758187; stroke-dasharray: 5 4; }
+.standard-work-handover-link--same-operator { stroke: #dfa841; }
+.standard-work-operator-list { display: grid; gap: 3px; max-height: 220px; margin-bottom: 12px; overflow: auto; }
 .standard-work-block-label { fill: #f5f8f9; font-size: 10px; pointer-events: none; }
 .standard-work-block-values { fill: #e3eaed; font-size: 8px; pointer-events: none; }
 .standard-work-launch-marker { fill: #d4a4ef; stroke: #2b1d34; stroke-width: 1; }

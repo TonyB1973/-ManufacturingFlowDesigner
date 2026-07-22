@@ -190,7 +190,9 @@ export function createDemoProject(now = new Date().toISOString()): ProjectDocume
       { id: 'ANN-0005', annotationType: 'leader', layoutId: DEFAULT_FACTORY_LAYOUT_ID, anchor: { kind: 'resource', resourceId: 'RES-0004', feature: 'centre' }, elbowPoints: [{ x: 1120, y: 80 }], textPosition: { x: 1180, y: 40 }, text: 'Final quality gate', textSize: 16, arrowStyle: 'filled', visible: true, locked: false, layer: 'Notes', note: 'Example resource callout.', createdUtc: now },
     ],
     standardWorkStudies: [{ id: 'SW-0001', name: 'Demo Product Standard Work', description: 'Reference study for testing live Process Flow timing.', productOrProcessName: 'Demo Product', revision: 'A', active: true, notes: 'Durations resolve from the referenced operations.', createdUtc: now, modifiedUtc: now }],
-    standardWorkEntries: operations.map((item, index) => ({ id: `SWE-${String(index + 1).padStart(4, '0')}`, studyId: 'SW-0001', operationId: item.id, order: (index + 1) * 10, occurrences: 1, enabled: true, notes: '' })),
+    standardWorkOperators: [{ id: 'SWO-0001', studyId: 'SW-0001', name: 'Operator 1', role: 'Production operator', displayOrder: 10, active: true, linkedResourceId: null, notes: 'Default demonstration operator.' }],
+    standardWorkEntries: operations.map((item, index) => ({ id: `SWE-${String(index + 1).padStart(4, '0')}`, studyId: 'SW-0001', operationId: item.id, assignedOperatorId: 'SWO-0001', order: (index + 1) * 10, occurrences: 1, enabled: true, notes: '' })),
+    standardWorkHandovers: [],
     workspaces: {
       active: 'processFlow',
       processFlow: { panX: 55, panY: 100, zoom: 0.5, gridVisible: true, originVisible: true, snapEnabled: true },

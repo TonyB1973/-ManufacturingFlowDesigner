@@ -3,6 +3,8 @@ export type StandardWorkChartIntervalMode = typeof STANDARD_WORK_CHART_INTERVAL_
 
 export const STANDARD_WORK_CHART_LANE_DENSITIES = ['compact', 'comfortable'] as const;
 export type StandardWorkChartLaneDensity = typeof STANDARD_WORK_CHART_LANE_DENSITIES[number];
+export const STANDARD_WORK_HANDOVER_ROUTING_STYLES = ['orthogonal', 'curved'] as const;
+export type StandardWorkHandoverRoutingStyle = typeof STANDARD_WORK_HANDOVER_ROUTING_STYLES[number];
 
 export interface StandardWorkChartSettings {
   intervalMode: StandardWorkChartIntervalMode;
@@ -18,6 +20,14 @@ export interface StandardWorkChartSettings {
   showAutomaticLanes: boolean;
   showDisabledEntries: boolean;
   laneDensity: StandardWorkChartLaneDensity;
+  showOperatorIds: boolean;
+  showOperatorRoles: boolean;
+  showOperatorTotals: boolean;
+  showHandoverLinks: boolean;
+  showDisabledHandovers: boolean;
+  showDependencyIdle: boolean;
+  operatorLaneDensity: StandardWorkChartLaneDensity;
+  handoverRoutingStyle: StandardWorkHandoverRoutingStyle;
 }
 
 export const DEFAULT_STANDARD_WORK_CHART_SETTINGS: Readonly<StandardWorkChartSettings> = {
@@ -34,6 +44,14 @@ export const DEFAULT_STANDARD_WORK_CHART_SETTINGS: Readonly<StandardWorkChartSet
   showAutomaticLanes: true,
   showDisabledEntries: false,
   laneDensity: 'comfortable',
+  showOperatorIds: true,
+  showOperatorRoles: true,
+  showOperatorTotals: true,
+  showHandoverLinks: true,
+  showDisabledHandovers: false,
+  showDependencyIdle: true,
+  operatorLaneDensity: 'comfortable',
+  handoverRoutingStyle: 'orthogonal',
 };
 
 export function isValidStandardWorkChartSettings(value: unknown): value is StandardWorkChartSettings {
@@ -42,8 +60,10 @@ export function isValidStandardWorkChartSettings(value: unknown): value is Stand
   return STANDARD_WORK_CHART_INTERVAL_MODES.includes(item.intervalMode as StandardWorkChartIntervalMode)
     && typeof item.fixedMajorIntervalSeconds === 'number' && Number.isFinite(item.fixedMajorIntervalSeconds) && item.fixedMajorIntervalSeconds > 0
     && Number.isInteger(item.minorSubdivisions) && Number(item.minorSubdivisions) >= 1 && Number(item.minorSubdivisions) <= 10
-    && ['showMinorGrid', 'showOperationIds', 'showOperationNames', 'showDurations', 'showStartEndValues', 'showAutomaticLaunchMarkers', 'showLaneIds', 'showAutomaticLanes', 'showDisabledEntries'].every((key) => typeof item[key] === 'boolean')
-    && STANDARD_WORK_CHART_LANE_DENSITIES.includes(item.laneDensity as StandardWorkChartLaneDensity);
+    && ['showMinorGrid', 'showOperationIds', 'showOperationNames', 'showDurations', 'showStartEndValues', 'showAutomaticLaunchMarkers', 'showLaneIds', 'showAutomaticLanes', 'showDisabledEntries', 'showOperatorIds', 'showOperatorRoles', 'showOperatorTotals', 'showHandoverLinks', 'showDisabledHandovers', 'showDependencyIdle'].every((key) => typeof item[key] === 'boolean')
+    && STANDARD_WORK_CHART_LANE_DENSITIES.includes(item.laneDensity as StandardWorkChartLaneDensity)
+    && STANDARD_WORK_CHART_LANE_DENSITIES.includes(item.operatorLaneDensity as StandardWorkChartLaneDensity)
+    && STANDARD_WORK_HANDOVER_ROUTING_STYLES.includes(item.handoverRoutingStyle as StandardWorkHandoverRoutingStyle);
 }
 
 export const cloneStandardWorkChartSettings = (value: StandardWorkChartSettings): StandardWorkChartSettings => ({ ...value });
