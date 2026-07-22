@@ -51,7 +51,7 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
       processFlow: source.workspaces.getViewport('processFlow'),
       factoryLayout: source.workspaces.getViewport('factoryLayout'),
     },
-    settings: { ...source.settings, units: { ...source.settings.units }, standardWork: { ...source.settings.standardWork } },
+    settings: { ...source.settings, units: { ...source.settings.units }, standardWork: { ...source.settings.standardWork, chart: { ...source.settings.standardWork.chart } } },
   };
 }
 

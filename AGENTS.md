@@ -68,4 +68,9 @@
 66. A study contains an operation at most once, uses occurrences for repetition, and owns an independently ordered entry list that does not mutate or silently follow Process Flow sequence after initial population.
 67. Deleting an operation atomically deletes attached Process Connections and affected Standard Work entries; Undo restores exact operation, connection, SW/SWE IDs, references, and entry order. Resource deletion still clears assignments without deleting Standard Work entries.
 68. Schema `1.5.0` owns Standard Work studies, entries, and display settings and explicitly migrates `1.4.0` projects without changing existing authored project data or canvas viewports.
+69. Standard Work charts are derived single-operator schedules: Manual, Walking, and Waiting advance the operator cursor; Automatic starts at the cursor on a resource lane and does not advance it.
+70. Chart cycle span is the maximum of operator sequence end and latest Automatic completion. Automatic overrun is the positive Automatic tail and is not operator waiting without an explicit Waiting operation.
+71. Keep `OperationInstance.cycleTimeSeconds` authoritative. Never persist chart block times, calculated lanes, span, overrun, diagnostics, SVG geometry, chart selection, zoom, or scroll.
+72. Automatic lanes use physical Resource Instance IDs, resolve names dynamically, and retain an Unassigned Automatic lane. Same-resource overlap is preliminary chart information until authoritative capacity validation in Sprint 3.6.
+73. Schema `1.6.0` owns validated persistent Standard Work chart-display settings and explicitly migrates `1.5.0`; chart settings are undoable, while calculation, selection, zoom, pan, and Fit Chart are not history actions.
 
