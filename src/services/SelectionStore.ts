@@ -2,7 +2,7 @@ import type { ObjectSelection, SelectionController, SelectionItem, SelectionStat
 import type { WorkspaceId } from '../models/workspace/Workspace';
 
 const key = (item: SelectionItem): string => `${item.kind}:${item.id}`;
-const workspaceFor = (item: SelectionItem): WorkspaceId => item.kind === 'resource' ? 'factoryLayout' : 'processFlow';
+const workspaceFor = (item: SelectionItem): WorkspaceId => ['resource', 'boundary', 'wall', 'area', 'aisle'].includes(item.kind) ? 'factoryLayout' : 'processFlow';
 
 export class SelectionStore implements SelectionController {
   private workspace: WorkspaceId;

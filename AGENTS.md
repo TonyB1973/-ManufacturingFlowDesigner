@@ -45,4 +45,9 @@
 43. Normalize persisted resource rotation to `[0, 360)`. Rotation, clearance, and footprint edits are Factory Layout-only, respect locks, and are reversible commands; cancelled gestures restore without history.
 44. Clearance belongs to each Resource Instance, rotates with its footprint, is deeply cloned, and remains distinct from the physical footprint in validation and summaries.
 45. Derive footprint and clearance overlap with rotated-polygon geometry, AABB broad phase, positive-penetration tolerance, and one result per unordered pair. Hidden resources are excluded and inactive footprint overlap is not a hard error.
+46. Factory boundaries, walls, areas, and aisles are authored Factory Layout entities; they must never render or become selectable in Process Flow.
+47. Keep one valid orthogonal boundary per Factory Layout. Treat boundary replacement as one reversible transaction and reject diagonal, degenerate, or self-intersecting geometry.
+48. Keep walls, areas, and aisles separate from Resource Instances. Resource placement policy belongs to areas, while wall and aisle obstruction is derived validation rather than persisted state.
+49. Route persistent factory-structure changes through reversible commands with stable typed IDs; transient drawing previews, layer visibility, and selections remain outside project persistence.
+50. Schema `1.2.0` owns the factory-structure collections and explicitly migrates `1.1.0` projects by adding empty collections without changing resources, clearances, operations, connections, or viewports.
 

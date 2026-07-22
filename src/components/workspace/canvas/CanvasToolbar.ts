@@ -1,7 +1,7 @@
 import type { CanvasTool } from '../../../models/canvas/CanvasState';
 import { actionButton, element } from '../../../ui/dom';
 
-export type CanvasToolbarCommand = 'select' | 'pan' | 'connect' | 'delete-link' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'toggle-clearance' | 'grid' | 'origin' | 'snap' | 'copy' | 'paste' | 'duplicate' | 'delete-selection' | 'clear-selection' | 'focus';
+export type CanvasToolbarCommand = 'select' | 'pan' | 'connect' | 'delete-link' | 'draw-boundary-rect' | 'draw-boundary-orthogonal' | 'draw-wall' | 'draw-area' | 'draw-aisle' | 'zoom-in' | 'zoom-out' | 'actual-size' | 'fit' | 'fit-boundary' | 'fit-all-layout' | 'toggle-clearance' | 'layer-boundary' | 'layer-floor-fill' | 'layer-walls' | 'layer-areas' | 'layer-aisles' | 'layer-resources' | 'layer-labels' | 'grid' | 'origin' | 'snap' | 'copy' | 'paste' | 'duplicate' | 'delete-selection' | 'clear-selection' | 'focus';
 
 export interface CanvasToolbarController {
   readonly element: HTMLElement;
@@ -14,6 +14,7 @@ export interface CanvasToolbarController {
   setConnectionToolsEnabled(enabled: boolean): void;
   setFactoryToolsEnabled(enabled: boolean): void;
   setClearanceVisible(visible: boolean): void;
+  setLayerVisible(command: Extract<CanvasToolbarCommand, `layer-${string}`>, visible: boolean): void;
 }
 
 interface CommandDefinition {
@@ -28,11 +29,25 @@ const COMMANDS: readonly CommandDefinition[] = [
   { command: 'pan', label: 'Pan', title: 'Pan tool', toggle: true },
   { command: 'connect', label: 'Connect', title: 'Connect operations (C)', toggle: true },
   { command: 'delete-link', label: 'Delete Link', title: 'Delete process connections', toggle: true },
+  { command: 'draw-boundary-rect', label: 'Boundary', title: 'Draw rectangular factory boundary (B)', toggle: true },
+  { command: 'draw-boundary-orthogonal', label: 'Ortho Boundary', title: 'Draw orthogonal factory boundary', toggle: true },
+  { command: 'draw-wall', label: 'Wall', title: 'Draw factory wall (W)', toggle: true },
+  { command: 'draw-area', label: 'Area', title: 'Draw factory area (A)', toggle: true },
+  { command: 'draw-aisle', label: 'Aisle', title: 'Draw orthogonal aisle (I)', toggle: true },
   { command: 'zoom-in', label: '+', title: 'Zoom in (+)' },
   { command: 'zoom-out', label: '−', title: 'Zoom out (-)' },
   { command: 'actual-size', label: '100%', title: 'Reset zoom to 100% (0)' },
   { command: 'fit', label: 'Fit', title: 'Fit visible engineering geometry (F)' },
+  { command: 'fit-boundary', label: 'Fit Boundary', title: 'Fit Factory Boundary' },
+  { command: 'fit-all-layout', label: 'Fit All Layout', title: 'Fit all visible Factory Layout entities' },
   { command: 'toggle-clearance', label: 'Clearance', title: 'Show or hide factory clearance envelopes', toggle: true },
+  { command: 'layer-boundary', label: 'Boundary Layer', title: 'Show or hide boundary', toggle: true },
+  { command: 'layer-floor-fill', label: 'Floor Fill', title: 'Show or hide floor fill', toggle: true },
+  { command: 'layer-walls', label: 'Walls', title: 'Show or hide walls', toggle: true },
+  { command: 'layer-areas', label: 'Areas', title: 'Show or hide factory areas', toggle: true },
+  { command: 'layer-aisles', label: 'Aisles', title: 'Show or hide aisles', toggle: true },
+  { command: 'layer-resources', label: 'Resources', title: 'Show or hide physical resources', toggle: true },
+  { command: 'layer-labels', label: 'Labels', title: 'Show or hide factory structure labels', toggle: true },
   { command: 'grid', label: 'Grid', title: 'Toggle engineering grid', toggle: true },
   { command: 'origin', label: 'Origin', title: 'Toggle origin and axes', toggle: true },
   { command: 'snap', label: 'Snap', title: 'Toggle Snap to Grid', toggle: true },
@@ -79,6 +94,7 @@ export function createCanvasToolbar(onCommand: (command: CanvasToolbarCommand) =
       setPressed('pan', tool === 'pan');
       setPressed('connect', tool === 'connect');
       setPressed('delete-link', tool === 'delete-link');
+      for (const command of ['draw-boundary-rect', 'draw-boundary-orthogonal', 'draw-wall', 'draw-area', 'draw-aisle'] as const) setPressed(command, tool === command);
     },
     setGridVisible: (visible) => setPressed('grid', visible),
     setOriginVisible: (visible) => setPressed('origin', visible),
@@ -89,8 +105,9 @@ export function createCanvasToolbar(onCommand: (command: CanvasToolbarCommand) =
         if (button) button.disabled = !enabled;
       }
     },
-    setFactoryToolsEnabled: (enabled) => { const button = buttons.get('toggle-clearance'); if (button) button.disabled = !enabled; },
+    setFactoryToolsEnabled: (enabled) => { for (const command of ['draw-boundary-rect', 'draw-boundary-orthogonal', 'draw-wall', 'draw-area', 'draw-aisle', 'fit-boundary', 'fit-all-layout', 'toggle-clearance', 'layer-boundary', 'layer-floor-fill', 'layer-walls', 'layer-areas', 'layer-aisles', 'layer-resources', 'layer-labels'] as const) { const button = buttons.get(command); if (button) button.disabled = !enabled; } },
     setClearanceVisible: (visible) => setPressed('toggle-clearance', visible),
+    setLayerVisible: (command, visible) => setPressed(command, visible),
     setFocusMode: (active) => {
       setPressed('focus', active);
       const button = buttons.get('focus');

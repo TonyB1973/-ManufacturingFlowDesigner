@@ -6,6 +6,7 @@ import type { ConnectionStore } from '../ConnectionStore';
 import type { OperationStore } from '../OperationStore';
 import type { ResourceStore } from '../ResourceStore';
 import type { WorkspaceStore } from '../WorkspaceStore';
+import type { FactoryStructureStore } from '../FactoryStructureStore';
 
 export interface ProjectSerializationSource {
   readonly metadata: ProjectMetadata;
@@ -13,6 +14,7 @@ export interface ProjectSerializationSource {
   readonly resources: ResourceStore;
   readonly operations: OperationStore;
   readonly connections: ConnectionStore;
+  readonly structure: FactoryStructureStore;
   readonly workspaces: WorkspaceStore;
 }
 
@@ -28,6 +30,10 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
     resources: byId(source.resources.getPlacedResources()).map(({ selected: _selected, ...item }) => ({ ...item, clearance: { ...item.clearance } })),
     operations: byId(source.operations.getOperations()).map(({ selected: _selected, ...item }) => ({ ...item })),
     connections: byId(source.connections.getConnections()).map(({ selected: _selected, routePoints: _points, routeStatus: _status, ...item }) => ({ ...item, sourceAnchor: { ...item.sourceAnchor }, targetAnchor: { ...item.targetAnchor } })),
+    layoutBoundaries: byId(source.structure.getBoundaries()).map((item) => ({ ...item, points: item.points.map((point) => ({ ...point })) })),
+    walls: byId(source.structure.getWalls()).map((item) => ({ ...item, start: { ...item.start }, end: { ...item.end } })),
+    areas: byId(source.structure.getAreas()).map((item) => ({ ...item })),
+    aisles: byId(source.structure.getAisles()).map((item) => ({ ...item, points: item.points.map((point) => ({ ...point })) })),
     workspaces: {
       active: source.workspaces.getActive(),
       processFlow: source.workspaces.getViewport('processFlow'),

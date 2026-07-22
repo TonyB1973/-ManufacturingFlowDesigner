@@ -17,6 +17,7 @@ import type { ResourceStore, ResourceStoreChange } from '../ResourceStore';
 import type { WorkspaceStore } from '../WorkspaceStore';
 import { DirtyStateService } from './DirtyStateService';
 import type { CommandHistoryService } from '../history/CommandHistoryService';
+import type { FactoryStructureStore, FactoryStructureChange } from '../FactoryStructureStore';
 
 export interface ProjectSessionState {
   readonly metadata: ProjectMetadata;
@@ -40,6 +41,7 @@ export class ProjectSessionService {
     public readonly resources: ResourceStore,
     public readonly operations: OperationStore,
     public readonly connections: ConnectionStore,
+    public readonly structure: FactoryStructureStore,
     public readonly workspaces: WorkspaceStore,
     private readonly selection: SelectionController,
     private readonly resourceIds: ResourceIdGenerator,
@@ -52,6 +54,7 @@ export class ProjectSessionService {
       resources.subscribe((change) => this.resourceChanged(change)),
       operations.subscribe((change) => this.operationChanged(change)),
       connections.subscribe((change) => this.connectionChanged(change)),
+      structure.subscribe((change) => this.structureChanged(change)),
       this.dirtyState.subscribe(() => this.notify()),
     ];
   }
@@ -82,7 +85,7 @@ export class ProjectSessionService {
     this.replace({
       format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: APPLICATION_VERSION, project: metadata,
       resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES,
-      resources: [], operations: [], connections: [],
+      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [],
       workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
       settings: { ...DEFAULT_PROJECT_SETTINGS },
     }, null);
@@ -105,12 +108,13 @@ export class ProjectSessionService {
       this.resources.replaceAll(document.resourceTemplates, resources, false);
       this.operations.replaceAll(document.operationTemplates, operations, false);
       this.connections.replaceAll(connections, false);
+      this.structure.replaceAll(document.layoutBoundaries, document.walls, document.areas, document.aisles, false);
       this.workspaces.restore(document.workspaces.active, document.workspaces.processFlow, document.workspaces.factoryLayout, false);
       this.resourceIds.ensureAfter(resources.map((item) => item.id));
       this.operationIds.ensureAfter(operations.map((item) => item.id));
       this.connectionIds.ensureAfter(connections.map((item) => item.id));
       this.projectIds.ensureAfter([document.project.id]);
-      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.workspaces.publish();
+      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.workspaces.publish();
       if (this.history) this.history.clear(); else this.dirtyState.markClean();
     } finally { this.loading = false; }
     this.notify();
@@ -122,5 +126,6 @@ export class ProjectSessionService {
   private resourceChanged(change: ResourceStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private operationChanged(change: OperationStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private connectionChanged(change: ConnectionStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private structureChanged(change: FactoryStructureChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private notify(): void { const state = this.getState(); for (const listener of this.listeners) listener(state); }
 }

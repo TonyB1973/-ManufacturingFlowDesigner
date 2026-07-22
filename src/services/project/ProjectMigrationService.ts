@@ -7,6 +7,7 @@ export class ProjectMigrationService {
 
   public constructor() {
     this.register('1.0.0', '1.1.0', migrateFactoryLayoutEngineering);
+    this.register('1.1.0', '1.2.0', migrateFactoryStructure);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -36,6 +37,10 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateFactoryStructure(document: Record<string, unknown>): Record<string, unknown> {
+  return { ...document, applicationVersion: '0.4.0', layoutBoundaries: [], walls: [], areas: [], aisles: [] };
 }
 
 function migrateFactoryLayoutEngineering(document: Record<string, unknown>): Record<string, unknown> {

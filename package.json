@@ -1,6 +1,6 @@
 {
   "name": "manufacturing-flow-designer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,7 +18,8 @@
     "test:editing": "node scripts/verify-multiselect-clipboard.mjs",
     "test:canvas": "node scripts/verify-canvas-editing.mjs",
     "test:factory": "node scripts/verify-factory-layout-engineering.mjs",
-    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history && npm run test:editing && npm run test:canvas && npm run test:factory"
+    "test:structure": "node scripts/verify-factory-structure.mjs",
+    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history && npm run test:editing && npm run test:canvas && npm run test:factory && npm run test:structure"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
