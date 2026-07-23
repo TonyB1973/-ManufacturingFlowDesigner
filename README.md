@@ -2,6 +2,22 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 3.4 scope
+
+Sprint 3.4 adds first-class manufacturing scenarios for controlled baseline-versus-alternative engineering. Every project contains exactly one baseline and may contain multiple alternatives. A scenario owns its Process Flow resources, operations and connections; Factory Layout structure, routes and annotations; Standard Work studies, operators, entries, handovers and planning; and both CAD viewport states. Resource and operation templates, availability shifts, breaks, calendars and exceptions, project metadata, and engineering settings remain shared project libraries.
+
+Use the persistent active-scenario selector in the title bar or the dedicated **Scenarios** workspace. **New from Baseline** and **Duplicate Current** deep-copy scenario-owned state while preserving stable entity IDs, which makes field-level comparisons deterministic. Scenario IDs are stable `SCN-####` values. The manager supports activation, rename, description, lock/unlock, Set as Baseline, deletion with impact confirmation, lineage display, per-scenario health, keyboard commands, and Undo/Redo of management operations. Activating a scenario is navigation: it cancels incomplete gestures, restores that scenario's stores and viewports, and creates no history or dirty action.
+
+The comparison workspace derives added, removed, and modified entities by entity type plus stable ID. It shows field changes and engineering deltas for entity counts, total operation cycle time, nominal resource footprint, routes, Standard Work participation, operator-occupied work, and calendar assignments. Comparison results are revision-cached and never persisted. Change rows can locate either the baseline or alternative entity in Process Flow, Factory Layout, or Standard Work.
+
+Locked scenarios reject scenario-scoped Process Flow, Factory Layout, and Standard Work commands at the central history boundary, while shared-library and scenario-management commands remain available. Global Undo/Redo binds each scenario-owned command to the scenario in which it was authored and safely activates that scenario before replay. Resource deletion still clears affected operation assignments without changing Process Connections; operation deletion still removes attached Process Connections and Standard Work references.
+
+Availability calendars are shared libraries, but their resource, operator, and planning assignments are scenario-owned. Calendar deletion reports impact across every scenario and atomically clears or replaces all affected scenario references. Project health includes inactive-scenario reference errors and warnings.
+
+`.mflow` schema `2.0.0` persists an `activeScenarioId`, one or more complete scenario records, and the shared project libraries without duplicated top-level scenario data. The explicit `1.9.0 -> 2.0.0` migration wraps every legacy scenario-owned collection and both viewports in one unlocked baseline, preserves all existing entity IDs and authored data, and invents no alternatives. Comparison results, revisions, history, selection, gestures, validation output, and route caches remain transient.
+
+Current limitations intentionally exclude scenario merge/rebase, cross-scenario entity copying, optimisation, authoritative resource-concurrency scheduling, stochastic simulation, and export.
+
 ## Sprint 3.3 scope
 
 Sprint 3.3 adds **Availability** as a fourth principal, non-CAD workspace. Reusable Shift Definitions use local wall-clock minutes, support overnight periods, and own non-overlapping planned breaks expressed as offsets from shift start. Gross duration, reducing-break time, resolved break clock times, and net shift availability are derived rather than duplicated in project data.
@@ -14,7 +30,7 @@ Standard Work Planning retains its manual scheduled and break inputs and adds Ma
 
 All persistent shift, break, calendar, exception, default, assignment, and planning-mode edits use normal Undo/Redo. Preview ranges, evaluation intervals, coverage, selection, scrolling, and validation remain transient. `.mflow` schema `1.9.0` persists the authored availability graph and assignments. Its explicit `1.8.0 → 1.9.0` migration creates no calendars, retains every manual planning value, and leaves legacy manual analysis behaviour unchanged.
 
-Current limitations intentionally exclude scenario variants, absence and leave records, skills, automatic allocation, availability-constrained scheduling, stochastic downtime, simulation, and export. Sprint 3.4 should build scenario management over stable base-project references without duplicating the availability domain.
+Current limitations for the availability domain intentionally exclude absence and leave records, skills, automatic allocation, availability-constrained scheduling, stochastic downtime, simulation, and export. Scenario variants are introduced by Sprint 3.4 without duplicating the shared availability domain.
 
 ## Sprint 3.2 scope
 
@@ -202,12 +218,12 @@ Manufacturing Flow Designer project files use:
 - extension: `.mflow`
 - media type: `application/vnd.manufacturing-flow-designer+json`
 - format identifier: `ManufacturingFlowDesigner`
-- current schema: `1.9.0`
-- current application version: `1.1.0`
+- current schema: `2.0.0`
+- current application version: `1.2.0`
 
-The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, Standard Work studies, operators, entries, handovers and study planning inputs, availability shifts, breaks, calendars and exceptions, calendar assignments, both independent CAD viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
+The JSON document persists project metadata; shared resource/operation templates, availability libraries and engineering settings; the active scenario ID; and one or more scenarios. Each scenario contains its physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes and Factory Annotations; Process Flow operations and connections; Standard Work studies, operators, entries, handovers and planning inputs; scenario-specific calendar assignments; both independent CAD viewport states; and the active scenario workspace. Arrays are written in stable ID order to make files readable and source-control friendly.
 
-Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 10,000 Factory Annotations, 10 boundaries, 50,000 walls, 20,000 areas, 20,000 aisles, 30 nested levels, and bounded structural, route, and leader vertex counts. They are defensive limits rather than expected working sizes.
+Initial safety ceilings are 20 MB per file, 128 scenarios, 2,000 templates of each kind, and per-scenario limits of 10,000 resources, 10,000 operations, 20,000 connections, 10,000 Factory Annotations, 10 boundaries, 50,000 walls, 20,000 areas and 20,000 aisles, plus 30 nested levels and bounded structural, route, and leader vertex counts. They are defensive limits rather than expected working sizes.
 
 Selection, active gestures, tool state, validation output, browser file handles, process-connection route points, resolved Factory Route endpoints, distance, and travel time are deliberately excluded. Process-connection geometry is derived and recalculated once after a complete project has loaded.
 

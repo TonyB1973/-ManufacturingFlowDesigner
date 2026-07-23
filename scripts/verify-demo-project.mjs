@@ -24,24 +24,26 @@ const { FactoryStructureIdGenerator } = await load('../src/utilities/FactoryStru
 const { FactoryRouteIdGenerator } = await load('../src/utilities/FactoryRouteIdGenerator.ts');
 
 const demo = validateProjectDocument(createDemoProject('2026-07-22T12:00:00.000Z'));
-assert(demo.resources.length === 6 && demo.operations.length === 5 && demo.connections.length === 4, 'Demo has the expected linked process and physical resources');
-assert(demo.factoryRoutes.length === 5 && demo.layoutBoundaries.length === 1 && demo.aisles.length === 1, 'Demo has the expected factory engineering entities');
-assert(demo.operations.every((operation) => operation.assignedResourceId), 'Every demo operation is assigned to a physical resource');
+const demoState = demo.scenarios.find((scenario) => scenario.isBaseline).state;
+assert(demo.scenarios.length === 1 && demo.activeScenarioId === demo.scenarios[0].id, 'Demo opens with one active baseline scenario');
+assert(demoState.resources.length === 6 && demoState.operations.length === 5 && demoState.connections.length === 4, 'Demo has the expected linked process and physical resources');
+assert(demoState.factoryRoutes.length === 5 && demoState.layoutBoundaries.length === 1 && demoState.aisles.length === 1, 'Demo has the expected factory engineering entities');
+assert(demoState.operations.every((operation) => operation.assignedResourceId), 'Every demo operation is assigned to a physical resource');
 
 const selection = new SelectionStore();
 const resources = new ResourceStore(demo.resourceTemplates, new ResourceIdGenerator(), selection);
 const operations = new OperationStore(demo.operationTemplates, new OperationIdGenerator(), selection);
-resources.replaceAll(demo.resourceTemplates, demo.resources, false);
-operations.replaceAll(demo.operationTemplates, demo.operations, false);
+resources.replaceAll(demo.resourceTemplates, demoState.resources, false);
+operations.replaceAll(demo.operationTemplates, demoState.operations, false);
 const connections = new ConnectionStore(new ConnectionIdGenerator(), (id) => operations.getOperation(id), (connection) => {
   const source = operations.getOperation(connection.sourceOperationId); const target = operations.getOperation(connection.targetOperationId);
   return source && target ? { points: [anchorWorldPosition(source, connection.sourceAnchor), anchorWorldPosition(target, connection.targetAnchor)], status: 'clear' } : { points: [], status: 'fallback' };
 }, selection);
-connections.replaceAll(demo.connections, false);
+connections.replaceAll(demoState.connections, false);
 const structure = new FactoryStructureStore(new FactoryStructureIdGenerator('BND'), new FactoryStructureIdGenerator('WALL'), new FactoryStructureIdGenerator('AREA'), new FactoryStructureIdGenerator('AISLE'));
-structure.replaceAll(demo.layoutBoundaries, demo.walls, demo.areas, demo.aisles, false);
+structure.replaceAll(demoState.layoutBoundaries, demoState.walls, demoState.areas, demoState.aisles, false);
 const routes = new FactoryRouteStore(new FactoryRouteIdGenerator(), { hasResource: (id) => Boolean(resources.getResource(id)), hasArea: (id) => Boolean(structure.getArea(id)) });
-routes.replaceAll(demo.factoryRoutes, false);
+routes.replaceAll(demoState.factoryRoutes, false);
 
 const operationHealth = validateOperations(operations.getOperations(), (id) => resources.getResource(id), (id) => Boolean(resources.getTemplate(id)));
 const resourceHealth = validateResources(resources.getPlacedResources(), resources.getTemplates(), (id) => operations.getAssignmentCount(id));

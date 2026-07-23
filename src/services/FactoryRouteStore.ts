@@ -51,7 +51,7 @@ export class FactoryRouteStore {
   public deleteAttachedToResource(resourceId: string): readonly FactoryRoute[] { return this.deleteAttached(this.getRoutesForResource(resourceId)); }
   public deleteAttachedToArea(areaId: string): readonly FactoryRoute[] { return this.deleteAttached(this.getRoutesForArea(areaId)); }
 
-  public replaceAll(routes: readonly FactoryRoute[], notify = true): void { this.routes.clear(); for (const route of routes) this.routes.set(route.id, cloneFactoryRoute(route)); this.ids.ensureAfter(routes.map((route) => route.id)); if (notify) this.publishReset(); }
+  public replaceAll(routes: readonly FactoryRoute[], notify = true): void { this.routes.clear(); for (const route of routes) this.routes.set(route.id, cloneFactoryRoute(route)); const ids = routes.map((route) => route.id); if (this.ids.reset) this.ids.reset(ids); else this.ids.ensureAfter(ids); if (notify) this.publishReset(); }
   public publishReset(): void { for (const listener of this.listeners) listener({ kind: 'reset' }); }
   public subscribe(listener: FactoryRouteListener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
 

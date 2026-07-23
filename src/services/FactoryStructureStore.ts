@@ -78,7 +78,8 @@ export class FactoryStructureStore {
   public replaceAll(boundaries: readonly FactoryLayoutBoundary[], walls: readonly FactoryWall[], areas: readonly FactoryArea[], aisles: readonly FactoryAisle[], notify = true): void {
     this.boundaries.clear(); this.walls.clear(); this.areas.clear(); this.aisles.clear();
     boundaries.forEach((item) => this.boundaries.set(item.id, cloneBoundary(item))); walls.forEach((item) => this.walls.set(item.id, cloneWall(item))); areas.forEach((item) => this.areas.set(item.id, cloneArea(item))); aisles.forEach((item) => this.aisles.set(item.id, cloneAisle(item)));
-    this.boundaryIds.ensureAfter(boundaries.map((item) => item.id)); this.wallIds.ensureAfter(walls.map((item) => item.id)); this.areaIds.ensureAfter(areas.map((item) => item.id)); this.aisleIds.ensureAfter(aisles.map((item) => item.id)); if (notify) this.publishReset();
+    const reset = (provider: FactoryStructureIdProvider, ids: readonly string[]): void => provider.reset ? provider.reset(ids) : provider.ensureAfter(ids);
+    reset(this.boundaryIds, boundaries.map((item) => item.id)); reset(this.wallIds, walls.map((item) => item.id)); reset(this.areaIds, areas.map((item) => item.id)); reset(this.aisleIds, aisles.map((item) => item.id)); if (notify) this.publishReset();
   }
   public publishReset(): void { for (const listener of this.listeners) listener({ kind: 'reset' }); }
   public subscribe(listener: FactoryStructureListener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }

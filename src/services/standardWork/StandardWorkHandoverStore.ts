@@ -19,7 +19,7 @@ export class StandardWorkHandoverStore {
   public deleteHandover(id: string): boolean { const item = this.values.get(id); if (!item) return false; this.values.delete(id); this.notify({ kind: 'handover', studyId: item.studyId, handoverId: id }); return true; }
   public deleteAttached(entryId: string): void { for (const item of this.getAttached(entryId)) this.values.delete(item.id); this.notify({ kind: 'handover' }); }
   public deleteStudy(studyId: string): void { for (const item of this.getHandovers(studyId)) this.values.delete(item.id); this.notify({ kind: 'handover', studyId }); }
-  public replaceAll(values: readonly StandardWorkHandover[], notify = true): void { this.values.clear(); values.forEach((item) => this.values.set(item.id, cloneStandardWorkHandover(item))); this.ids.ensureAfter(values.map((item) => item.id)); if (notify) this.publishReset(); }
+  public replaceAll(values: readonly StandardWorkHandover[], notify = true): void { this.values.clear(); values.forEach((item) => this.values.set(item.id, cloneStandardWorkHandover(item))); const ids = values.map((item) => item.id); if (this.ids.reset) this.ids.reset(ids); else this.ids.ensureAfter(ids); if (notify) this.publishReset(); }
   public publishReset(): void { this.notify({ kind: 'reset' }); }
   public subscribe(listener: (change: StandardWorkHandoverChange) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private notify(change: StandardWorkHandoverChange): void { for (const listener of this.listeners) listener(change); }

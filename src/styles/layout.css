@@ -16,6 +16,9 @@
 .app-shell--availability .app-body { grid-template-columns: 0 minmax(640px, 1fr) 0; }
 .app-shell--availability .panel-toggle { display: none; }
 .app-shell--availability .sidebar { visibility: hidden; }
+.app-shell--scenarios .app-body { grid-template-columns: 0 minmax(640px, 1fr) 0; }
+.app-shell--scenarios .panel-toggle { display: none; }
+.app-shell--scenarios .sidebar { visibility: hidden; }
 .standard-work-workspace { min-width: 0; min-height: 0; overflow: hidden; }
 .availability-workspace { min-width: 0; min-height: 0; overflow: hidden; }
 .panel-toggle { position: absolute; z-index: 5; top: 45%; width: 18px; height: 42px; padding: 0; color: var(--text-muted); background: var(--panel); border: 1px solid var(--border); cursor: pointer; }

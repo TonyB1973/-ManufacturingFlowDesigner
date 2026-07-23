@@ -1,6 +1,7 @@
 export interface FactoryRouteIdProvider {
   next(): string;
   ensureAfter(ids: readonly string[]): void;
+  reset?(ids?: readonly string[]): void;
 }
 
 export class FactoryRouteIdGenerator implements FactoryRouteIdProvider {
@@ -16,4 +17,5 @@ export class FactoryRouteIdGenerator implements FactoryRouteIdProvider {
     }
     this.nextValue = Math.max(this.nextValue, maximum + 1);
   }
+  public reset(ids: readonly string[] = []): void { this.nextValue = 1; this.ensureAfter(ids); }
 }

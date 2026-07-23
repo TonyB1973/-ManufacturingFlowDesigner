@@ -10,4 +10,5 @@ export class ConnectionIdGenerator implements ConnectionIdProvider {
     }, 0);
     this.sequence = Math.max(this.sequence, maximum);
   }
+  public reset(ids: readonly string[] = []): void { this.sequence = 0; this.ensureAfter(ids); }
 }

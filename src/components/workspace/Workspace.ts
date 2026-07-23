@@ -42,10 +42,11 @@ export interface WorkspaceOptions {
   readonly geometryCommands: GeometryCommandFactory;
   readonly standardWorkPanel: HTMLElement;
   readonly availabilityPanel: HTMLElement;
+  readonly scenarioPanel: HTMLElement;
 }
 
 export function createWorkspace(options: WorkspaceOptions): CanvasViewportController {
-  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.annotationStore, options.annotationResolver, options.projectSession, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.annotationCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, options.standardWorkPanel, options.availabilityPanel, {
+  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.annotationStore, options.annotationResolver, options.projectSession, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.annotationCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, options.standardWorkPanel, options.availabilityPanel, options.scenarioPanel, {
     onZoomChange: options.statusBar.setZoom,
     onGridVisibilityChange: options.statusBar.setGridVisible,
     onCoordinatesChange: options.statusBar.setCoordinates,
@@ -53,7 +54,7 @@ export function createWorkspace(options: WorkspaceOptions): CanvasViewportContro
     onStatusChange: options.statusBar.setMessage,
     onSnapChange: options.statusBar.setSnapEnabled,
     onToolChange: options.statusBar.setActiveTool,
-    onWorkspaceChange: (workspace) => options.statusBar.setWorkspace(workspace === 'processFlow' ? 'Process Flow' : workspace === 'factoryLayout' ? 'Factory Layout' : workspace === 'standardWork' ? 'Standard Work' : 'Availability'),
+    onWorkspaceChange: (workspace) => options.statusBar.setWorkspace(workspace === 'processFlow' ? 'Process Flow' : workspace === 'factoryLayout' ? 'Factory Layout' : workspace === 'standardWork' ? 'Standard Work' : workspace === 'availability' ? 'Availability' : 'Scenarios'),
     requestResourceDeletion: options.requestResourceDeletion,
   });
 }

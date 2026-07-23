@@ -51,11 +51,12 @@ export function createAvailabilityWorkspace(
       if (confirm(`Remove ${weeklyRefs} weekly and ${exceptionRefs} exception reference(s), then delete ${item.id} and its breaks?`)) run('Shift references removed and shift deleted', () => commands.deleteShift(item.id));
     } else if (item.kind === 'shiftBreak' && confirm(`Delete break ${item.id}?`)) run('Break deleted', () => commands.deleteBreak(item.id));
     else if (item.kind === 'availabilityCalendar') {
-      const references = (project.getSettings().defaultAvailabilityCalendarId === item.id ? 1 : 0) + operators.getOperators().filter((entry) => entry.availabilityCalendarId === item.id).length + resources.getPlacedResources().filter((entry) => entry.availabilityCalendarId === item.id).length + project.standardWorkPlanning.getAll().filter((entry) => entry.planningCalendarId === item.id).length;
-      if (!confirm(`Delete ${item.id}, which has ${references} assignment(s)?`)) return;
+      const impact = project.getCalendarReferences(item.id);
+      const scenarioImpact = impact.scenarios.map((entry) => `${entry.scenarioName} (${entry.scenarioId}): ${entry.total}`).join('\n');
+      if (!confirm(`Delete ${item.id}, which has ${impact.total} assignment(s) across ${impact.scenarios.length} scenario(s)?${scenarioImpact ? `\n${scenarioImpact}` : ''}`)) return;
       const alternatives = project.availability.getCalendars().filter((calendar) => calendar.id !== item.id);
       let replacementId: string | null = null;
-      if (references && alternatives.length && confirm('Reassign references to another calendar? Select Cancel to clear them.')) {
+      if (impact.total && alternatives.length && confirm('Reassign references in every scenario to another calendar? Select Cancel to clear them.')) {
         const entered = prompt(`Replacement calendar ID:\n${alternatives.map((calendar) => `${calendar.id} — ${calendar.name}`).join('\n')}`, alternatives[0]?.id ?? '');
         if (entered === null) return;
         replacementId = entered.trim();

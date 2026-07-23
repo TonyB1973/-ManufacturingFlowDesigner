@@ -89,4 +89,14 @@
 87. Null operator/resource calendar assignments inherit the project default; no effective calendar is not unlimited availability. Calendar assignment never changes geometry, capacity, cycle time, or Standard Work duration.
 88. Calendar planning derives scheduled and break seconds while preserving stored manual inputs. Coverage remains diagnostic and never modifies chart scheduling or claims authoritative throughput.
 89. Schema `1.9.0` owns availability collections, assignments, default calendar, and planning-mode/date fields. Derived intervals, totals, coverage, preview state, selection, and validation remain excluded.
+90. Every schema `2.0.0` project contains exactly one baseline scenario, at least one scenario, and one valid active scenario ID. Migrate `1.9.0` by wrapping legacy scenario-owned state in one baseline without changing authored IDs or data.
+91. Scenarios own physical resources, operations, Process Connections, Factory Layout structure/routes/annotations, Standard Work studies/operators/entries/handovers/planning, calendar assignments, and independent Process Flow and Factory Layout viewport states.
+92. Project metadata, project settings, Resource Templates, Operation Templates, shifts, breaks, calendars, and exceptions are shared libraries. Never duplicate shared libraries inside scenarios.
+93. Clone or duplicate scenario-owned state deeply while preserving stable entity IDs. Allocate new IDs only for the scenario itself and for entities newly authored within that scenario.
+94. Scenario activation is transient navigation: cancel incomplete interactions, restore scenario stores and viewports, clear invalid selections, and create no command or dirty action.
+95. Bind scenario-owned commands to the scenario in which they execute. Global Undo/Redo must activate that scenario before replay, while New/Open clear the whole-project history as before.
+96. Locked scenarios reject all supported scenario-owned mutation commands at the central command boundary. Scenario management and shared-library editing remain available, and Undo/Redo must remain capable of restoring prior commands.
+97. Compare scenarios by entity type plus stable ID. Added, removed, modified fields, engineering metric deltas, diagnostics, and comparison caches are derived and excluded from persistence.
+98. Shared-library deletion must report impact across every scenario and atomically clear or replace scenario-owned references. Validate every scenario, not only the active one, before accepting a project file.
+99. Scenario deletion never cascades into shared libraries or other scenarios. Baseline reassignment changes only the baseline designation and never copies or overwrites scenario state.
 

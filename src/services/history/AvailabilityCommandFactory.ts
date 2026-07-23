@@ -2,7 +2,6 @@ import {
   cloneCalendar, cloneCalendarException, type AvailabilityCalendarPatch,
   type CalendarExceptionPatch, type ShiftBreakPatch, type ShiftDefinitionPatch, type Weekday,
 } from '../../models/availability/AvailabilityModels';
-import { cloneStandardWorkOperator } from '../../models/standardWork/StandardWorkOperator';
 import type { AvailabilitySnapshot } from '../availability/AvailabilityStore';
 import type { CommandExecutionContext } from './ApplicationCommand';
 import { ReversibleCommand } from './ApplicationCommand';
@@ -85,26 +84,20 @@ export class AvailabilityCommandFactory {
   public deleteCalendar(id: string, replacementId: string | null = null): boolean {
     const calendar = this.context.availability.getCalendar(id); if (!calendar || replacementId === id || (replacementId && !this.context.availability.getCalendar(replacementId))) return false;
     const beforeSettings = this.context.project.getSettings();
-    const resources = this.context.resources.getPlacedResources().filter((item) => item.availabilityCalendarId === id).map((item) => ({ id: item.id, before: id as string | null }));
-    const operators = this.context.standardWorkOperators.getOperators().filter((item) => item.availabilityCalendarId === id).map(cloneStandardWorkOperator);
-    const planning = this.context.standardWorkPlanning.getAll().filter((item) => item.planningCalendarId === id).map((item) => ({ ...item }));
+    const scenariosBefore = this.context.project.getScenarios();
     const availabilityBefore = this.context.availability.getSnapshot(); let availabilityAfter: AvailabilitySnapshot | null = null;
     const command = new ReversibleCommand(`Delete calendar ${id}${replacementId ? ` and reassign to ${replacementId}` : ' and clear references'}`, [id, ...(replacementId ? [replacementId] : [])], 'availability',
       (context) => {
         if (availabilityAfter) context.availability.replaceAll(availabilityAfter);
         else { if (!context.availability.removeCalendar(id)) throw new Error('Calendar deletion failed.'); availabilityAfter = context.availability.getSnapshot(); }
         if (beforeSettings.defaultAvailabilityCalendarId === id && !context.project.applySettings({ defaultAvailabilityCalendarId: replacementId })) throw new Error('Default calendar update failed.');
-        for (const item of resources) if (!context.resources.updateResource(item.id, { availabilityCalendarId: replacementId })) throw new Error('Resource calendar reassignment failed.');
-        for (const item of operators) if (!context.standardWorkOperators.updateOperator(item.id, { availabilityCalendarId: replacementId })) throw new Error('Operator calendar reassignment failed.');
-        for (const item of planning) if (!context.standardWorkPlanning.update(item.studyId, { planningCalendarId: replacementId })) throw new Error('Planning calendar reassignment failed.');
+        context.project.replaceCalendarReferences(id, replacementId);
         context.availabilitySelection.clear();
       },
       (context) => {
         context.availability.replaceAll(availabilityBefore);
         context.project.applySettings({ defaultAvailabilityCalendarId: beforeSettings.defaultAvailabilityCalendarId });
-        for (const item of resources) context.resources.updateResource(item.id, { availabilityCalendarId: item.before });
-        for (const item of operators) context.standardWorkOperators.updateOperator(item.id, { availabilityCalendarId: item.availabilityCalendarId });
-        for (const item of planning) context.standardWorkPlanning.replace(item);
+        for (const scenario of scenariosBefore) context.project.replaceScenario(scenario);
         context.availabilitySelection.select({ kind: 'availabilityCalendar', id });
       });
     return this.run(command);

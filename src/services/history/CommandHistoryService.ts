@@ -36,9 +36,18 @@ export class CommandHistoryService {
 
   public execute(command: ApplicationCommand): boolean {
     try {
+      const scenarioScoped = command.workspace === 'processFlow' || command.workspace === 'factoryLayout' || command.workspace === 'standardWork';
+      const project = this.context.project as CommandExecutionContext['project'] | undefined;
+      const scenarioAware = typeof project?.getActiveScenarioId === 'function'
+        && typeof project?.isActiveScenarioLocked === 'function';
+      const scenarioId = scenarioScoped && scenarioAware ? project.getActiveScenarioId() : null;
+      if (scenarioScoped && scenarioAware && project.isActiveScenarioLocked()) {
+        this.lastAction = `Blocked: ${project.getActiveScenario().name} is locked`; this.notify(); return false;
+      }
       command.execute(this.context);
-      if (this.transaction) this.transaction.commands.push(command);
-      else this.pushExecuted(command);
+      const recorded = scenarioId ? new ScenarioBoundCommand(command, scenarioId) : command;
+      if (this.transaction) this.transaction.commands.push(recorded);
+      else this.pushExecuted(recorded);
       return true;
     } catch (error) {
       if (this.transaction) {
@@ -114,4 +123,19 @@ export class CommandHistoryService {
   }
   private absolutePosition(): number { return this.positionOffset + this.position; }
   private notify(): void { const state = this.getState(); for (const listener of this.listeners) listener(state); }
+}
+
+class ScenarioBoundCommand implements ApplicationCommand {
+  public constructor(private readonly command: ApplicationCommand, private readonly scenarioId: string) {}
+  public get id(): string { return this.command.id; }
+  public get description(): string { return this.command.description; }
+  public get timestamp(): number { return this.command.timestamp; }
+  public get affectedEntityIds(): readonly string[] { return this.command.affectedEntityIds; }
+  public get workspace(): ApplicationCommand['workspace'] { return this.command.workspace; }
+  public execute(context: CommandExecutionContext): void { this.activate(context); this.command.execute(context); }
+  public undo(context: CommandExecutionContext): void { this.activate(context); this.command.undo(context); }
+  public redo(context: CommandExecutionContext): void { this.activate(context); (this.command.redo ?? this.command.execute).call(this.command, context); }
+  private activate(context: CommandExecutionContext): void {
+    if (!context.project.activateScenario(this.scenarioId)) throw new Error(`Scenario ${this.scenarioId} is no longer available.`);
+  }
 }
