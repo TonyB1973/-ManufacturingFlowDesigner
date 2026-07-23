@@ -1,5 +1,5 @@
-export type StandardWorkSelectionKind = 'standardWorkStudy' | 'standardWorkOperator' | 'standardWorkEntry' | 'standardWorkHandover';
-export type StandardWorkSelection = { readonly kind: 'none' } | { readonly kind: StandardWorkSelectionKind; readonly id: string };
+export type StandardWorkSelectionKind = 'standardWorkStudy' | 'standardWorkPlanning' | 'standardWorkOperator' | 'standardWorkEntry' | 'standardWorkHandover';
+export type StandardWorkSelection = { readonly kind: 'none'; readonly id?: undefined } | { readonly kind: StandardWorkSelectionKind; readonly id: string };
 
 export class StandardWorkSelectionStore {
   private selection: StandardWorkSelection = { kind: 'none' };

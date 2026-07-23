@@ -193,6 +193,7 @@ export function createDemoProject(now = new Date().toISOString()): ProjectDocume
     standardWorkOperators: [{ id: 'SWO-0001', studyId: 'SW-0001', name: 'Operator 1', role: 'Production operator', displayOrder: 10, active: true, linkedResourceId: null, notes: 'Default demonstration operator.' }],
     standardWorkEntries: operations.map((item, index) => ({ id: `SWE-${String(index + 1).padStart(4, '0')}`, studyId: 'SW-0001', operationId: item.id, assignedOperatorId: 'SWO-0001', order: (index + 1) * 10, occurrences: 1, enabled: true, notes: '' })),
     standardWorkHandovers: [],
+    standardWorkPlanning: [{ studyId: 'SW-0001', periodName: 'Shift', scheduledProductionTimeSeconds: 28_800, plannedBreakTimeSeconds: 1_800, plannedDowntimeSeconds: 0, requiredOutputUnits: 300, active: true, notes: 'Demonstration planning inputs; edit to match the real production period.' }],
     workspaces: {
       active: 'processFlow',
       processFlow: { panX: 55, panY: 100, zoom: 0.5, gridVisible: true, originVisible: true, snapEnabled: true },

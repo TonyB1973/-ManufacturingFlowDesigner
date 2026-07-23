@@ -79,4 +79,8 @@
 77. Standard Work handovers are stable `SWH` zero-duration forward dependencies. Dependency idle is derived and distinct from explicit Waiting; model real transfer or waiting work as an operation.
 78. Operator deletion with assigned entries requires same-study reassignment and preserves handovers. Entry and operation deletion cascade attached handovers; physical-resource deletion clears only operator links and operation assignments.
 79. Schema `1.7.0` owns operators, entry assignments, handovers, and their chart settings. Operator cursors, workloads, schedules, dependency idle, and handover geometry remain derived and excluded from persistence.
+80. Each Standard Work study owns one persistent planning record; net available time subtracts planned breaks and downtime from scheduled seconds, and takt is always derived as net available time divided by required output.
+81. Operator occupied work is Manual plus Walking plus Waiting. Automatic time, dependency idle, and unallocated gaps remain separate and never contribute to occupied work or balance efficiency.
+82. Treat theoretical minimum operators and chart-based nominal capacity as planning estimates, not optimisation, simulated throughput, or authoritative physical-resource capacity.
+83. Schema `1.8.0` owns planning inputs and takt/work-balance display settings; net time, takt, workloads, capacity, balance metrics, Yamazumi geometry, and analysis diagnostics remain derived and excluded from persistence.
 

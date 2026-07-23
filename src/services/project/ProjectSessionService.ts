@@ -31,6 +31,8 @@ import { STANDARD_WORK_TIME_FORMATS } from '../../models/standardWork/StandardWo
 import { isValidStandardWorkChartSettings } from '../../models/standardWork/StandardWorkChartSettings';
 import { StandardWorkOperatorStore, type StandardWorkOperatorChange } from '../standardWork/StandardWorkOperatorStore';
 import { StandardWorkHandoverStore, type StandardWorkHandoverChange } from '../standardWork/StandardWorkHandoverStore';
+import { StandardWorkPlanningStore, type StandardWorkPlanningChange } from '../standardWork/StandardWorkPlanningStore';
+import { createDefaultStandardWorkPlanning } from '../../models/standardWork/StandardWorkPlanning';
 
 export interface ProjectSessionState {
   readonly metadata: ProjectMetadata;
@@ -42,6 +44,7 @@ export interface ProjectSessionState {
 export class ProjectSessionService {
   public readonly standardWorkOperators: StandardWorkOperatorStore;
   public readonly standardWorkHandovers: StandardWorkHandoverStore;
+  public readonly standardWorkPlanning: StandardWorkPlanningStore;
   private metadata: ProjectMetadata;
   private settings: ProjectSettings = { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork, chart: { ...DEFAULT_PROJECT_SETTINGS.standardWork.chart } } };
   private fileName: string | null = null;
@@ -72,6 +75,7 @@ export class ProjectSessionService {
   ) {
     this.standardWorkOperators = new StandardWorkOperatorStore(new StandardWorkOperatorIdGenerator(), (id) => Boolean(this.standardWork.getStudy(id)), (id) => Boolean(this.resources.getResource(id)));
     this.standardWorkHandovers = new StandardWorkHandoverStore(new StandardWorkHandoverIdGenerator(), (id) => this.standardWork.getEntry(id), (studyId) => this.standardWork.getEntries(studyId));
+    this.standardWorkPlanning = new StandardWorkPlanningStore((id) => Boolean(this.standardWork.getStudy(id)));
     this.standardWork.setOperatorResolver((id) => this.standardWorkOperators.getOperator(id)?.studyId ?? null);
     this.metadata = this.createMetadata();
     this.unsubscribers = [
@@ -84,6 +88,7 @@ export class ProjectSessionService {
       standardWork.subscribe((change) => this.standardWorkChanged(change)),
       this.standardWorkOperators.subscribe((change) => this.standardWorkOperatorChanged(change)),
       this.standardWorkHandovers.subscribe((change) => this.standardWorkHandoverChanged(change)),
+      this.standardWorkPlanning.subscribe((change) => this.standardWorkPlanningChanged(change)),
       this.dirtyState.subscribe(() => this.notify()),
     ];
   }
@@ -117,7 +122,7 @@ export class ProjectSessionService {
     this.replace({
       format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: APPLICATION_VERSION, project: metadata,
       resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES,
-      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [], standardWorkOperators: [], standardWorkHandovers: [],
+      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [], standardWorkOperators: [], standardWorkHandovers: [], standardWorkPlanning: [],
       workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
       settings: { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork, chart: { ...DEFAULT_PROJECT_SETTINGS.standardWork.chart } } },
     }, null);
@@ -147,6 +152,7 @@ export class ProjectSessionService {
       this.standardWork.replaceAll(document.standardWorkStudies, document.standardWorkEntries, false);
       this.standardWorkOperators.replaceAll(document.standardWorkOperators, false);
       this.standardWorkHandovers.replaceAll(document.standardWorkHandovers, false);
+      this.standardWorkPlanning.replaceAll(document.standardWorkPlanning ?? document.standardWorkStudies.map((study) => createDefaultStandardWorkPlanning(study.id)), false);
       this.workspaces.restore(document.workspaces.active, document.workspaces.processFlow, document.workspaces.factoryLayout, false);
       this.resourceIds.ensureAfter(resources.map((item) => item.id));
       this.operationIds.ensureAfter(operations.map((item) => item.id));
@@ -154,7 +160,7 @@ export class ProjectSessionService {
       this.routeIds.ensureAfter(document.factoryRoutes.map((item) => item.id));
       this.annotationIds.ensureAfter(document.factoryAnnotations.map((item) => item.id));
       this.projectIds.ensureAfter([document.project.id]);
-      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.annotations.publishReset(); this.standardWork.publishReset(); this.standardWorkOperators.publishReset(); this.standardWorkHandovers.publishReset(); this.workspaces.publish();
+      this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.annotations.publishReset(); this.standardWork.publishReset(); this.standardWorkOperators.publishReset(); this.standardWorkHandovers.publishReset(); this.standardWorkPlanning.publishReset(); this.workspaces.publish();
       if (this.history) this.history.clear(); else this.dirtyState.markClean();
     } finally { this.loading = false; }
     this.notify();
@@ -172,5 +178,6 @@ export class ProjectSessionService {
   private standardWorkChanged(change: StandardWorkChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private standardWorkOperatorChanged(change: StandardWorkOperatorChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private standardWorkHandoverChanged(change: StandardWorkHandoverChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private standardWorkPlanningChanged(change: StandardWorkPlanningChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private notify(): void { const state = this.getState(); for (const listener of this.listeners) listener(state); }
 }

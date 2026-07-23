@@ -15,10 +15,11 @@ import type { StandardWorkEntry, StandardWorkStudy, StandardWorkTimeFormat } fro
 import { DEFAULT_STANDARD_WORK_CHART_SETTINGS, type StandardWorkChartSettings } from '../standardWork/StandardWorkChartSettings';
 import type { StandardWorkOperator } from '../standardWork/StandardWorkOperator';
 import type { StandardWorkHandover } from '../standardWork/StandardWorkHandover';
+import type { StandardWorkPlanningParameters } from '../standardWork/StandardWorkPlanning';
 
 export const PROJECT_FORMAT = 'ManufacturingFlowDesigner' as const;
-export const PROJECT_SCHEMA_VERSION = '1.7.0' as const;
-export const APPLICATION_VERSION = '0.9.0' as const;
+export const PROJECT_SCHEMA_VERSION = '1.8.0' as const;
+export const APPLICATION_VERSION = '1.0.0' as const;
 export const PROJECT_MIME_TYPE = 'application/vnd.manufacturing-flow-designer+json' as const;
 export const PROJECT_FILE_EXTENSION = '.mflow' as const;
 
@@ -80,6 +81,7 @@ export interface ProjectDocument {
   readonly standardWorkEntries: readonly StandardWorkEntry[];
   readonly standardWorkOperators: readonly StandardWorkOperator[];
   readonly standardWorkHandovers: readonly StandardWorkHandover[];
+  readonly standardWorkPlanning: readonly StandardWorkPlanningParameters[];
   readonly workspaces: PersistedWorkspaces;
   readonly settings: ProjectSettings;
 }

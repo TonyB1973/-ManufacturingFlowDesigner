@@ -2,6 +2,24 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 3.2 scope
+
+Sprint 3.2 adds study-specific production planning and demand analysis to Standard Work. Planning Settings store the period name, scheduled production seconds, planned break seconds, planned downtime seconds, required output, active state, and notes. Net available production time is scheduled time minus breaks and downtime; **takt time** is the derived net time divided by required output. Takt is never independently editable, and `OperationInstance.cycleTimeSeconds × occurrences` remains the only entry-duration calculation.
+
+Valid active planning adds a patterned, labelled takt line to the Combination Chart, optional beyond-takt shading, **Fit Chart and Takt**, and **Centre on Takt**. Chart cycle span is compared with takt without changing the existing multi-operator schedule. Disabling analysis preserves the planning inputs while suppressing operational over-takt and nominal-shortfall warnings.
+
+The new **Work Balance** view provides one keyboard-selectable Yamazumi-style bar per relevant operator, a fixed-header numeric table, and Category Stack, Occupied Work, and Productive Work display modes. Category Stack separates Manual, Walking, and Waiting. Operator occupied work is Manual + Walking + Waiting; productive work excludes Waiting. Automatic time is excluded from operator bars and occupied content. Dependency idle is optional and visually separate, so a handover may extend lane completion without being misclassified as labour or an explicit Waiting operation.
+
+Per-operator analysis reports workload percentage, spare time, overload, lane completion versus takt, entry count, and Automatic launched time. Summary analysis reports included operators, total occupied work, available operator capacity at takt, workload spread, highest assigned operator workload, and **work-balance efficiency against takt** (`total occupied / (included operators × takt)`). The theoretical minimum operator count is `ceil(total occupied / takt)` and is a mathematical lower bound, not an automatic staffing recommendation.
+
+**Chart-based nominal capacity** is net available production time divided by current chart cycle span. It reports decimal and whole-unit capacity plus demand surplus or shortfall, but it is not simulated output and does not include variability, queueing, unentered downtime, availability calendars, or authoritative physical-resource capacity. Automatic durations are not added together because they may overlap.
+
+Planning edits, analysis activation, takt visibility, Yamazumi mode/density/value choices, dependency-idle display, and capacity-summary visibility use normal Undo/Redo and saved checkpoints. Selection, hover, fit, calculation, chart geometry, and scrolling remain transient. Project Explorer and Properties expose planning inputs and derived analysis, and active analysis warnings contribute to project health.
+
+`.mflow` schema `1.8.0` and application version `1.0.0` persist one planning record per study and validated display settings. The explicit `1.7.0 → 1.8.0` migration creates inactive Shift defaults (28,800 scheduled seconds, zero breaks/downtime, one required unit) without altering existing studies, operators, assignments, handovers, timing, IDs, or viewports. Derived takt, capacity, balance, diagnostics, and Yamazumi geometry are never persisted.
+
+Current limitations intentionally exclude shift-pattern records, working calendars, absence and availability, skills, automatic balancing or staffing recommendations, final machine-capacity validation, scenarios, simulation, stochastic downtime, and export. Sprint 3.3 is planned to add **resource availability, shifts and calendars**, including shift definitions, planned breaks, working calendars, operator and physical-resource availability, calendar exceptions, and availability-aware planning inputs.
+
 ## Sprint 3.1 scope
 
 Sprint 3.1 makes Standard Work operators explicit study participants. Every new study creates a persistent **Operator 1** with a stable `SWO` ID, and every entry references one operator in the same study. The active operator with the lowest display order, then stable ID, is the default for newly added or populated entries. Operators support names, roles, active state, notes, ordering, duplication, and an optional live link to a physical Resource Instance without copying physical-resource data.
@@ -170,10 +188,10 @@ Manufacturing Flow Designer project files use:
 - extension: `.mflow`
 - media type: `application/vnd.manufacturing-flow-designer+json`
 - format identifier: `ManufacturingFlowDesigner`
-- current schema: `1.7.0`
-- current application version: `0.9.0`
+- current schema: `1.8.0`
+- current application version: `1.0.0`
 
-The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, Standard Work studies, operators, entries and handovers, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
+The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, Standard Work studies, operators, entries, handovers and study planning inputs, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
 
 Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 10,000 Factory Annotations, 10 boundaries, 50,000 walls, 20,000 areas, 20,000 aisles, 30 nested levels, and bounded structural, route, and leader vertex counts. They are defensive limits rather than expected working sizes.
 
@@ -229,6 +247,7 @@ npm run test:annotations
 npm run test:standard-work
 npm run test:standard-work-chart
 npm run test:standard-work-operators
+npm run test:standard-work-balance
 npm run build
 git diff --check
 ```
@@ -256,9 +275,10 @@ git diff --check
 - `StandardWorkStore`, `StandardWorkOperationResolver`, `StandardWorkCalculationService`, `StandardWorkValidationService`, and `StandardWorkCommandFactory` keep persistent study data, live operation resolution, derived timing, validation, and history separate from the workspace DOM.
 - `StandardWorkOperatorStore`, `StandardWorkHandoverStore`, and their command factories own study participants, allocation, dependencies, and reversible lifecycle separately from the workspace DOM.
 - `StandardWorkChartScheduler` owns deterministic per-operator scheduling and automatic-resource lanes; `StandardWorkOperatorWorkloadService` owns derived workload totals; `StandardWorkChartScale` owns engineering intervals and fit calculations; the chart renderer owns SVG only.
+- `StandardWorkPlanningStore`, `StandardWorkTaktService`, `StandardWorkCapacityService`, `StandardWorkBalanceService`, and `StandardWorkAnalysisValidation` keep persisted planning, derived calculations, and diagnostics independent of DOM/SVG rendering.
 - Domain stores remain the runtime authorities for resources, operations, connections, factory structure, factory routes, factory annotations, Standard Work studies/entries, selection, and workspace viewports.
 
-See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for annotations and units, [ADR-0010](docs/architecture/ADR-0010-standard-work-timing-foundations.md) for Standard Work references, timing, ordering, lifecycle, and persistence, [ADR-0011](docs/architecture/ADR-0011-standard-work-combination-chart.md) for chart scheduling, resource lanes, derived data, and settings persistence, and [ADR-0012](docs/architecture/ADR-0012-standard-work-operators-and-handovers.md) for study operators, assignments, parallel cursors, handovers, workload, and schema 1.7.0.
+See [ADR-0001](docs/architecture/ADR-0001-process-flow-factory-layout-resources.md) for workspace/resource separation, [ADR-0002](docs/architecture/ADR-0002-versioned-mflow-project-persistence.md) for persistence decisions, [ADR-0003](docs/architecture/ADR-0003-command-history-and-dirty-state.md) for command history and dirty checkpoints, [ADR-0004](docs/architecture/ADR-0004-workspace-multiselection-and-application-clipboard.md) for multi-selection and clipboard rules, [ADR-0005](docs/architecture/ADR-0005-canvas-geometry-editing-and-overlays.md) for geometry editing and transient overlay decisions, [ADR-0006](docs/architecture/ADR-0006-factory-footprints-rotation-clearance.md) for physical footprints, rotation, clearance, and overlap analysis, [ADR-0007](docs/architecture/ADR-0007-factory-boundaries-walls-areas-aisles.md) for factory structure and policy validation, [ADR-0008](docs/architecture/ADR-0008-factory-walking-material-routes.md) for Factory Route identity, endpoints, lifecycle, and workspace separation, [ADR-0009](docs/architecture/ADR-0009-factory-measurement-dimensions-annotations.md) for annotations and units, [ADR-0010](docs/architecture/ADR-0010-standard-work-timing-foundations.md) for Standard Work references, timing, ordering, lifecycle, and persistence, [ADR-0011](docs/architecture/ADR-0011-standard-work-combination-chart.md) for chart scheduling, resource lanes, derived data, and settings persistence, [ADR-0012](docs/architecture/ADR-0012-standard-work-operators-and-handovers.md) for study operators, assignments, parallel cursors, handovers, workload, and schema 1.7.0, and [ADR-0013](docs/architecture/ADR-0013-standard-work-takt-capacity-balance.md) for planning inputs, derived takt, balance, nominal capacity, validation, and schema 1.8.0.
 
 ## Current limitations
 
@@ -268,8 +288,8 @@ Clipboard contents are session-only and cannot be exchanged with external applic
 
 Route travel-time estimates are nominal geometric calculations, not simulation. Annotation anchor editing is currently provided through typed creation, property editing, clipboard remapping, and referenced-entity geometry changes rather than a full CAD constraint solver.
 
-## Planned Sprint 3.2
+## Planned Sprint 3.3
 
-Sprint 3.2 is planned to add **takt time, capacity, and work-balance analysis**, including available production time, required demand, takt-time calculation and chart line, operator workload comparison, Yamazumi-style visualisation, over/under-takt indicators, balance metrics, and bottleneck identification.
+Sprint 3.3 is planned to add **resource availability, shifts and calendars**, including shift definitions, planned breaks, working calendars, operator availability, physical-resource availability, calendar exceptions, and availability-aware planning inputs.
 
-Development for Sprint 3.1 is performed on `feature/sprint-3.1-operator-lanes`.
+Development for Sprint 3.2 is performed on `feature/sprint-3.2-takt-work-balance`.
