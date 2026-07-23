@@ -18,7 +18,7 @@ export class StandardWorkCommandFactory {
   public createStudy(name?: string): StandardWorkStudy | null {
     const id = this.context.standardWork.nextStudyId(); const timestamp = now();
     const study: StandardWorkStudy = { id, name: name?.trim() || `Standard Work Study ${this.context.standardWork.getStudyCount() + 1}`, description: '', productOrProcessName: '', revision: '', active: true, notes: '', createdUtc: timestamp, modifiedUtc: timestamp };
-    const operator: StandardWorkOperator = { id: this.context.standardWorkOperators.nextId(), studyId: id, name: 'Operator 1', role: '', displayOrder: 10, active: true, linkedResourceId: null, notes: '' };
+    const operator: StandardWorkOperator = { id: this.context.standardWorkOperators.nextId(), studyId: id, name: 'Operator 1', role: '', displayOrder: 10, active: true, linkedResourceId: null, availabilityCalendarId: null, notes: '' };
     const planning = createDefaultStandardWorkPlanning(id);
     const command = new ReversibleCommand(`Create Standard Work study ${id}`, [id, operator.id], 'standardWork',
       ({ standardWork, standardWorkOperators, standardWorkPlanning, standardWorkSelection }) => { if (!standardWork.restoreStudy(study) || !standardWorkOperators.restoreOperator(operator) || !standardWorkPlanning.restore(planning)) throw new Error('Study, default operator, and planning parameters could not be created.'); standardWorkSelection.select({ kind: 'standardWorkStudy', id }); },

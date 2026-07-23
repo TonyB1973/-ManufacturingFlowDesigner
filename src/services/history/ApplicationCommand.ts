@@ -12,6 +12,8 @@ import type { StandardWorkSelectionStore } from '../standardWork/StandardWorkSel
 import type { StandardWorkOperatorStore } from '../standardWork/StandardWorkOperatorStore';
 import type { StandardWorkHandoverStore } from '../standardWork/StandardWorkHandoverStore';
 import type { StandardWorkPlanningStore } from '../standardWork/StandardWorkPlanningStore';
+import type { AvailabilityStore } from '../availability/AvailabilityStore';
+import type { AvailabilitySelectionStore } from '../availability/AvailabilitySelectionStore';
 
 export interface CommandExecutionContext {
   readonly resources: ResourceStore;
@@ -24,6 +26,8 @@ export interface CommandExecutionContext {
   readonly standardWorkOperators: StandardWorkOperatorStore;
   readonly standardWorkHandovers: StandardWorkHandoverStore;
   readonly standardWorkPlanning: StandardWorkPlanningStore;
+  readonly availability: AvailabilityStore;
+  readonly availabilitySelection: AvailabilitySelectionStore;
   readonly standardWorkSelection: StandardWorkSelectionStore;
   readonly project: ProjectSessionService;
   readonly selection: SelectionController;

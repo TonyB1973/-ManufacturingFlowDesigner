@@ -82,6 +82,7 @@ export class ResourceStore {
       locked: false,
       visible: true,
       capacity: 1,
+      availabilityCalendarId: null,
     };
     this.resources.set(resource.id, resource);
     this.notify({ kind: 'created', resource });

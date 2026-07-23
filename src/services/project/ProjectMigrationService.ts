@@ -15,6 +15,7 @@ export class ProjectMigrationService {
     this.register('1.5.0', '1.6.0', migrateStandardWorkChart);
     this.register('1.6.0', '1.7.0', migrateStandardWorkOperators);
     this.register('1.7.0', '1.8.0', migrateStandardWorkPlanning);
+    this.register('1.8.0', '1.9.0', migrateAvailabilityCalendars);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -44,6 +45,20 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateAvailabilityCalendars(document: Record<string, unknown>): Record<string, unknown> {
+  const settings = isRecord(document.settings) ? document.settings : {};
+  const resources = Array.isArray(document.resources) ? document.resources.map((candidate) => isRecord(candidate) ? { ...candidate, availabilityCalendarId: null } : candidate) : [];
+  const standardWorkOperators = Array.isArray(document.standardWorkOperators) ? document.standardWorkOperators.map((candidate) => isRecord(candidate) ? { ...candidate, availabilityCalendarId: null } : candidate) : [];
+  const standardWorkPlanning = Array.isArray(document.standardWorkPlanning) ? document.standardWorkPlanning.map((candidate) => isRecord(candidate) ? {
+    ...candidate, availabilityMode: 'manual', planningCalendarId: null, periodStartDate: null, periodEndDate: null,
+  } : candidate) : [];
+  return {
+    ...document, applicationVersion: '1.1.0', resources, standardWorkOperators, standardWorkPlanning,
+    shiftDefinitions: [], shiftBreaks: [], availabilityCalendars: [], calendarExceptions: [],
+    settings: { ...settings, defaultAvailabilityCalendarId: null },
+  };
 }
 
 function migrateStandardWorkPlanning(document: Record<string, unknown>): Record<string, unknown> {

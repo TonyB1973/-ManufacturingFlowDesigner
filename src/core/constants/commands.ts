@@ -15,7 +15,7 @@ export const RIBBON_TABS: readonly RibbonTab[] = [
   { name: 'Arrange', groups: [{ name: 'Align', commands: ['Align Left', 'Align Horizontal Centre', 'Align Right', 'Align Top', 'Align Vertical Centre', 'Align Bottom'] }, { name: 'Distribute', commands: ['Distribute Horizontally', 'Distribute Vertically', 'Equal Horizontal Gaps', 'Equal Vertical Gaps'] }, { name: 'Size', commands: ['Match Width', 'Match Height', 'Match Size'] }, { name: 'Selection', commands: ['Select All', 'Clear Selection'] }] },
   { name: 'Process', groups: [{ name: 'Flow', commands: ['Add Operation', 'Select', 'Connect'] }] },
   { name: 'Resources', groups: [{ name: 'Library', commands: ['Resource Library', 'Add Resource', 'Manage Library'] }, { name: 'Orientation', commands: ['Rotate Left', 'Rotate Right', 'Reset Rotation'] }] },
-  { name: 'Engineering', groups: [{ name: 'Factory Layout', commands: ['Clearance Envelopes', 'Fit Layout', 'Fit Including Clearance'] }, { name: 'Analysis', commands: ['Validate', 'Standard Work'] }] },
+  { name: 'Engineering', groups: [{ name: 'Factory Layout', commands: ['Clearance Envelopes', 'Fit Layout', 'Fit Including Clearance'] }, { name: 'Analysis', commands: ['Validate', 'Standard Work', 'Availability'] }] },
   { name: 'Simulation', groups: [{ name: 'Controls', commands: ['Run', 'Pause', 'Reset'] }] },
 ];
 

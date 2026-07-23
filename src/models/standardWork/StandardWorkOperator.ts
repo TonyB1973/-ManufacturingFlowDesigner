@@ -8,10 +8,11 @@ export interface StandardWorkOperator {
   displayOrder: number;
   active: boolean;
   linkedResourceId: string | null;
+  availabilityCalendarId: string | null;
   notes: string;
 }
 
-export type StandardWorkOperatorPatch = Partial<Pick<StandardWorkOperator, 'name' | 'role' | 'displayOrder' | 'active' | 'linkedResourceId' | 'notes'>>;
+export type StandardWorkOperatorPatch = Partial<Pick<StandardWorkOperator, 'name' | 'role' | 'displayOrder' | 'active' | 'linkedResourceId' | 'availabilityCalendarId' | 'notes'>>;
 export const cloneStandardWorkOperator = (value: StandardWorkOperator): StandardWorkOperator => ({ ...value });
 
 export function isValidStandardWorkOperator(value: StandardWorkOperator): boolean {
@@ -21,5 +22,6 @@ export function isValidStandardWorkOperator(value: StandardWorkOperator): boolea
     && Number.isInteger(value.displayOrder) && value.displayOrder > 0
     && typeof value.active === 'boolean'
     && (value.linkedResourceId === null || value.linkedResourceId.trim().length > 0)
+    && (value.availabilityCalendarId === null || /^CAL-\d+$/.test(value.availabilityCalendarId))
     && value.notes.length <= STANDARD_WORK_OPERATOR_LIMITS.notes;
 }

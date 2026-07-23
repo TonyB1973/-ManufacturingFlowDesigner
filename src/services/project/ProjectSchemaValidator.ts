@@ -24,6 +24,13 @@ import { STANDARD_WORK_OPERATOR_LIMITS, isValidStandardWorkOperator, type Standa
 import { STANDARD_WORK_HANDOVER_LIMITS, isValidStandardWorkHandover, type StandardWorkHandover } from '../../models/standardWork/StandardWorkHandover';
 import { validateHandoverGraph } from '../standardWork/StandardWorkDependencyGraph';
 import { isValidStandardWorkPlanning, type StandardWorkPlanningParameters } from '../../models/standardWork/StandardWorkPlanning';
+import {
+  AVAILABILITY_LIMITS, isValidCalendar, isValidCalendarException, isValidShift, isValidShiftBreak,
+  type AvailabilityCalendar, type CalendarException, type ShiftBreak, type ShiftDefinition,
+} from '../../models/availability/AvailabilityModels';
+import { isValidDateOnly } from '../availability/DateOnlyService';
+import { AvailabilityStore } from '../availability/AvailabilityStore';
+import { AvailabilityCalendarEvaluationService } from '../availability/AvailabilityCalendarEvaluationService';
 
 const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, studies: 10000, standardWorkEntries: 500000, standardWorkOperators: 100000, standardWorkHandovers: 1000000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
@@ -70,6 +77,10 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const standardWorkOperators = standardWorkOperatorValues(root.standardWorkOperators, issues);
   const standardWorkHandovers = standardWorkHandoverValues(root.standardWorkHandovers, issues);
   const standardWorkPlanning = standardWorkPlanningValues(root.standardWorkPlanning, issues);
+  const shiftDefinitions = shiftValues(root.shiftDefinitions, issues);
+  const shiftBreaks = shiftBreakValues(root.shiftBreaks, issues);
+  const availabilityCalendars = availabilityCalendarValues(root.availabilityCalendars, issues);
+  const calendarExceptions = calendarExceptionValues(root.calendarExceptions, issues);
   const workspaces = workspaceValues(root.workspaces, issues);
   const settings = settingsValue(root.settings, issues);
 
@@ -80,6 +91,7 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   uniqueIds('connection', connections, issues);
   uniqueIds('boundary', layoutBoundaries, issues); uniqueIds('wall', walls, issues); uniqueIds('area', areas, issues); uniqueIds('aisle', aisles, issues); uniqueIds('factory route', factoryRoutes, issues); uniqueIds('factory annotation', factoryAnnotations, issues);
   uniqueIds('Standard Work study', standardWorkStudies, issues); uniqueIds('Standard Work entry', standardWorkEntries, issues); uniqueIds('Standard Work operator', standardWorkOperators, issues); uniqueIds('Standard Work handover', standardWorkHandovers, issues);
+  uniqueIds('shift', shiftDefinitions, issues); uniqueIds('shift break', shiftBreaks, issues); uniqueIds('availability calendar', availabilityCalendars, issues); uniqueIds('calendar exception', calendarExceptions, issues);
   if (layoutBoundaries.filter((item) => item.layoutId === DEFAULT_FACTORY_LAYOUT_ID).length > 1) issues.push('Only one active factory boundary is allowed per layout.');
   const entityIds = new Set<string>();
   [...resources, ...operations, ...connections, ...layoutBoundaries, ...walls, ...areas, ...aisles, ...factoryRoutes, ...factoryAnnotations, ...standardWorkStudies, ...standardWorkEntries, ...standardWorkOperators, ...standardWorkHandovers].forEach((item) => { if (entityIds.has(item.id)) issues.push(`Project entity id ${item.id} is used by more than one entity type.`); entityIds.add(item.id); });
@@ -89,9 +101,10 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const operationIds = new Set(operations.map((item) => item.id));
   const studyIds = new Set(standardWorkStudies.map((item) => item.id));
   const operatorIds = new Set(standardWorkOperators.map((item) => item.id));
+  const shiftIds = new Set(shiftDefinitions.map((item) => item.id)); const calendarIds = new Set(availabilityCalendars.map((item) => item.id));
   const areaIds = new Set(areas.map((item) => item.id));
   const boundaryIds = new Set(layoutBoundaries.map((item) => item.id)); const wallIds = new Set(walls.map((item) => item.id)); const aisleIds = new Set(aisles.map((item) => item.id)); const routeIds = new Set(factoryRoutes.map((item) => item.id));
-  resources.forEach((item) => { if (!resourceTemplateIds.has(item.templateId)) issues.push(`Resource ${item.id} references missing template ${item.templateId}.`); });
+  resources.forEach((item) => { if (!resourceTemplateIds.has(item.templateId)) issues.push(`Resource ${item.id} references missing template ${item.templateId}.`); if (item.availabilityCalendarId !== null && !calendarIds.has(item.availabilityCalendarId)) issues.push(`Resource ${item.id} references missing availability calendar ${item.availabilityCalendarId}.`); });
   operations.forEach((item) => {
     if (!operationTemplateIds.has(item.templateId)) issues.push(`Operation ${item.id} references missing template ${item.templateId}.`);
     if (item.assignedResourceId !== null && !resourceIds.has(item.assignedResourceId)) issues.push(`Operation ${item.id} references missing physical resource ${item.assignedResourceId}.`);
@@ -109,11 +122,25 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const standardWorkPairs = new Set<string>(); const standardWorkCounts = new Map<string, number>();
   standardWorkEntries.forEach((entry) => { if (!studyIds.has(entry.studyId)) issues.push(`Standard Work entry ${entry.id} references missing study ${entry.studyId}.`); if (!operationIds.has(entry.operationId)) issues.push(`Standard Work entry ${entry.id} references missing operation ${entry.operationId}.`); const operator = standardWorkOperators.find((item) => item.id === entry.assignedOperatorId); if (!operatorIds.has(entry.assignedOperatorId)) issues.push(`Standard Work entry ${entry.id} references missing operator ${entry.assignedOperatorId}.`); else if (operator?.studyId !== entry.studyId) issues.push(`Standard Work entry ${entry.id} references an operator from another study.`); const pair = `${entry.studyId}\u0000${entry.operationId}`; if (standardWorkPairs.has(pair)) issues.push(`Standard Work study ${entry.studyId} contains duplicate operation ${entry.operationId}.`); standardWorkPairs.add(pair); standardWorkCounts.set(entry.studyId, (standardWorkCounts.get(entry.studyId) ?? 0) + 1); });
   standardWorkCounts.forEach((count, studyId) => { if (count > STANDARD_WORK_LIMITS.entriesPerStudy) issues.push(`Standard Work study ${studyId} exceeds ${STANDARD_WORK_LIMITS.entriesPerStudy} entries.`); });
-  const operatorCounts = new Map<string, number>(); standardWorkOperators.forEach((operator) => { if (!studyIds.has(operator.studyId)) issues.push(`Standard Work operator ${operator.id} references missing study ${operator.studyId}.`); if (operator.linkedResourceId !== null && !resourceIds.has(operator.linkedResourceId)) issues.push(`Standard Work operator ${operator.id} references missing physical resource ${operator.linkedResourceId}.`); operatorCounts.set(operator.studyId, (operatorCounts.get(operator.studyId) ?? 0) + 1); });
+  const operatorCounts = new Map<string, number>(); standardWorkOperators.forEach((operator) => { if (!studyIds.has(operator.studyId)) issues.push(`Standard Work operator ${operator.id} references missing study ${operator.studyId}.`); if (operator.linkedResourceId !== null && !resourceIds.has(operator.linkedResourceId)) issues.push(`Standard Work operator ${operator.id} references missing physical resource ${operator.linkedResourceId}.`); if (operator.availabilityCalendarId !== null && !calendarIds.has(operator.availabilityCalendarId)) issues.push(`Standard Work operator ${operator.id} references missing availability calendar ${operator.availabilityCalendarId}.`); operatorCounts.set(operator.studyId, (operatorCounts.get(operator.studyId) ?? 0) + 1); });
   for (const study of standardWorkStudies) if (!(operatorCounts.get(study.id) ?? 0)) issues.push(`Standard Work study ${study.id} requires at least one operator.`); operatorCounts.forEach((count, studyId) => { if (count > STANDARD_WORK_OPERATOR_LIMITS.perStudy) issues.push(`Standard Work study ${studyId} exceeds the operator safety limit.`); });
   const handoverCounts = new Map<string, number>(); standardWorkHandovers.forEach((handover) => { if (!studyIds.has(handover.studyId)) issues.push(`Standard Work handover ${handover.id} references missing study ${handover.studyId}.`); handoverCounts.set(handover.studyId, (handoverCounts.get(handover.studyId) ?? 0) + 1); }); handoverCounts.forEach((count, studyId) => { if (count > STANDARD_WORK_HANDOVER_LIMITS.perStudy) issues.push(`Standard Work study ${studyId} exceeds the handover safety limit.`); });
   for (const study of standardWorkStudies) for (const issue of validateHandoverGraph(standardWorkEntries.filter((entry) => entry.studyId === study.id), standardWorkHandovers.filter((item) => item.studyId === study.id))) issues.push(issue.message);
-  const planningStudyIds = new Set<string>(); for (const planning of standardWorkPlanning) { if (planningStudyIds.has(planning.studyId)) issues.push(`Standard Work study ${planning.studyId} has more than one planning record.`); planningStudyIds.add(planning.studyId); if (!studyIds.has(planning.studyId)) issues.push(`Standard Work planning record references missing study ${planning.studyId}.`); } for (const study of standardWorkStudies) if (!planningStudyIds.has(study.id)) issues.push(`Standard Work study ${study.id} requires one planning record.`);
+  const planningStudyIds = new Set<string>(); for (const planning of standardWorkPlanning) { if (planningStudyIds.has(planning.studyId)) issues.push(`Standard Work study ${planning.studyId} has more than one planning record.`); planningStudyIds.add(planning.studyId); if (!studyIds.has(planning.studyId)) issues.push(`Standard Work planning record references missing study ${planning.studyId}.`); if (planning.planningCalendarId !== null && !calendarIds.has(planning.planningCalendarId)) issues.push(`Standard Work planning record ${planning.studyId} references missing availability calendar ${planning.planningCalendarId}.`); if (planning.availabilityMode === 'calendar' && (!planning.periodStartDate || !planning.periodEndDate || !isValidDateOnly(planning.periodStartDate) || !isValidDateOnly(planning.periodEndDate))) issues.push(`Standard Work planning record ${planning.studyId} has invalid calendar dates.`); } for (const study of standardWorkStudies) if (!planningStudyIds.has(study.id)) issues.push(`Standard Work study ${study.id} requires one planning record.`);
+  shiftBreaks.forEach((item) => { const shift = shiftDefinitions.find((candidate) => candidate.id === item.shiftId); if (!shift) issues.push(`Shift break ${item.id} references missing shift ${item.shiftId}.`); else if (!isValidShiftBreak(item, shift)) issues.push(`Shift break ${item.id} does not fit inside its shift.`); });
+  for (const shift of shiftDefinitions) { const breaks = shiftBreaks.filter((item) => item.shiftId === shift.id).sort((a, b) => a.startOffsetMinutes - b.startOffsetMinutes); for (let index = 1; index < breaks.length; index += 1) if (breaks[index].startOffsetMinutes < breaks[index - 1].startOffsetMinutes + breaks[index - 1].durationMinutes) issues.push(`Shift ${shift.id} contains overlapping breaks.`); }
+  availabilityCalendars.forEach((calendar) => Object.values(calendar.weeklyPattern).flat().forEach((id) => { if (!shiftIds.has(id)) issues.push(`Availability calendar ${calendar.id} references missing shift ${id}.`); }));
+  const exceptionDates = new Set<string>(); calendarExceptions.forEach((item) => { if (!calendarIds.has(item.calendarId)) issues.push(`Calendar exception ${item.id} references missing calendar ${item.calendarId}.`); if (!isValidDateOnly(item.date)) issues.push(`Calendar exception ${item.id} has an invalid date.`); const key = `${item.calendarId}\0${item.date}`; if (exceptionDates.has(key)) issues.push(`Availability calendar ${item.calendarId} has more than one exception for ${item.date}.`); exceptionDates.add(key); item.replacementShiftIds.forEach((id) => { if (!shiftIds.has(id)) issues.push(`Calendar exception ${item.id} references missing shift ${id}.`); }); });
+  if (settings && settings.defaultAvailabilityCalendarId !== null && !calendarIds.has(settings.defaultAvailabilityCalendarId)) issues.push(`Project default availability calendar ${settings.defaultAvailabilityCalendarId} does not exist.`);
+  const availabilityCandidate = new AvailabilityStore(); if (availabilityCandidate.replaceAll({ shifts: shiftDefinitions, breaks: shiftBreaks, calendars: availabilityCalendars, exceptions: calendarExceptions }, false)) {
+    const evaluator = new AvailabilityCalendarEvaluationService(availabilityCandidate);
+    for (const planning of standardWorkPlanning.filter((item) => item.availabilityMode === 'calendar' && item.planningCalendarId && item.periodStartDate && item.periodEndDate)) {
+      const evaluated = evaluator.evaluate(planning.planningCalendarId!, planning.periodStartDate!, planning.periodEndDate!);
+      evaluated.errors.forEach((message) => issues.push(`Standard Work planning record ${planning.studyId}: ${message}`));
+      if (evaluated.valid && evaluated.netAvailableSeconds <= 0) issues.push(`Standard Work planning record ${planning.studyId} produces no net availability.`);
+      if (evaluated.valid && planning.plannedDowntimeSeconds >= evaluated.netAvailableSeconds) issues.push(`Standard Work planning record ${planning.studyId} has planned downtime greater than or equal to calendar net availability.`);
+    }
+  }
   factoryRoutes.forEach((route) => {
     for (const endpoint of [route.source, route.target]) {
       if (endpoint.kind === 'resource' && !resourceIds.has(endpoint.resourceId)) issues.push(`FactoryRoute ${route.id} references missing physical resource ${endpoint.resourceId}.`);
@@ -137,7 +164,7 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   if (issues.length) throw new ProjectValidationError(issues);
   return {
     format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: root.applicationVersion as string,
-    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations, standardWorkStudies, standardWorkEntries, standardWorkOperators, standardWorkHandovers, standardWorkPlanning,
+    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations, standardWorkStudies, standardWorkEntries, standardWorkOperators, standardWorkHandovers, standardWorkPlanning, shiftDefinitions, shiftBreaks, availabilityCalendars, calendarExceptions,
     workspaces: workspaces!, settings: settings!,
   };
 }
@@ -187,7 +214,7 @@ function resourceValues(value: unknown, issues: string[]): Omit<ResourceInstance
     const item = record(raw, `resources[${index}]`, issues); if (!item) return [];
     const clearance = record(item.clearance, `resources[${index}].clearance`, issues);
     const validClearance = clearance && bool(clearance.enabled) && [clearance.left, clearance.right, clearance.top, clearance.bottom].every((distance) => finite(distance) && distance >= 0) && CLEARANCE_CATEGORIES.has(String(clearance.category)) && boundedString(clearance.note, 1000);
-    if (!nonEmpty(item.id) || !nonEmpty(item.templateId) || !nonEmpty(item.name) || !RESOURCE_TYPES.has(String(item.resourceType)) || item.layoutId !== DEFAULT_FACTORY_LAYOUT_ID || !finite(item.worldX) || !finite(item.worldY) || !finite(item.width) || item.width < 100 || !finite(item.depth) || item.depth < 60 || !finite(item.rotationDegrees) || item.rotationDegrees < 0 || item.rotationDegrees >= 360 || !validClearance || !bool(item.active) || !bool(item.visible) || !bool(item.locked) || !Number.isInteger(item.capacity) || (item.capacity as number) < 1) issues.push(`resources[${index}] has invalid fields.`);
+    if (!nonEmpty(item.id) || !nonEmpty(item.templateId) || !nonEmpty(item.name) || !RESOURCE_TYPES.has(String(item.resourceType)) || item.layoutId !== DEFAULT_FACTORY_LAYOUT_ID || !finite(item.worldX) || !finite(item.worldY) || !finite(item.width) || item.width < 100 || !finite(item.depth) || item.depth < 60 || !finite(item.rotationDegrees) || item.rotationDegrees < 0 || item.rotationDegrees >= 360 || !validClearance || !bool(item.active) || !bool(item.visible) || !bool(item.locked) || !Number.isInteger(item.capacity) || (item.capacity as number) < 1 || !(item.availabilityCalendarId === null || typeof item.availabilityCalendarId === 'string' && /^CAL-\d+$/.test(item.availabilityCalendarId))) issues.push(`resources[${index}] has invalid fields.`);
     return [item as unknown as Omit<ResourceInstance, 'selected'>];
   });
 }
@@ -290,6 +317,18 @@ function standardWorkHandoverValues(value: unknown, issues: string[]): StandardW
 function standardWorkPlanningValues(value: unknown, issues: string[]): StandardWorkPlanningParameters[] {
   return arrayValue(value, 'standardWorkPlanning', LIMITS.studies, issues).flatMap((raw, index) => { const item = record(raw, `standardWorkPlanning[${index}]`, issues); if (!item) return []; const planning = item as unknown as StandardWorkPlanningParameters; if (!isValidStandardWorkPlanning(planning)) issues.push(`standardWorkPlanning[${index}] has invalid fields.`); return [planning]; });
 }
+function shiftValues(value: unknown, issues: string[]): ShiftDefinition[] {
+  return arrayValue(value, 'shiftDefinitions', AVAILABILITY_LIMITS.shifts, issues).flatMap((raw, index) => { const item = record(raw, `shiftDefinitions[${index}]`, issues); if (!item) return []; const shift = item as unknown as ShiftDefinition; if (!isValidShift(shift)) issues.push(`shiftDefinitions[${index}] has invalid fields.`); return [shift]; });
+}
+function shiftBreakValues(value: unknown, issues: string[]): ShiftBreak[] {
+  return arrayValue(value, 'shiftBreaks', AVAILABILITY_LIMITS.totalBreaks, issues).flatMap((raw, index) => { const item = record(raw, `shiftBreaks[${index}]`, issues); if (!item) return []; const entry = item as unknown as ShiftBreak; if (!isValidShiftBreak(entry)) issues.push(`shiftBreaks[${index}] has invalid fields.`); return [entry]; });
+}
+function availabilityCalendarValues(value: unknown, issues: string[]): AvailabilityCalendar[] {
+  return arrayValue(value, 'availabilityCalendars', AVAILABILITY_LIMITS.calendars, issues).flatMap((raw, index) => { const item = record(raw, `availabilityCalendars[${index}]`, issues); if (!item) return []; const entry = item as unknown as AvailabilityCalendar; if (!isValidCalendar(entry)) issues.push(`availabilityCalendars[${index}] has invalid fields.`); return [entry]; });
+}
+function calendarExceptionValues(value: unknown, issues: string[]): CalendarException[] {
+  return arrayValue(value, 'calendarExceptions', AVAILABILITY_LIMITS.totalExceptions, issues).flatMap((raw, index) => { const item = record(raw, `calendarExceptions[${index}]`, issues); if (!item) return []; const entry = item as unknown as CalendarException; if (!isValidCalendarException(entry)) issues.push(`calendarExceptions[${index}] has invalid fields.`); return [entry]; });
+}
 function anchorValue(value: unknown): ProcessConnection['sourceAnchor'] | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
@@ -299,7 +338,7 @@ function workspaceValues(value: unknown, issues: string[]): PersistedWorkspaces 
   const item = record(value, 'workspaces', issues); if (!item) return null;
   const processFlow = viewportValue(item.processFlow); const factoryLayout = viewportValue(item.factoryLayout);
   const active = item.active === undefined ? 'processFlow' : item.active;
-  if (active !== 'processFlow' && active !== 'factoryLayout' && active !== 'standardWork') issues.push('workspaces.active is invalid.');
+  if (active !== 'processFlow' && active !== 'factoryLayout' && active !== 'standardWork' && active !== 'availability') issues.push('workspaces.active is invalid.');
   if (!processFlow || !factoryLayout) issues.push('Workspace viewport state is invalid.');
   return processFlow && factoryLayout ? { active: active as PersistedWorkspaces['active'], processFlow, factoryLayout } : null;
 }
@@ -318,7 +357,7 @@ function settingsValue(value: unknown, issues: string[]): ProjectSettings | null
   const units = record(item.units, 'settings.units', issues);
   const validUnits = units && LENGTH_UNITS.includes(units.modelLengthUnit as never) && LENGTH_UNITS.includes(units.displayLengthUnit as never) && Number.isInteger(units.displayPrecision) && Number(units.displayPrecision) >= 0 && Number(units.displayPrecision) <= 6 && bool(units.showTrailingZeros);
   const standardWork = record(item.standardWork, 'settings.standardWork', issues); const validStandardWork = standardWork && STANDARD_WORK_TIME_FORMATS.includes(standardWork.timeFormat as never) && isValidStandardWorkChartSettings(standardWork.chart);
-  if (!positive(item.gridBaseInterval) || !finite(item.routingClearance) || item.routingClearance < 0 || item.unitSystem !== 'metric' || !finite(item.displayPrecision) || !Number.isInteger(item.displayPrecision) || item.displayPrecision < 0 || item.displayPrecision > 6 || !validUnits || !validStandardWork || !positive(item.dimensionTextScale) || !positive(item.annotationTextSize) || !positive(item.defaultDimensionOffset) || !FACTORY_ANNOTATION_LAYERS.includes(item.defaultDimensionLayer as never)) issues.push('settings has invalid fields.');
+  if (!positive(item.gridBaseInterval) || !finite(item.routingClearance) || item.routingClearance < 0 || item.unitSystem !== 'metric' || !finite(item.displayPrecision) || !Number.isInteger(item.displayPrecision) || item.displayPrecision < 0 || item.displayPrecision > 6 || !validUnits || !validStandardWork || !positive(item.dimensionTextScale) || !positive(item.annotationTextSize) || !positive(item.defaultDimensionOffset) || !FACTORY_ANNOTATION_LAYERS.includes(item.defaultDimensionLayer as never) || (item.defaultAvailabilityCalendarId !== null && (typeof item.defaultAvailabilityCalendarId !== 'string' || !/^CAL-\d+$/.test(item.defaultAvailabilityCalendarId)))) issues.push('settings has invalid fields.');
   return item as unknown as ProjectSettings;
 }
 function uniqueIds(label: string, items: readonly { readonly id: string }[], issues: string[]): void {

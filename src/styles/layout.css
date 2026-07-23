@@ -13,7 +13,11 @@
 .app-shell--standard-work .app-body { grid-template-columns: 0 minmax(640px, 1fr) 0; }
 .app-shell--standard-work .panel-toggle { display: none; }
 .app-shell--standard-work .sidebar { visibility: hidden; }
+.app-shell--availability .app-body { grid-template-columns: 0 minmax(640px, 1fr) 0; }
+.app-shell--availability .panel-toggle { display: none; }
+.app-shell--availability .sidebar { visibility: hidden; }
 .standard-work-workspace { min-width: 0; min-height: 0; overflow: hidden; }
+.availability-workspace { min-width: 0; min-height: 0; overflow: hidden; }
 .panel-toggle { position: absolute; z-index: 5; top: 45%; width: 18px; height: 42px; padding: 0; color: var(--text-muted); background: var(--panel); border: 1px solid var(--border); cursor: pointer; }
 .panel-toggle--left { left: calc(var(--left-width) - 1px); transform: translateX(-100%); border-radius: 3px 0 0 3px; }
 .panel-toggle--right { right: calc(var(--right-width) - 1px); transform: translateX(100%); border-radius: 0 3px 3px 0; }
