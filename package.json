@@ -1,6 +1,6 @@
 {
   "name": "manufacturing-flow-designer",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,7 +25,8 @@
     "test:standard-work": "node scripts/verify-standard-work.mjs",
     "test:standard-work-chart": "node scripts/verify-standard-work-chart.mjs",
     "test:standard-work-operators": "node scripts/verify-standard-work-operators.mjs",
-    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history && npm run test:editing && npm run test:canvas && npm run test:factory && npm run test:structure && npm run test:routes && npm run test:demo && npm run test:annotations && npm run test:standard-work && npm run test:standard-work-chart && npm run test:standard-work-operators"
+    "test:standard-work-balance": "node scripts/verify-standard-work-balance.mjs",
+    "test": "npm run test:coordinates && npm run test:resources && npm run test:operations && npm run test:connections && npm run test:workspaces && npm run test:persistence && npm run test:history && npm run test:editing && npm run test:canvas && npm run test:factory && npm run test:structure && npm run test:routes && npm run test:demo && npm run test:annotations && npm run test:standard-work && npm run test:standard-work-chart && npm run test:standard-work-operators && npm run test:standard-work-balance"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

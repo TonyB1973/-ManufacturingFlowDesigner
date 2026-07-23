@@ -14,6 +14,7 @@ export class ProjectMigrationService {
     this.register('1.4.0', '1.5.0', migrateStandardWork);
     this.register('1.5.0', '1.6.0', migrateStandardWorkChart);
     this.register('1.6.0', '1.7.0', migrateStandardWorkOperators);
+    this.register('1.7.0', '1.8.0', migrateStandardWorkPlanning);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -43,6 +44,13 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateStandardWorkPlanning(document: Record<string, unknown>): Record<string, unknown> {
+  const studies = Array.isArray(document.standardWorkStudies) ? document.standardWorkStudies.filter(isRecord) : [];
+  const standardWorkPlanning = studies.map((study) => ({ studyId: String(study.id), periodName: 'Shift', scheduledProductionTimeSeconds: 28_800, plannedBreakTimeSeconds: 0, plannedDowntimeSeconds: 0, requiredOutputUnits: 1, active: false, notes: '' }));
+  const settings = isRecord(document.settings) ? document.settings : {}; const standardWork = isRecord(settings.standardWork) ? settings.standardWork : {}; const chart = isRecord(standardWork.chart) ? standardWork.chart : {};
+  return { ...document, applicationVersion: '1.0.0', standardWorkPlanning, settings: { ...settings, standardWork: { ...standardWork, chart: { ...DEFAULT_STANDARD_WORK_CHART_SETTINGS, ...chart } } } };
 }
 
 function migrateStandardWorkOperators(document: Record<string, unknown>): Record<string, unknown> {

@@ -14,6 +14,7 @@ import { cloneFactoryAnnotation } from '../../models/factory/FactoryAnnotation';
 import type { StandardWorkStore } from '../StandardWorkStore';
 import type { StandardWorkOperatorStore } from '../standardWork/StandardWorkOperatorStore';
 import type { StandardWorkHandoverStore } from '../standardWork/StandardWorkHandoverStore';
+import type { StandardWorkPlanningStore } from '../standardWork/StandardWorkPlanningStore';
 
 export interface ProjectSerializationSource {
   readonly metadata: ProjectMetadata;
@@ -27,6 +28,7 @@ export interface ProjectSerializationSource {
   readonly standardWork: StandardWorkStore;
   readonly standardWorkOperators: StandardWorkOperatorStore;
   readonly standardWorkHandovers: StandardWorkHandoverStore;
+  readonly standardWorkPlanning: StandardWorkPlanningStore;
   readonly workspaces: WorkspaceStore;
 }
 
@@ -52,6 +54,7 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
     standardWorkEntries: byId(source.standardWork.getEntries()).map((item) => ({ ...item })),
     standardWorkOperators: byId(source.standardWorkOperators.getOperators()).map((item) => ({ ...item })),
     standardWorkHandovers: byId(source.standardWorkHandovers.getHandovers()).map((item) => ({ ...item })),
+    standardWorkPlanning: source.standardWorkPlanning.getAll().map((item) => ({ ...item })),
     workspaces: {
       active: source.workspaces.getActive(),
       processFlow: source.workspaces.getViewport('processFlow'),
