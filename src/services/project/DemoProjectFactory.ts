@@ -47,6 +47,7 @@ function resource(
     visible: true,
     locked: false,
     capacity: 1,
+    availabilityCalendarId: null,
   };
 }
 
@@ -190,15 +191,26 @@ export function createDemoProject(now = new Date().toISOString()): ProjectDocume
       { id: 'ANN-0005', annotationType: 'leader', layoutId: DEFAULT_FACTORY_LAYOUT_ID, anchor: { kind: 'resource', resourceId: 'RES-0004', feature: 'centre' }, elbowPoints: [{ x: 1120, y: 80 }], textPosition: { x: 1180, y: 40 }, text: 'Final quality gate', textSize: 16, arrowStyle: 'filled', visible: true, locked: false, layer: 'Notes', note: 'Example resource callout.', createdUtc: now },
     ],
     standardWorkStudies: [{ id: 'SW-0001', name: 'Demo Product Standard Work', description: 'Reference study for testing live Process Flow timing.', productOrProcessName: 'Demo Product', revision: 'A', active: true, notes: 'Durations resolve from the referenced operations.', createdUtc: now, modifiedUtc: now }],
-    standardWorkOperators: [{ id: 'SWO-0001', studyId: 'SW-0001', name: 'Operator 1', role: 'Production operator', displayOrder: 10, active: true, linkedResourceId: null, notes: 'Default demonstration operator.' }],
+    standardWorkOperators: [{ id: 'SWO-0001', studyId: 'SW-0001', name: 'Operator 1', role: 'Production operator', displayOrder: 10, active: true, linkedResourceId: null, availabilityCalendarId: 'CAL-0001', notes: 'Default demonstration operator.' }],
     standardWorkEntries: operations.map((item, index) => ({ id: `SWE-${String(index + 1).padStart(4, '0')}`, studyId: 'SW-0001', operationId: item.id, assignedOperatorId: 'SWO-0001', order: (index + 1) * 10, occurrences: 1, enabled: true, notes: '' })),
     standardWorkHandovers: [],
-    standardWorkPlanning: [{ studyId: 'SW-0001', periodName: 'Shift', scheduledProductionTimeSeconds: 28_800, plannedBreakTimeSeconds: 1_800, plannedDowntimeSeconds: 0, requiredOutputUnits: 300, active: true, notes: 'Demonstration planning inputs; edit to match the real production period.' }],
+    standardWorkPlanning: [{ studyId: 'SW-0001', periodName: 'Shift', availabilityMode: 'manual', planningCalendarId: 'CAL-0001', periodStartDate: null, periodEndDate: null, scheduledProductionTimeSeconds: 28_800, plannedBreakTimeSeconds: 1_800, plannedDowntimeSeconds: 0, requiredOutputUnits: 300, active: true, notes: 'Demonstration planning inputs; edit to match the real production period.' }],
+    shiftDefinitions: [
+      { id: 'SHF-0001', name: 'Early Shift', startMinuteOfDay: 360, endMinuteOfDay: 840, active: true, notes: 'Demonstration shift; replace with the real working pattern.' },
+      { id: 'SHF-0002', name: 'Late Shift', startMinuteOfDay: 840, endMinuteOfDay: 1_320, active: true, notes: 'Demonstration shift; replace with the real working pattern.' },
+    ],
+    shiftBreaks: [
+      { id: 'SHB-0001', shiftId: 'SHF-0001', name: 'Morning break', startOffsetMinutes: 120, durationMinutes: 15, reducesAvailableTime: true, notes: '' },
+      { id: 'SHB-0002', shiftId: 'SHF-0001', name: 'Lunch', startOffsetMinutes: 240, durationMinutes: 30, reducesAvailableTime: true, notes: '' },
+      { id: 'SHB-0003', shiftId: 'SHF-0002', name: 'Afternoon break', startOffsetMinutes: 120, durationMinutes: 15, reducesAvailableTime: true, notes: '' },
+    ],
+    availabilityCalendars: [{ id: 'CAL-0001', name: 'Production Calendar', active: true, weeklyPattern: { monday: ['SHF-0001', 'SHF-0002'], tuesday: ['SHF-0001', 'SHF-0002'], wednesday: ['SHF-0001', 'SHF-0002'], thursday: ['SHF-0001', 'SHF-0002'], friday: ['SHF-0001', 'SHF-0002'], saturday: [], sunday: [] }, notes: 'Demonstration calendar for availability testing.' }],
+    calendarExceptions: [],
     workspaces: {
       active: 'processFlow',
       processFlow: { panX: 55, panY: 100, zoom: 0.5, gridVisible: true, originVisible: true, snapEnabled: true },
       factoryLayout: { panX: 50, panY: 90, zoom: 0.28, gridVisible: true, originVisible: true, snapEnabled: true },
     },
-    settings: { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork } },
+    settings: { ...DEFAULT_PROJECT_SETTINGS, defaultAvailabilityCalendarId: 'CAL-0001', units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork } },
   };
 }

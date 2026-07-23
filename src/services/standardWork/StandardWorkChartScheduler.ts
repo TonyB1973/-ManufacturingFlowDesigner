@@ -28,7 +28,7 @@ export class StandardWorkChartScheduler {
     const ordered = entries.filter((entry) => entry.enabled).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
     const configuredOperators = this.operators?.getOperators(study.id) ?? [];
     const fallbackOperatorId = configuredOperators[0]?.id ?? ordered[0]?.assignedOperatorId ?? 'SWO-1';
-    const laneOperators = configuredOperators.length ? configuredOperators : [{ id: fallbackOperatorId, studyId: study.id, name: 'Operator 1', role: '', displayOrder: 10, active: true, linkedResourceId: null, notes: '' }];
+    const laneOperators = configuredOperators.length ? configuredOperators : [{ id: fallbackOperatorId, studyId: study.id, name: 'Operator 1', role: '', displayOrder: 10, active: true, linkedResourceId: null, availabilityCalendarId: null, notes: '' }];
     const operatorById = new Map(laneOperators.map((operator) => [operator.id, operator]));
     const cursors = new Map(laneOperators.map((operator) => [operator.id, 0]));
     const handovers = [...(this.handovers?.getHandovers(study.id) ?? [])].sort((left, right) => left.id.localeCompare(right.id));

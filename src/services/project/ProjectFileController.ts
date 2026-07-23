@@ -37,7 +37,7 @@ export class ProjectFileController implements ProjectFileCommands {
     await this.run(async () => {
       reportStatus('Saving project…');
       const state = this.session.getState(); const savedAt = new Date().toISOString();
-      const result = serializeProject({ metadata: state.metadata, settings: state.settings, resources: this.session.resources, operations: this.session.operations, connections: this.session.connections, structure: this.session.structure, routes: this.session.routes, annotations: this.session.annotations, standardWork: this.session.standardWork, standardWorkOperators: this.session.standardWorkOperators, standardWorkHandovers: this.session.standardWorkHandovers, standardWorkPlanning: this.session.standardWorkPlanning, workspaces: this.session.workspaces }, savedAt);
+      const result = serializeProject({ metadata: state.metadata, settings: state.settings, resources: this.session.resources, operations: this.session.operations, connections: this.session.connections, structure: this.session.structure, routes: this.session.routes, annotations: this.session.annotations, standardWork: this.session.standardWork, standardWorkOperators: this.session.standardWorkOperators, standardWorkHandovers: this.session.standardWorkHandovers, standardWorkPlanning: this.session.standardWorkPlanning, availability: this.session.availability, workspaces: this.session.workspaces }, savedAt);
       const suggested = saveAs ? state.metadata.name : state.fileName ?? state.metadata.name;
       const saved = await this.files.save(result.text, suggested, this.handle, saveAs);
       if (!saved) { reportStatus('Save cancelled'); return; }

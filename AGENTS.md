@@ -83,4 +83,10 @@
 81. Operator occupied work is Manual plus Walking plus Waiting. Automatic time, dependency idle, and unallocated gaps remain separate and never contribute to occupied work or balance efficiency.
 82. Treat theoretical minimum operators and chart-based nominal capacity as planning estimates, not optimisation, simulated throughput, or authoritative physical-resource capacity.
 83. Schema `1.8.0` owns planning inputs and takt/work-balance display settings; net time, takt, workloads, capacity, balance metrics, Yamazumi geometry, and analysis diagnostics remain derived and excluded from persistence.
+84. Availability is a separate non-CAD workspace with transient typed selection. Keep shifts, breaks, calendars, exceptions, assignments, date arithmetic, evaluation, coverage, rendering, and commands in focused modules.
+85. Store shift wall-clock times as minutes and breaks as shift-start offsets. Derive duration and resolved clock times; reject equal shift endpoints, out-of-shift breaks, and overlapping breaks.
+86. Calendar exceptions use validated date-only `YYYY-MM-DD` values and replace the weekly schedule. Evaluate with interval union/subtraction, count complete assigned overnight shifts, and never double-count overlap.
+87. Null operator/resource calendar assignments inherit the project default; no effective calendar is not unlimited availability. Calendar assignment never changes geometry, capacity, cycle time, or Standard Work duration.
+88. Calendar planning derives scheduled and break seconds while preserving stored manual inputs. Coverage remains diagnostic and never modifies chart scheduling or claims authoritative throughput.
+89. Schema `1.9.0` owns availability collections, assignments, default calendar, and planning-mode/date fields. Derived intervals, totals, coverage, preview state, selection, and validation remain excluded.
 

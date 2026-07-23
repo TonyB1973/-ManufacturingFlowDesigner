@@ -8,6 +8,10 @@ export const STANDARD_WORK_PLANNING_LIMITS = {
 export interface StandardWorkPlanningParameters {
   readonly studyId: string;
   periodName: string;
+  availabilityMode: 'manual' | 'calendar';
+  planningCalendarId: string | null;
+  periodStartDate: string | null;
+  periodEndDate: string | null;
   scheduledProductionTimeSeconds: number;
   plannedBreakTimeSeconds: number;
   plannedDowntimeSeconds: number;
@@ -21,6 +25,10 @@ export type StandardWorkPlanningPatch = Partial<Omit<StandardWorkPlanningParamet
 export const createDefaultStandardWorkPlanning = (studyId: string): StandardWorkPlanningParameters => ({
   studyId,
   periodName: 'Shift',
+  availabilityMode: 'manual',
+  planningCalendarId: null,
+  periodStartDate: null,
+  periodEndDate: null,
   scheduledProductionTimeSeconds: 28_800,
   plannedBreakTimeSeconds: 0,
   plannedDowntimeSeconds: 0,
@@ -34,6 +42,10 @@ export const cloneStandardWorkPlanning = (value: StandardWorkPlanningParameters)
 export function isValidStandardWorkPlanning(value: StandardWorkPlanningParameters): boolean {
   return /^SW-\d+$/.test(value.studyId)
     && typeof value.periodName === 'string' && value.periodName.length <= STANDARD_WORK_PLANNING_LIMITS.periodName
+    && (value.availabilityMode === 'manual' || value.availabilityMode === 'calendar')
+    && (value.planningCalendarId === null || /^CAL-\d+$/.test(value.planningCalendarId))
+    && (value.periodStartDate === null || /^\d{4}-\d{2}-\d{2}$/.test(value.periodStartDate))
+    && (value.periodEndDate === null || /^\d{4}-\d{2}-\d{2}$/.test(value.periodEndDate))
     && Number.isFinite(value.scheduledProductionTimeSeconds) && value.scheduledProductionTimeSeconds > 0
     && value.scheduledProductionTimeSeconds <= STANDARD_WORK_PLANNING_LIMITS.scheduledProductionTimeSeconds
     && Number.isFinite(value.plannedBreakTimeSeconds) && value.plannedBreakTimeSeconds >= 0

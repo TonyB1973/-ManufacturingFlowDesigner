@@ -15,6 +15,7 @@ import type { StandardWorkStore } from '../StandardWorkStore';
 import type { StandardWorkOperatorStore } from '../standardWork/StandardWorkOperatorStore';
 import type { StandardWorkHandoverStore } from '../standardWork/StandardWorkHandoverStore';
 import type { StandardWorkPlanningStore } from '../standardWork/StandardWorkPlanningStore';
+import type { AvailabilityStore } from '../availability/AvailabilityStore';
 
 export interface ProjectSerializationSource {
   readonly metadata: ProjectMetadata;
@@ -29,6 +30,7 @@ export interface ProjectSerializationSource {
   readonly standardWorkOperators: StandardWorkOperatorStore;
   readonly standardWorkHandovers: StandardWorkHandoverStore;
   readonly standardWorkPlanning: StandardWorkPlanningStore;
+  readonly availability: AvailabilityStore;
   readonly workspaces: WorkspaceStore;
 }
 
@@ -55,6 +57,10 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
     standardWorkOperators: byId(source.standardWorkOperators.getOperators()).map((item) => ({ ...item })),
     standardWorkHandovers: byId(source.standardWorkHandovers.getHandovers()).map((item) => ({ ...item })),
     standardWorkPlanning: source.standardWorkPlanning.getAll().map((item) => ({ ...item })),
+    shiftDefinitions: source.availability.getShifts().map((item) => ({ ...item })),
+    shiftBreaks: source.availability.getBreaks().map((item) => ({ ...item })),
+    availabilityCalendars: source.availability.getCalendars().map((item) => ({ ...item, weeklyPattern: Object.fromEntries(Object.entries(item.weeklyPattern).map(([day, ids]) => [day, [...ids]])) as typeof item.weeklyPattern })),
+    calendarExceptions: source.availability.getExceptions().map((item) => ({ ...item, replacementShiftIds: [...item.replacementShiftIds] })),
     workspaces: {
       active: source.workspaces.getActive(),
       processFlow: source.workspaces.getViewport('processFlow'),

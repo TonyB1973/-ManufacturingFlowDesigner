@@ -132,7 +132,7 @@ export class ApplicationClipboardService {
 
   private capture(skipLocked = false): ApplicationClipboard | { readonly message: string } {
     const workspace = this.workspaces.getActive(); const items = this.selection.getState().items;
-    if (workspace === 'standardWork') return { message: 'Use Standard Work commands to edit study entries' };
+    if (workspace !== 'processFlow' && workspace !== 'factoryLayout') return { message: workspace === 'standardWork' ? 'Use Standard Work commands to edit study entries' : 'Use Availability commands to edit shifts and calendars' };
     const resources = workspace === 'factoryLayout' ? items.filter((item) => item.kind === 'resource').map((item) => this.resources.getResource(item.id)).filter((item): item is PlacedResource => Boolean(item && (!skipLocked || !item.locked))) : [];
     const operations = workspace === 'processFlow' ? items.filter((item) => item.kind === 'operation').map((item) => this.operations.getOperation(item.id)).filter((item): item is OperationInstance => Boolean(item && (!skipLocked || !item.locked))) : [];
     const operationIds = new Set(operations.map((item) => item.id)); const explicitlySelected = new Set(items.filter((item) => item.kind === 'connection').map((item) => item.id));

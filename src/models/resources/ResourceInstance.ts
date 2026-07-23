@@ -18,9 +18,11 @@ export interface ResourceInstance {
   locked: boolean;
   selected: boolean;
   capacity: number;
+  availabilityCalendarId: string | null;
 }
 
 export type ResourceInstancePatch = Partial<Pick<ResourceInstance,
   'name' | 'layoutId' | 'worldX' | 'worldY' | 'width' | 'depth' | 'rotationDegrees' | 'clearance'
   | 'active' | 'visible' | 'locked' | 'capacity'
+  | 'availabilityCalendarId'
 >>;

@@ -16,10 +16,11 @@ import { DEFAULT_STANDARD_WORK_CHART_SETTINGS, type StandardWorkChartSettings } 
 import type { StandardWorkOperator } from '../standardWork/StandardWorkOperator';
 import type { StandardWorkHandover } from '../standardWork/StandardWorkHandover';
 import type { StandardWorkPlanningParameters } from '../standardWork/StandardWorkPlanning';
+import type { AvailabilityCalendar, CalendarException, ShiftBreak, ShiftDefinition } from '../availability/AvailabilityModels';
 
 export const PROJECT_FORMAT = 'ManufacturingFlowDesigner' as const;
-export const PROJECT_SCHEMA_VERSION = '1.8.0' as const;
-export const APPLICATION_VERSION = '1.0.0' as const;
+export const PROJECT_SCHEMA_VERSION = '1.9.0' as const;
+export const APPLICATION_VERSION = '1.1.0' as const;
 export const PROJECT_MIME_TYPE = 'application/vnd.manufacturing-flow-designer+json' as const;
 export const PROJECT_FILE_EXTENSION = '.mflow' as const;
 
@@ -49,6 +50,7 @@ export interface ProjectSettings {
   defaultDimensionOffset: number;
   defaultDimensionLayer: FactoryAnnotationLayer;
   standardWork: { timeFormat: StandardWorkTimeFormat; chart: StandardWorkChartSettings };
+  defaultAvailabilityCalendarId: string | null;
 }
 
 export type PersistedResourceInstance = Omit<ResourceInstance, 'selected'>;
@@ -82,6 +84,10 @@ export interface ProjectDocument {
   readonly standardWorkOperators: readonly StandardWorkOperator[];
   readonly standardWorkHandovers: readonly StandardWorkHandover[];
   readonly standardWorkPlanning: readonly StandardWorkPlanningParameters[];
+  readonly shiftDefinitions: readonly ShiftDefinition[];
+  readonly shiftBreaks: readonly ShiftBreak[];
+  readonly availabilityCalendars: readonly AvailabilityCalendar[];
+  readonly calendarExceptions: readonly CalendarException[];
   readonly workspaces: PersistedWorkspaces;
   readonly settings: ProjectSettings;
 }
@@ -97,6 +103,7 @@ export const DEFAULT_PROJECT_SETTINGS: Readonly<ProjectSettings> = {
   defaultDimensionOffset: 60,
   defaultDimensionLayer: 'Dimensions',
   standardWork: { timeFormat: 'seconds', chart: { ...DEFAULT_STANDARD_WORK_CHART_SETTINGS } },
+  defaultAvailabilityCalendarId: null,
 };
 
 export function defaultViewport(): WorkspaceViewportState {

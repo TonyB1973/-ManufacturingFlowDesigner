@@ -41,10 +41,11 @@ export interface WorkspaceOptions {
   readonly geometryEditing: GeometryEditingService;
   readonly geometryCommands: GeometryCommandFactory;
   readonly standardWorkPanel: HTMLElement;
+  readonly availabilityPanel: HTMLElement;
 }
 
 export function createWorkspace(options: WorkspaceOptions): CanvasViewportController {
-  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.annotationStore, options.annotationResolver, options.projectSession, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.annotationCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, options.standardWorkPanel, {
+  return createCanvasViewport(options.application, options.resourceStore, options.operationStore, options.connectionStore, options.structureStore, options.routeStore, options.annotationStore, options.annotationResolver, options.projectSession, options.workspaceStore, options.selectionStore, options.commands, options.routeCommands, options.annotationCommands, options.editing, options.geometrySelection, options.geometryEditing, options.geometryCommands, options.standardWorkPanel, options.availabilityPanel, {
     onZoomChange: options.statusBar.setZoom,
     onGridVisibilityChange: options.statusBar.setGridVisible,
     onCoordinatesChange: options.statusBar.setCoordinates,
@@ -52,7 +53,7 @@ export function createWorkspace(options: WorkspaceOptions): CanvasViewportContro
     onStatusChange: options.statusBar.setMessage,
     onSnapChange: options.statusBar.setSnapEnabled,
     onToolChange: options.statusBar.setActiveTool,
-    onWorkspaceChange: (workspace) => options.statusBar.setWorkspace(workspace === 'processFlow' ? 'Process Flow' : workspace === 'factoryLayout' ? 'Factory Layout' : 'Standard Work'),
+    onWorkspaceChange: (workspace) => options.statusBar.setWorkspace(workspace === 'processFlow' ? 'Process Flow' : workspace === 'factoryLayout' ? 'Factory Layout' : workspace === 'standardWork' ? 'Standard Work' : 'Availability'),
     requestResourceDeletion: options.requestResourceDeletion,
   });
 }

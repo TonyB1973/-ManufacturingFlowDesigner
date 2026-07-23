@@ -1,4 +1,7 @@
 import type { StandardWorkPlanningParameters } from '../../models/standardWork/StandardWorkPlanning';
+import type { AvailabilityStore } from '../availability/AvailabilityStore';
+import { AvailabilityCalendarEvaluationService } from '../availability/AvailabilityCalendarEvaluationService';
+import { StandardWorkCalendarPlanningService, type ResolvedStandardWorkPlanning } from '../availability/StandardWorkCalendarPlanningService';
 
 export interface StandardWorkTaktResult {
   readonly valid: boolean;
@@ -19,4 +22,12 @@ export function calculateStandardWorkTakt(parameters: StandardWorkPlanningParame
   const net = parameters.scheduledProductionTimeSeconds - parameters.plannedBreakTimeSeconds - parameters.plannedDowntimeSeconds;
   if (!(net > 0)) return { valid: false, active: parameters.active, netAvailableProductionSeconds: null, taktTimeSeconds: null, errors: ['Net available production time must be greater than zero.'] };
   return { valid: true, active: parameters.active, netAvailableProductionSeconds: net, taktTimeSeconds: net / parameters.requiredOutputUnits, errors: [] };
+}
+
+export function resolveStandardWorkPlanning(parameters: StandardWorkPlanningParameters, availability: AvailabilityStore): ResolvedStandardWorkPlanning {
+  return new StandardWorkCalendarPlanningService(new AvailabilityCalendarEvaluationService(availability)).resolve(parameters);
+}
+
+export function calculateStandardWorkTaktWithAvailability(parameters: StandardWorkPlanningParameters, availability: AvailabilityStore): StandardWorkTaktResult {
+  return resolveStandardWorkPlanning(parameters, availability).takt;
 }

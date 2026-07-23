@@ -2,6 +2,20 @@
 
 Manufacturing Flow Designer is a professional engineering PWA for modelling manufacturing process flow, physical factory resources, resource allocation, and future standard-work and simulation workflows.
 
+## Sprint 3.3 scope
+
+Sprint 3.3 adds **Availability** as a fourth principal, non-CAD workspace. Reusable Shift Definitions use local wall-clock minutes, support overnight periods, and own non-overlapping planned breaks expressed as offsets from shift start. Gross duration, reducing-break time, resolved break clock times, and net shift availability are derived rather than duplicated in project data.
+
+Availability Calendars assign ordered stable shift IDs to Monday through Sunday. Date-specific `closed` and `replaceShifts` exceptions use validated Gregorian `YYYY-MM-DD` values. The focused evaluator counts complete shifts on their assigned date, including overnight tails, unions overlapping scheduled and break intervals, subtracts reducing breaks once, and reports daily and range totals without timezone-dependent parsing or display rounding.
+
+Operators and physical Resource Instances may explicitly reference a calendar or inherit the project default. Calendar assignment never changes Factory Layout geometry, resource capacity, operation cycle time, Standard Work entry duration, or chart scheduling. The demo includes editable Early/Late shifts and a Production Calendar for continuing regression and demonstration work.
+
+Standard Work Planning retains its manual scheduled and break inputs and adds Manual/Calendar availability modes, a planning calendar, and inclusive period dates. Calendar mode derives scheduled and break seconds while leaving planned downtime and required output editable; returning to Manual restores the stored manual inputs. Takt and chart-based nominal capacity use the resolved planning time. Included operator and required-resource coverage is shown separately as a ratio or shortfall and does not claim authoritative availability-constrained throughput.
+
+All persistent shift, break, calendar, exception, default, assignment, and planning-mode edits use normal Undo/Redo. Preview ranges, evaluation intervals, coverage, selection, scrolling, and validation remain transient. `.mflow` schema `1.9.0` persists the authored availability graph and assignments. Its explicit `1.8.0 → 1.9.0` migration creates no calendars, retains every manual planning value, and leaves legacy manual analysis behaviour unchanged.
+
+Current limitations intentionally exclude scenario variants, absence and leave records, skills, automatic allocation, availability-constrained scheduling, stochastic downtime, simulation, and export. Sprint 3.4 should build scenario management over stable base-project references without duplicating the availability domain.
+
 ## Sprint 3.2 scope
 
 Sprint 3.2 adds study-specific production planning and demand analysis to Standard Work. Planning Settings store the period name, scheduled production seconds, planned break seconds, planned downtime seconds, required output, active state, and notes. Net available production time is scheduled time minus breaks and downtime; **takt time** is the derived net time divided by required output. Takt is never independently editable, and `OperationInstance.cycleTimeSeconds × occurrences` remains the only entry-duration calculation.
@@ -188,10 +202,10 @@ Manufacturing Flow Designer project files use:
 - extension: `.mflow`
 - media type: `application/vnd.manufacturing-flow-designer+json`
 - format identifier: `ManufacturingFlowDesigner`
-- current schema: `1.8.0`
-- current application version: `1.0.0`
+- current schema: `1.9.0`
+- current application version: `1.1.0`
 
-The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, Standard Work studies, operators, entries, handovers and study planning inputs, both independent viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
+The JSON document persists project metadata, reusable resource and operation templates, physical Factory Layout resources, boundaries, walls, areas, aisles, Factory Routes, Factory Annotations, Process Flow operations and connections, Standard Work studies, operators, entries, handovers and study planning inputs, availability shifts, breaks, calendars and exceptions, calendar assignments, both independent CAD viewport states, the active workspace, and engineering settings. Arrays are written in stable ID order to make files readable and source-control friendly.
 
 Initial safety ceilings are 20 MB per file, 2,000 templates of each kind, 10,000 resources, 10,000 operations, 20,000 connections, 10,000 Factory Annotations, 10 boundaries, 50,000 walls, 20,000 areas, 20,000 aisles, 30 nested levels, and bounded structural, route, and leader vertex counts. They are defensive limits rather than expected working sizes.
 
