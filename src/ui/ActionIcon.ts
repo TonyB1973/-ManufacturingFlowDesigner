@@ -1,0 +1,85 @@
+export interface ActionIcon {
+  readonly glyph: string;
+  readonly name: string;
+}
+
+const icon = (glyph: string, name: string): ActionIcon => ({ glyph, name });
+
+const ACTION_ICONS: readonly [RegExp, ActionIcon][] = [
+  [/^save as\b/i, icon('▣+', 'save as')],
+  [/^save\b/i, icon('▣', 'save')],
+  [/^open\b/i, icon('◫', 'open')],
+  [/^load demo\b/i, icon('▶', 'load demo')],
+  [/^(new|add|insert)\b/i, icon('+', 'add')],
+  [/^undo\b/i, icon('↶', 'undo')],
+  [/^redo\b/i, icon('↷', 'redo')],
+  [/^cut\b/i, icon('✂', 'cut')],
+  [/^copy\b/i, icon('⧉', 'copy')],
+  [/^paste\b/i, icon('▤', 'paste')],
+  [/^duplicate\b/i, icon('⧉+', 'duplicate')],
+  [/^(delete|remove)\b/i, icon('×', 'delete')],
+  [/^clear\b/i, icon('⌫', 'clear')],
+  [/^cancel\b/i, icon('×', 'cancel')],
+  [/^(apply|confirm|ok|validate)\b/i, icon('✓', 'confirm')],
+  [/^select all\b/i, icon('☷', 'select all')],
+  [/^select\b/i, icon('⌖', 'select')],
+  [/^align left\b/i, icon('|←', 'align left')],
+  [/^align horizontal centre\b/i, icon('↔', 'align horizontal centre')],
+  [/^align right\b/i, icon('→|', 'align right')],
+  [/^align top\b/i, icon('↑', 'align top')],
+  [/^align vertical centre\b/i, icon('↕', 'align vertical centre')],
+  [/^align bottom\b/i, icon('↓', 'align bottom')],
+  [/^(distribute horizontally|equal horizontal gaps)\b/i, icon('↔', 'horizontal distribution')],
+  [/^(distribute vertically|equal vertical gaps)\b/i, icon('↕', 'vertical distribution')],
+  [/^match width\b/i, icon('↔', 'match width')],
+  [/^match height\b/i, icon('↕', 'match height')],
+  [/^match size\b/i, icon('↔↕', 'match size')],
+  [/^(zoom in|increase)\b/i, icon('⊕', 'zoom in')],
+  [/^(zoom out|decrease)\b/i, icon('⊖', 'zoom out')],
+  [/^(reset zoom|actual size)\b/i, icon('1:1', 'actual size')],
+  [/^(fit|centre on)\b/i, icon('⛶', 'fit view')],
+  [/^grid\b/i, icon('▦', 'grid')],
+  [/^clearance\b/i, icon('◌', 'clearance')],
+  [/^canvas focus\b/i, icon('◎', 'focus')],
+  [/^resource library\b/i, icon('▦', 'resource library')],
+  [/^manage library\b/i, icon('⚙', 'manage library')],
+  [/^rotate left\b/i, icon('↶', 'rotate left')],
+  [/^rotate right\b/i, icon('↷', 'rotate right')],
+  [/^reset rotation\b/i, icon('⟳', 'reset rotation')],
+  [/^reverse\b/i, icon('⇄', 'reverse')],
+  [/^(connect|create handover)\b/i, icon('⇢', 'connect')],
+  [/^delete link\b/i, icon('⇢×', 'delete link')],
+  [/^populate\b/i, icon('⇲', 'populate')],
+  [/^move top\b/i, icon('⇈', 'move to top')],
+  [/^move up\b/i, icon('↑', 'move up')],
+  [/^move down\b/i, icon('↓', 'move down')],
+  [/^move bottom\b/i, icon('⇊', 'move to bottom')],
+  [/^entry table\b/i, icon('≣', 'entry table')],
+  [/^combination chart\b/i, icon('▥', 'combination chart')],
+  [/^work balance\b/i, icon('▤', 'work balance')],
+  [/^split view\b/i, icon('▦', 'split view')],
+  [/^planning settings\b/i, icon('◷', 'planning settings')],
+  [/^(chart settings|settings|properties)\b/i, icon('⚙', 'settings')],
+  [/^(enable|disable).*analysis\b/i, icon('⏻', 'analysis')],
+  [/^takt line\b/i, icon('│', 'takt line')],
+  [/^automatic lanes\b/i, icon('≈', 'automatic lanes')],
+  [/^disabled entries\b/i, icon('⊘', 'disabled entries')],
+  [/^block labels\b/i, icon('Aa', 'labels')],
+  [/^dependency idle\b/i, icon('⌛', 'dependency idle')],
+  [/^values\b/i, icon('#', 'values')],
+  [/^percentages\b/i, icon('%', 'percentages')],
+  [/^capacity summary\b/i, icon('Σ', 'capacity summary')],
+  [/^(locate|reveal|show in)\b/i, icon('⌖', 'locate')],
+  [/^standard work\b/i, icon('SW', 'standard work')],
+  [/^run\b/i, icon('▶', 'run')],
+  [/^pause\b/i, icon('Ⅱ', 'pause')],
+  [/^reset\b/i, icon('↺', 'reset')],
+];
+
+const FALLBACK_ICON = icon('·', 'command');
+
+export function actionIconFor(label: string): ActionIcon {
+  const normalized = label.trim();
+  for (const [pattern, value] of ACTION_ICONS) if (pattern.test(normalized)) return value;
+  return FALLBACK_ICON;
+}

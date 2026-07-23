@@ -1,3 +1,5 @@
+import { actionIconFor } from './ActionIcon';
+
 export function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -13,6 +15,11 @@ export function actionButton(label: string, className = 'command-button'): HTMLB
   const button = element('button', className, label);
   button.type = 'button';
   button.setAttribute('aria-label', label);
+  if (button.classList.contains('command-button')) {
+    const icon = actionIconFor(label);
+    button.dataset.icon = icon.glyph;
+    button.dataset.iconName = icon.name;
+  }
   return button;
 }
 
