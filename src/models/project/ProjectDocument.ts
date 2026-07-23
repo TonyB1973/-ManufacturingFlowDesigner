@@ -4,23 +4,16 @@ import type { OperationTemplate } from '../operations/OperationTemplate';
 import type { ResourceInstance } from '../resources/ResourceInstance';
 import type { ResourceTemplate } from '../resources/ResourceTemplate';
 import type { WorkspaceId, WorkspaceViewportState } from '../workspace/Workspace';
-import type { FactoryLayoutBoundary } from '../factory/FactoryLayoutBoundary';
-import type { FactoryWall } from '../factory/FactoryWall';
-import type { FactoryArea } from '../factory/FactoryArea';
-import type { FactoryAisle } from '../factory/FactoryAisle';
-import type { FactoryRoute } from '../factory/FactoryRoute';
-import type { FactoryAnnotation, FactoryAnnotationLayer } from '../factory/FactoryAnnotation';
+import type { FactoryAnnotationLayer } from '../factory/FactoryAnnotation';
 import type { LengthUnit } from '../../services/units/LengthUnitService';
-import type { StandardWorkEntry, StandardWorkStudy, StandardWorkTimeFormat } from '../standardWork/StandardWork';
+import type { StandardWorkTimeFormat } from '../standardWork/StandardWork';
 import { DEFAULT_STANDARD_WORK_CHART_SETTINGS, type StandardWorkChartSettings } from '../standardWork/StandardWorkChartSettings';
-import type { StandardWorkOperator } from '../standardWork/StandardWorkOperator';
-import type { StandardWorkHandover } from '../standardWork/StandardWorkHandover';
-import type { StandardWorkPlanningParameters } from '../standardWork/StandardWorkPlanning';
 import type { AvailabilityCalendar, CalendarException, ShiftBreak, ShiftDefinition } from '../availability/AvailabilityModels';
+import type { ManufacturingScenario } from '../scenarios/ManufacturingScenario';
 
 export const PROJECT_FORMAT = 'ManufacturingFlowDesigner' as const;
-export const PROJECT_SCHEMA_VERSION = '1.9.0' as const;
-export const APPLICATION_VERSION = '1.1.0' as const;
+export const PROJECT_SCHEMA_VERSION = '2.0.0' as const;
+export const APPLICATION_VERSION = '1.2.0' as const;
 export const PROJECT_MIME_TYPE = 'application/vnd.manufacturing-flow-designer+json' as const;
 export const PROJECT_FILE_EXTENSION = '.mflow' as const;
 
@@ -70,25 +63,12 @@ export interface ProjectDocument {
   readonly project: ProjectMetadata;
   readonly resourceTemplates: readonly ResourceTemplate[];
   readonly operationTemplates: readonly OperationTemplate[];
-  readonly resources: readonly PersistedResourceInstance[];
-  readonly operations: readonly PersistedOperationInstance[];
-  readonly connections: readonly PersistedProcessConnection[];
-  readonly layoutBoundaries: readonly FactoryLayoutBoundary[];
-  readonly walls: readonly FactoryWall[];
-  readonly areas: readonly FactoryArea[];
-  readonly aisles: readonly FactoryAisle[];
-  readonly factoryRoutes: readonly FactoryRoute[];
-  readonly factoryAnnotations: readonly FactoryAnnotation[];
-  readonly standardWorkStudies: readonly StandardWorkStudy[];
-  readonly standardWorkEntries: readonly StandardWorkEntry[];
-  readonly standardWorkOperators: readonly StandardWorkOperator[];
-  readonly standardWorkHandovers: readonly StandardWorkHandover[];
-  readonly standardWorkPlanning: readonly StandardWorkPlanningParameters[];
+  readonly activeScenarioId: string;
+  readonly scenarios: readonly ManufacturingScenario[];
   readonly shiftDefinitions: readonly ShiftDefinition[];
   readonly shiftBreaks: readonly ShiftBreak[];
   readonly availabilityCalendars: readonly AvailabilityCalendar[];
   readonly calendarExceptions: readonly CalendarException[];
-  readonly workspaces: PersistedWorkspaces;
   readonly settings: ProjectSettings;
 }
 

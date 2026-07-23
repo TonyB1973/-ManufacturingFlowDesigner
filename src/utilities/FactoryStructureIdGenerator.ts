@@ -1,6 +1,7 @@
 export interface FactoryStructureIdProvider {
   next(): string;
   ensureAfter(ids: readonly string[]): void;
+  reset?(ids?: readonly string[]): void;
 }
 
 export class FactoryStructureIdGenerator implements FactoryStructureIdProvider {
@@ -17,4 +18,5 @@ export class FactoryStructureIdGenerator implements FactoryStructureIdProvider {
       if (match) this.sequence = Math.max(this.sequence, Number(match[1]));
     }
   }
+  public reset(ids: readonly string[] = []): void { this.sequence = 0; this.ensureAfter(ids); }
 }

@@ -21,4 +21,5 @@ export class ResourceIdGenerator implements ResourceIdProvider {
     }, 0);
     this.sequence = Math.max(this.sequence, maximum + 1);
   }
+  public reset(ids: readonly string[] = []): void { this.sequence = 1; this.ensureAfter(ids); }
 }

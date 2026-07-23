@@ -35,12 +35,35 @@ import { StandardWorkPlanningStore, type StandardWorkPlanningChange } from '../s
 import { createDefaultStandardWorkPlanning } from '../../models/standardWork/StandardWorkPlanning';
 import { AvailabilityStore, type AvailabilityChange } from '../availability/AvailabilityStore';
 import type { AvailabilitySelectionStore } from '../availability/AvailabilitySelectionStore';
+import type { ManufacturingScenario, ManufacturingScenarioState, ScenarioSummary } from '../../models/scenarios/ManufacturingScenario';
+import { ScenarioCloneService } from '../scenarios/ScenarioCloneService';
+import { ScenarioIdGenerator } from '../../utilities/ScenarioIdGenerator';
+import { scenarioStateFromStores } from './ProjectSerializer';
+import { validateScenario } from '../scenarios/ScenarioValidationService';
 
 export interface ProjectSessionState {
   readonly metadata: ProjectMetadata;
   readonly settings: ProjectSettings;
   readonly fileName: string | null;
   readonly dirty: boolean;
+  readonly activeScenarioId: string;
+  readonly scenarioCount: number;
+}
+
+export interface ScenarioCalendarReferenceSummary {
+  readonly scenarioId: string;
+  readonly scenarioName: string;
+  readonly resources: number;
+  readonly operators: number;
+  readonly planningRecords: number;
+  readonly total: number;
+}
+
+export interface CalendarReferenceSummary {
+  readonly calendarId: string;
+  readonly projectDefault: boolean;
+  readonly scenarios: readonly ScenarioCalendarReferenceSummary[];
+  readonly total: number;
 }
 
 export class ProjectSessionService {
@@ -48,6 +71,11 @@ export class ProjectSessionService {
   public readonly standardWorkHandovers: StandardWorkHandoverStore;
   public readonly standardWorkPlanning: StandardWorkPlanningStore;
   public readonly availability = new AvailabilityStore();
+  private readonly scenarios = new Map<string, ManufacturingScenario>();
+  private readonly scenarioRevisions = new Map<string, number>();
+  private readonly scenarioClone = new ScenarioCloneService();
+  private readonly scenarioIds = new ScenarioIdGenerator();
+  private activeScenarioId = 'SCN-0001';
   private metadata: ProjectMetadata;
   private settings: ProjectSettings = { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork, chart: { ...DEFAULT_PROJECT_SETTINGS.standardWork.chart } } };
   private fileName: string | null = null;
@@ -82,6 +110,10 @@ export class ProjectSessionService {
     this.standardWorkPlanning = new StandardWorkPlanningStore((id) => Boolean(this.standardWork.getStudy(id)));
     this.standardWork.setOperatorResolver((id) => this.standardWorkOperators.getOperator(id)?.studyId ?? null);
     this.metadata = this.createMetadata();
+    const initialBaseline = this.createBaselineScenario(this.metadata.createdUtc);
+    this.scenarios.set(initialBaseline.id, initialBaseline);
+    this.scenarioRevisions.set(initialBaseline.id, 0);
+    this.scenarioIds.reset([initialBaseline.id]);
     this.unsubscribers = [
       resources.subscribe((change) => this.resourceChanged(change)),
       operations.subscribe((change) => this.operationChanged(change)),
@@ -98,11 +130,68 @@ export class ProjectSessionService {
     ];
   }
 
-  public getState(): ProjectSessionState { return { metadata: { ...this.metadata }, settings: this.getSettings(), fileName: this.fileName, dirty: this.dirtyState.isDirty() }; }
+  public getState(): ProjectSessionState { return { metadata: { ...this.metadata }, settings: this.getSettings(), fileName: this.fileName, dirty: this.dirtyState.isDirty(), activeScenarioId: this.activeScenarioId, scenarioCount: this.scenarios.size }; }
   public getMetadata(): ProjectMetadata { return { ...this.metadata }; }
   public getSettings(): ProjectSettings { return { ...this.settings, units: { ...this.settings.units }, standardWork: { ...this.settings.standardWork, chart: { ...this.settings.standardWork.chart } } }; }
   public isDirty(): boolean { return this.dirtyState.isDirty(); }
   public subscribe(listener: (state: ProjectSessionState) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+
+  public getActiveScenarioId(): string { return this.activeScenarioId; }
+  public getActiveScenario(): ManufacturingScenario { return this.getScenario(this.activeScenarioId)!; }
+  public getScenario(id: string): ManufacturingScenario | undefined {
+    if (id === this.activeScenarioId) this.synchronizeActiveScenarioState(false);
+    const value = this.scenarios.get(id); return value ? this.scenarioClone.cloneScenario(value) : undefined;
+  }
+  public getScenarios(): readonly ManufacturingScenario[] {
+    this.synchronizeActiveScenarioState(false);
+    return [...this.scenarios.values()].sort((left, right) => left.createdUtc.localeCompare(right.createdUtc) || left.id.localeCompare(right.id)).map((item) => this.scenarioClone.cloneScenario(item));
+  }
+  public getScenarioSummaries(): readonly ScenarioSummary[] {
+    const ids = new Set(this.scenarios.keys());
+    return this.getScenarios().map((item) => {
+      const health = validateScenario(item, this.availability.getCalendars(), this.settings);
+      return {
+        id: item.id, name: item.name, isBaseline: item.isBaseline, locked: item.locked, active: item.id === this.activeScenarioId,
+        sourceScenarioId: item.sourceScenarioId, sourceAvailable: item.sourceScenarioId === null || ids.has(item.sourceScenarioId),
+        createdUtc: item.createdUtc, modifiedUtc: item.modifiedUtc, resourceCount: item.state.resources.length,
+        operationCount: item.state.operations.length, standardWorkStudyCount: item.state.standardWorkStudies.length,
+        operatorCount: item.state.standardWorkOperators.length, revision: this.scenarioRevisions.get(item.id) ?? 0,
+        errors: health.errors, warnings: health.warnings,
+      };
+    });
+  }
+  public getBaselineScenario(): ManufacturingScenario { return this.getScenarios().find((item) => item.isBaseline)!; }
+  public getScenarioRevision(id: string): number { return this.scenarioRevisions.get(id) ?? 0; }
+  public isActiveScenarioLocked(): boolean { return this.scenarios.get(this.activeScenarioId)?.locked ?? false; }
+  public getCalendarReferences(calendarId: string): CalendarReferenceSummary {
+    const scenarios = this.getScenarios().map((scenario) => {
+      const resources = scenario.state.resources.filter((item) => item.availabilityCalendarId === calendarId).length;
+      const operators = scenario.state.standardWorkOperators.filter((item) => item.availabilityCalendarId === calendarId).length;
+      const planningRecords = scenario.state.standardWorkPlanning.filter((item) => item.planningCalendarId === calendarId).length;
+      return { scenarioId: scenario.id, scenarioName: scenario.name, resources, operators, planningRecords, total: resources + operators + planningRecords };
+    }).filter((item) => item.total > 0);
+    const projectDefault = this.settings.defaultAvailabilityCalendarId === calendarId;
+    return { calendarId, projectDefault, scenarios, total: scenarios.reduce((sum, item) => sum + item.total, projectDefault ? 1 : 0) };
+  }
+
+  public replaceCalendarReferences(calendarId: string, replacementId: string | null): number {
+    if (replacementId === calendarId || (replacementId !== null && !this.availability.getCalendar(replacementId))) return 0;
+    this.synchronizeActiveScenarioState(false);
+    let changed = 0; const now = new Date().toISOString();
+    for (const scenario of this.scenarios.values()) {
+      let scenarioChanged = false;
+      const resources = scenario.state.resources.map((item) => item.availabilityCalendarId === calendarId ? (changed += 1, scenarioChanged = true, { ...item, availabilityCalendarId: replacementId }) : item);
+      const standardWorkOperators = scenario.state.standardWorkOperators.map((item) => item.availabilityCalendarId === calendarId ? (changed += 1, scenarioChanged = true, { ...item, availabilityCalendarId: replacementId }) : item);
+      const standardWorkPlanning = scenario.state.standardWorkPlanning.map((item) => item.planningCalendarId === calendarId ? (changed += 1, scenarioChanged = true, { ...item, planningCalendarId: replacementId }) : item);
+      if (scenarioChanged) {
+        scenario.state = { ...scenario.state, resources, standardWorkOperators, standardWorkPlanning };
+        scenario.modifiedUtc = now; this.bumpScenario(scenario.id);
+      }
+    }
+    if (changed) this.loadScenarioState(this.scenarios.get(this.activeScenarioId)!.state);
+    else this.notify();
+    return changed;
+  }
 
   public applyMetadata(patch: Partial<Pick<ProjectMetadata, 'name' | 'description' | 'author' | 'company'>>): boolean {
     const next = { ...this.metadata, ...patch };
@@ -123,14 +212,78 @@ export class ProjectSessionService {
   public updateSettings(patch: Partial<ProjectSettings>): void { if (this.applySettings(patch) && !this.history) this.dirtyState.markDirty(); }
   public attachHistory(history: CommandHistoryService): void { this.unsubscribeHistory?.(); this.history = history; this.unsubscribeHistory = history.subscribe((state) => { if (state.atSavedCheckpoint) this.dirtyState.markClean(); else this.dirtyState.markDirty(); }); this.dirtyState.markClean(); }
 
+  public activateScenario(id: string): boolean {
+    if (id === this.activeScenarioId) return true;
+    const target = this.scenarios.get(id); if (!target) return false;
+    this.synchronizeActiveScenarioState(false);
+    this.activeScenarioId = id;
+    this.loadScenarioState(target.state);
+    this.notify();
+    return true;
+  }
+
+  public createScenarioFrom(sourceId: string, name: string, now = new Date().toISOString()): ManufacturingScenario | null {
+    const source = this.getScenario(sourceId); const trimmed = name.trim();
+    if (!source || !trimmed || trimmed.length > 200) return null;
+    const scenario: ManufacturingScenario = {
+      id: this.scenarioIds.next(), name: trimmed, description: '', isBaseline: false, locked: false,
+      createdUtc: now, modifiedUtc: now, sourceScenarioId: source.id, state: this.scenarioClone.cloneState(source.state),
+    };
+    this.scenarios.set(scenario.id, scenario); this.scenarioRevisions.set(scenario.id, 0); this.activateScenario(scenario.id); return this.scenarioClone.cloneScenario(scenario);
+  }
+
+  public restoreScenario(value: ManufacturingScenario, makeActive = false): boolean {
+    if (this.scenarios.has(value.id) || !value.name.trim()) return false;
+    const scenario = this.scenarioClone.cloneScenario(value);
+    this.scenarios.set(scenario.id, scenario); this.scenarioRevisions.set(scenario.id, 0); this.scenarioIds.ensureAfter([scenario.id]);
+    if (makeActive) this.activateScenario(scenario.id); else this.notify();
+    return true;
+  }
+
+  public updateScenario(id: string, patch: Partial<Pick<ManufacturingScenario, 'name' | 'description' | 'locked'>>): boolean {
+    const scenario = this.scenarios.get(id); if (!scenario) return false;
+    const nextName = patch.name?.trim() ?? scenario.name; const nextDescription = patch.description ?? scenario.description;
+    if (!nextName || nextName.length > 200 || nextDescription.length > 10000) return false;
+    scenario.name = nextName; scenario.description = nextDescription; if (patch.locked !== undefined) scenario.locked = patch.locked;
+    scenario.modifiedUtc = new Date().toISOString(); this.bumpScenario(id); this.notify(); return true;
+  }
+
+  public setBaselineScenario(id: string): boolean {
+    const target = this.scenarios.get(id); if (!target || target.isBaseline) return false;
+    const now = new Date().toISOString();
+    for (const scenario of this.scenarios.values()) {
+      const next = scenario.id === id;
+      if (scenario.isBaseline !== next) { scenario.isBaseline = next; scenario.modifiedUtc = now; this.bumpScenario(scenario.id); }
+    }
+    this.notify(); return true;
+  }
+
+  public deleteScenario(id: string): ManufacturingScenario | null {
+    const scenario = this.scenarios.get(id); if (!scenario || scenario.isBaseline || this.scenarios.size <= 1) return null;
+    const snapshot = this.scenarioClone.cloneScenario(scenario); const wasActive = id === this.activeScenarioId;
+    this.scenarios.delete(id); this.scenarioRevisions.delete(id);
+    if (wasActive) {
+      const replacement = [...this.scenarios.values()].sort((left, right) => Number(right.isBaseline) - Number(left.isBaseline) || left.createdUtc.localeCompare(right.createdUtc) || left.id.localeCompare(right.id))[0];
+      this.activeScenarioId = replacement.id; this.loadScenarioState(replacement.state);
+    }
+    this.notify(); return snapshot;
+  }
+
+  public replaceScenario(value: ManufacturingScenario): boolean {
+    if (!this.scenarios.has(value.id)) return false;
+    this.scenarios.set(value.id, this.scenarioClone.cloneScenario(value)); this.bumpScenario(value.id);
+    if (value.id === this.activeScenarioId) { this.loadScenarioState(value.state); this.notify(); } else this.notify();
+    return true;
+  }
+
   public newProject(now = new Date().toISOString()): void {
     const metadata = this.createMetadata(now);
+    const baseline = this.createBaselineScenario(now);
     this.replace({
       format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: APPLICATION_VERSION, project: metadata,
       resourceTemplates: RESOURCE_TEMPLATES, operationTemplates: OPERATION_TEMPLATES,
-      resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [], factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [], standardWorkOperators: [], standardWorkHandovers: [], standardWorkPlanning: [],
+      activeScenarioId: baseline.id, scenarios: [baseline],
       shiftDefinitions: [], shiftBreaks: [], availabilityCalendars: [], calendarExceptions: [],
-      workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
       settings: { ...DEFAULT_PROJECT_SETTINGS, units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork, chart: { ...DEFAULT_PROJECT_SETTINGS.standardWork.chart } } },
     }, null);
   }
@@ -145,34 +298,22 @@ export class ProjectSessionService {
       this.selection.clear();
       this.standardWorkSelection.clear();
       this.availabilitySelection?.clear();
-      const resources: ResourceInstance[] = document.resources.map((item) => ({ ...item, clearance: { ...item.clearance }, selected: false }));
-      const operations: OperationInstance[] = document.operations.map((item) => ({ ...item, selected: false }));
-      const connections: ProcessConnection[] = document.connections.map((item) => ({ ...item, sourceAnchor: { ...item.sourceAnchor }, targetAnchor: { ...item.targetAnchor }, routePoints: [], routeStatus: 'clear', selected: false }));
       this.metadata = { ...document.project };
       this.settings = { ...document.settings, units: { ...document.settings.units }, standardWork: { ...document.settings.standardWork, chart: { ...document.settings.standardWork.chart } } };
       this.fileName = fileName;
-      this.resources.replaceAll(document.resourceTemplates, resources, false);
-      this.operations.replaceAll(document.operationTemplates, operations, false);
-      this.connections.replaceAll(connections, false);
-      this.structure.replaceAll(document.layoutBoundaries, document.walls, document.areas, document.aisles, false);
-      this.routes.replaceAll(document.factoryRoutes, false);
-      this.annotations.replaceAll(document.factoryAnnotations, false);
-      this.standardWork.replaceAll(document.standardWorkStudies, document.standardWorkEntries, false);
-      this.standardWorkOperators.replaceAll(document.standardWorkOperators, false);
-      this.standardWorkHandovers.replaceAll(document.standardWorkHandovers, false);
-      this.standardWorkPlanning.replaceAll(document.standardWorkPlanning ?? document.standardWorkStudies.map((study) => createDefaultStandardWorkPlanning(study.id)), false);
+      this.scenarios.clear(); this.scenarioRevisions.clear();
+      for (const value of document.scenarios) { const scenario = this.scenarioClone.cloneScenario(value); this.scenarios.set(scenario.id, scenario); this.scenarioRevisions.set(scenario.id, 0); }
+      this.activeScenarioId = this.scenarios.has(document.activeScenarioId) ? document.activeScenarioId : [...this.scenarios.values()].find((item) => item.isBaseline)!.id;
+      this.scenarioIds.reset(this.scenarios.keys());
       this.availability.replaceAll({
         shifts: document.shiftDefinitions ?? [],
         breaks: document.shiftBreaks ?? [],
         calendars: document.availabilityCalendars ?? [],
         exceptions: document.calendarExceptions ?? [],
       }, false);
-      this.workspaces.restore(document.workspaces.active, document.workspaces.processFlow, document.workspaces.factoryLayout, false);
-      this.resourceIds.ensureAfter(resources.map((item) => item.id));
-      this.operationIds.ensureAfter(operations.map((item) => item.id));
-      this.connectionIds.ensureAfter(connections.map((item) => item.id));
-      this.routeIds.ensureAfter(document.factoryRoutes.map((item) => item.id));
-      this.annotationIds.ensureAfter(document.factoryAnnotations.map((item) => item.id));
+      this.resources.replaceAll(document.resourceTemplates, [], false);
+      this.operations.replaceAll(document.operationTemplates, [], false);
+      this.loadScenarioState(this.scenarios.get(this.activeScenarioId)!.state, false);
       this.projectIds.ensureAfter([document.project.id]);
       this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.annotations.publishReset(); this.standardWork.publishReset(); this.standardWorkOperators.publishReset(); this.standardWorkHandovers.publishReset(); this.standardWorkPlanning.publishReset(); this.availability.publishReset(); this.workspaces.publish();
       if (this.history) this.history.clear(); else this.dirtyState.markClean();
@@ -180,19 +321,65 @@ export class ProjectSessionService {
     this.notify();
   }
 
+  private createBaselineScenario(now: string): ManufacturingScenario {
+    return {
+      id: 'SCN-0001', name: 'Baseline', description: '', isBaseline: true, locked: false,
+      createdUtc: now, modifiedUtc: now, sourceScenarioId: null,
+      state: {
+        resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [],
+        factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [],
+        standardWorkOperators: [], standardWorkHandovers: [], standardWorkPlanning: [],
+        workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
+      },
+    };
+  }
+
+  private loadScenarioState(state: ManufacturingScenarioState, notify = true): void {
+    const wasLoading = this.loading; this.loading = true;
+    try {
+      this.selection.clear(); this.standardWorkSelection.clear(); this.availabilitySelection?.clear();
+      const resources: ResourceInstance[] = state.resources.map((item) => ({ ...item, clearance: { ...item.clearance }, selected: false }));
+      const operations: OperationInstance[] = state.operations.map((item) => ({ ...item, selected: false }));
+      const connections: ProcessConnection[] = state.connections.map((item) => ({ ...item, sourceAnchor: { ...item.sourceAnchor }, targetAnchor: { ...item.targetAnchor }, routePoints: [], routeStatus: 'clear', selected: false }));
+      this.resources.replaceAll(this.resources.getTemplates(), resources, false);
+      this.operations.replaceAll(this.operations.getTemplates(), operations, false);
+      this.connections.replaceAll(connections, false);
+      this.structure.replaceAll(state.layoutBoundaries, state.walls, state.areas, state.aisles, false);
+      this.routes.replaceAll(state.factoryRoutes, false); this.annotations.replaceAll(state.factoryAnnotations, false);
+      this.standardWork.replaceAll(state.standardWorkStudies, state.standardWorkEntries, false);
+      this.standardWorkOperators.replaceAll(state.standardWorkOperators, false);
+      this.standardWorkHandovers.replaceAll(state.standardWorkHandovers, false);
+      this.standardWorkPlanning.replaceAll(state.standardWorkPlanning.length ? state.standardWorkPlanning : state.standardWorkStudies.map((study) => createDefaultStandardWorkPlanning(study.id)), false);
+      this.workspaces.restore(state.workspaces.active, state.workspaces.processFlow, state.workspaces.factoryLayout, false);
+      this.resourceIds.reset(resources.map((item) => item.id)); this.operationIds.reset(operations.map((item) => item.id)); this.connectionIds.reset(connections.map((item) => item.id));
+      this.routeIds.reset(state.factoryRoutes.map((item) => item.id)); this.annotationIds.reset(state.factoryAnnotations.map((item) => item.id));
+      this.connections.recalculateAll();
+      if (notify) { this.resources.publishReset(); this.operations.publishReset(); this.connections.publishReset(); this.structure.publishReset(); this.routes.publishReset(); this.annotations.publishReset(); this.standardWork.publishReset(); this.standardWorkOperators.publishReset(); this.standardWorkHandovers.publishReset(); this.standardWorkPlanning.publishReset(); this.workspaces.publish(); }
+    } finally { this.loading = wasLoading; }
+  }
+
+  private synchronizeActiveScenarioState(touch: boolean): void {
+    if (this.loading) return;
+    const scenario = this.scenarios.get(this.activeScenarioId); if (!scenario) return;
+    scenario.state = this.scenarioClone.cloneState(scenarioStateFromStores(this));
+    if (touch) { scenario.modifiedUtc = new Date().toISOString(); this.bumpScenario(scenario.id); }
+  }
+  private bumpScenario(id: string): void { this.scenarioRevisions.set(id, (this.scenarioRevisions.get(id) ?? 0) + 1); }
+  private recordScenarioChange(): void { this.synchronizeActiveScenarioState(true); if (!this.history) this.dirtyState.markDirty(); this.notify(); }
+
   private createMetadata(now = new Date().toISOString()): ProjectMetadata {
     return { id: this.projectIds.next(), name: 'Untitled Project', description: '', author: '', company: '', createdUtc: now, modifiedUtc: now };
   }
-  private resourceChanged(change: ResourceStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private operationChanged(change: OperationStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private connectionChanged(change: ConnectionStoreChange): void { if (!this.history && !this.loading && change.kind !== 'selection' && change.kind !== 'validation' && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private structureChanged(change: FactoryStructureChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private routeChanged(change: FactoryRouteChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private annotationChanged(change: FactoryAnnotationChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private standardWorkChanged(change: StandardWorkChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private standardWorkOperatorChanged(change: StandardWorkOperatorChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private standardWorkHandoverChanged(change: StandardWorkHandoverChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
-  private standardWorkPlanningChanged(change: StandardWorkPlanningChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
+  private resourceChanged(change: ResourceStoreChange): void { if (!this.loading && !['selection', 'template', 'reset'].includes(change.kind)) this.recordScenarioChange(); }
+  private operationChanged(change: OperationStoreChange): void { if (!this.loading && !['selection', 'validation', 'reset'].includes(change.kind)) this.recordScenarioChange(); }
+  private connectionChanged(change: ConnectionStoreChange): void { if (!this.loading && !['selection', 'validation', 'reset'].includes(change.kind)) this.recordScenarioChange(); }
+  private structureChanged(change: FactoryStructureChange): void { if (!this.loading && change.kind !== 'reset') this.recordScenarioChange(); }
+  private routeChanged(change: FactoryRouteChange): void { if (!this.loading && change.kind !== 'reset') this.recordScenarioChange(); }
+  private annotationChanged(change: FactoryAnnotationChange): void { if (!this.loading && change.kind !== 'reset') this.recordScenarioChange(); }
+  private standardWorkChanged(change: StandardWorkChange): void { if (!this.loading && change.kind !== 'reset') this.recordScenarioChange(); }
+  private standardWorkOperatorChanged(change: StandardWorkOperatorChange): void { if (!this.loading && change.kind !== 'reset') this.recordScenarioChange(); }
+  private standardWorkHandoverChanged(change: StandardWorkHandoverChange): void { if (!this.loading && change.kind !== 'reset') this.recordScenarioChange(); }
+  private standardWorkPlanningChanged(change: StandardWorkPlanningChange): void { if (!this.loading && change.kind !== 'reset') this.recordScenarioChange(); }
   private availabilityChanged(change: AvailabilityChange): void { if (!this.history && !this.loading && change.kind !== 'reset') this.dirtyState.markDirty(); }
   private notify(): void { const state = this.getState(); for (const listener of this.listeners) listener(state); }
 }

@@ -9,6 +9,7 @@ import {
   type PersistedResourceInstance,
   type ProjectDocument,
 } from '../../models/project/ProjectDocument';
+import type { ManufacturingScenarioState } from '../../models/scenarios/ManufacturingScenario';
 import { DEFAULT_FACTORY_LAYOUT_ID } from '../../models/workspace/Workspace';
 
 const clearance = (enabled = false) => ({
@@ -82,7 +83,7 @@ function operation(
 }
 
 export function createDemoProject(now = new Date().toISOString()): ProjectDocument {
-  const resources: ProjectDocument['resources'] = [
+  const resources: readonly PersistedResourceInstance[] = [
     resource('RES-0001', 'TPL-CNC-002', 'Saw and Turning Cell', 100, 140, true),
     resource('RES-0002', 'TPL-CNC-001', 'CNC Machining Cell', 400, 140, true),
     resource('RES-0003', 'TPL-MAN-001', 'Assembly Cell', 700, 140),
@@ -90,7 +91,7 @@ export function createDemoProject(now = new Date().toISOString()): ProjectDocume
     resource('RES-0005', 'TPL-MAN-002', 'Packing and Dispatch', 1000, 500),
     resource('RES-0006', 'TPL-HAN-002', 'Finished Goods Buffer', 700, 500),
   ];
-  const operations: ProjectDocument['operations'] = [
+  const operations: readonly PersistedOperationInstance[] = [
     operation('operation-0001', 'op-cut', 'Cut stock', 10, 'RES-0001', 0, 80),
     operation('operation-0002', 'op-machine', 'Machine features', 20, 'RES-0002', 260, 80),
     operation('operation-0003', 'op-assemble', 'Assemble product', 30, 'RES-0003', 520, 80),
@@ -115,7 +116,7 @@ export function createDemoProject(now = new Date().toISOString()): ProjectDocume
     anchorOffset: 0.5,
   });
 
-  return {
+  const legacy = {
     format: PROJECT_FORMAT,
     schemaVersion: PROJECT_SCHEMA_VERSION,
     applicationVersion: APPLICATION_VERSION,
@@ -212,5 +213,23 @@ export function createDemoProject(now = new Date().toISOString()): ProjectDocume
       factoryLayout: { panX: 50, panY: 90, zoom: 0.28, gridVisible: true, originVisible: true, snapEnabled: true },
     },
     settings: { ...DEFAULT_PROJECT_SETTINGS, defaultAvailabilityCalendarId: 'CAL-0001', units: { ...DEFAULT_PROJECT_SETTINGS.units }, standardWork: { ...DEFAULT_PROJECT_SETTINGS.standardWork } },
+  };
+  const {
+    resources: scenarioResources, operations: scenarioOperations, connections, layoutBoundaries, walls, areas, aisles,
+    factoryRoutes, factoryAnnotations, standardWorkStudies, standardWorkEntries, standardWorkOperators,
+    standardWorkHandovers, standardWorkPlanning, workspaces, ...shared
+  } = legacy;
+  return {
+    ...shared,
+    activeScenarioId: 'SCN-0001',
+    scenarios: [{
+      id: 'SCN-0001', name: 'Baseline', description: 'Protected reference manufacturing design.', isBaseline: true,
+      locked: false, createdUtc: now, modifiedUtc: now, sourceScenarioId: null,
+      state: {
+        resources: scenarioResources, operations: scenarioOperations, connections, layoutBoundaries, walls, areas, aisles,
+        factoryRoutes, factoryAnnotations, standardWorkStudies, standardWorkEntries, standardWorkOperators,
+        standardWorkHandovers, standardWorkPlanning, workspaces,
+      } as ManufacturingScenarioState,
+    }],
   };
 }

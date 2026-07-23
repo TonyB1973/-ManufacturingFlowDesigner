@@ -16,6 +16,7 @@ export class ProjectMigrationService {
     this.register('1.6.0', '1.7.0', migrateStandardWorkOperators);
     this.register('1.7.0', '1.8.0', migrateStandardWorkPlanning);
     this.register('1.8.0', '1.9.0', migrateAvailabilityCalendars);
+    this.register('1.9.0', '2.0.0', migrateScenarios);
   }
 
   public register(from: string, to: string, migrate: ProjectMigration): void {
@@ -45,6 +46,37 @@ export class ProjectMigrationService {
     }
     return { value, migratedFrom };
   }
+}
+
+function migrateScenarios(document: Record<string, unknown>): Record<string, unknown> {
+  const project = isRecord(document.project) ? document.project : {};
+  const timestamp = typeof project.createdUtc === 'string' ? project.createdUtc : new Date(0).toISOString();
+  const {
+    resources = [], operations = [], connections = [], layoutBoundaries = [], walls = [], areas = [], aisles = [],
+    factoryRoutes = [], factoryAnnotations = [], standardWorkStudies = [], standardWorkEntries = [],
+    standardWorkOperators = [], standardWorkHandovers = [], standardWorkPlanning = [], workspaces,
+    ...shared
+  } = document;
+  const defaultViewports = { active: 'processFlow', processFlow: defaultViewportRecord(), factoryLayout: defaultViewportRecord() };
+  return {
+    ...shared,
+    applicationVersion: '1.2.0',
+    activeScenarioId: 'SCN-0001',
+    scenarios: [{
+      id: 'SCN-0001', name: 'Baseline', description: '', isBaseline: true, locked: false,
+      createdUtc: timestamp, modifiedUtc: typeof project.modifiedUtc === 'string' ? project.modifiedUtc : timestamp,
+      sourceScenarioId: null,
+      state: {
+        resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations,
+        standardWorkStudies, standardWorkEntries, standardWorkOperators, standardWorkHandovers, standardWorkPlanning,
+        workspaces: isRecord(workspaces) ? workspaces : defaultViewports,
+      },
+    }],
+  };
+}
+
+function defaultViewportRecord(): Record<string, unknown> {
+  return { panX: 0, panY: 0, zoom: 1, gridVisible: true, originVisible: true, snapEnabled: true };
 }
 
 function migrateAvailabilityCalendars(document: Record<string, unknown>): Record<string, unknown> {

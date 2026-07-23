@@ -16,6 +16,8 @@ import type { StandardWorkOperatorStore } from '../standardWork/StandardWorkOper
 import type { StandardWorkHandoverStore } from '../standardWork/StandardWorkHandoverStore';
 import type { StandardWorkPlanningStore } from '../standardWork/StandardWorkPlanningStore';
 import type { AvailabilityStore } from '../availability/AvailabilityStore';
+import type { ManufacturingScenario, ManufacturingScenarioState } from '../../models/scenarios/ManufacturingScenario';
+import { ScenarioCloneService } from '../scenarios/ScenarioCloneService';
 
 export interface ProjectSerializationSource {
   readonly metadata: ProjectMetadata;
@@ -32,10 +34,20 @@ export interface ProjectSerializationSource {
   readonly standardWorkPlanning: StandardWorkPlanningStore;
   readonly availability: AvailabilityStore;
   readonly workspaces: WorkspaceStore;
+  readonly scenarios?: readonly ManufacturingScenario[];
+  readonly activeScenarioId?: string;
 }
 
 export function createProjectDocument(source: ProjectSerializationSource, modifiedUtc = new Date().toISOString()): ProjectDocument {
   const byId = <T extends { readonly id: string }>(items: readonly T[]): T[] => [...items].sort((left, right) => left.id.localeCompare(right.id));
+  const activeState = scenarioStateFromStores(source);
+  const fallbackScenario: ManufacturingScenario = {
+    id: 'SCN-0001', name: 'Baseline', description: '', isBaseline: true, locked: false,
+    createdUtc: source.metadata.createdUtc, modifiedUtc, sourceScenarioId: null, state: activeState,
+  };
+  const clone = new ScenarioCloneService();
+  const scenarios = (source.scenarios?.length ? source.scenarios : [fallbackScenario]).map((item) => clone.cloneScenario(item)).sort((left, right) => left.id.localeCompare(right.id));
+  const activeScenarioId = scenarios.some((item) => item.id === source.activeScenarioId) ? source.activeScenarioId! : scenarios.find((item) => item.isBaseline)?.id ?? scenarios[0].id;
   return {
     format: PROJECT_FORMAT,
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -43,6 +55,19 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
     project: { ...source.metadata, modifiedUtc },
     resourceTemplates: byId(source.resources.getTemplates()).map((item) => ({ ...item, tags: [...item.tags] })),
     operationTemplates: byId(source.operations.getTemplates()).map((item) => ({ ...item, tags: [...item.tags] })),
+    activeScenarioId,
+    scenarios,
+    shiftDefinitions: source.availability.getShifts().map((item) => ({ ...item })),
+    shiftBreaks: source.availability.getBreaks().map((item) => ({ ...item })),
+    availabilityCalendars: source.availability.getCalendars().map((item) => ({ ...item, weeklyPattern: Object.fromEntries(Object.entries(item.weeklyPattern).map(([day, ids]) => [day, [...ids]])) as typeof item.weeklyPattern })),
+    calendarExceptions: source.availability.getExceptions().map((item) => ({ ...item, replacementShiftIds: [...item.replacementShiftIds] })),
+    settings: { ...source.settings, units: { ...source.settings.units }, standardWork: { ...source.settings.standardWork, chart: { ...source.settings.standardWork.chart } } },
+  };
+}
+
+export function scenarioStateFromStores(source: Pick<ProjectSerializationSource, 'resources' | 'operations' | 'connections' | 'structure' | 'routes' | 'annotations' | 'standardWork' | 'standardWorkOperators' | 'standardWorkHandovers' | 'standardWorkPlanning' | 'workspaces'>): ManufacturingScenarioState {
+  const byId = <T extends { readonly id: string }>(items: readonly T[]): T[] => [...items].sort((left, right) => left.id.localeCompare(right.id));
+  return {
     resources: byId(source.resources.getPlacedResources()).map(({ selected: _selected, ...item }) => ({ ...item, clearance: { ...item.clearance } })),
     operations: byId(source.operations.getOperations()).map(({ selected: _selected, ...item }) => ({ ...item })),
     connections: byId(source.connections.getConnections()).map(({ selected: _selected, routePoints: _points, routeStatus: _status, ...item }) => ({ ...item, sourceAnchor: { ...item.sourceAnchor }, targetAnchor: { ...item.targetAnchor } })),
@@ -57,16 +82,7 @@ export function createProjectDocument(source: ProjectSerializationSource, modifi
     standardWorkOperators: byId(source.standardWorkOperators.getOperators()).map((item) => ({ ...item })),
     standardWorkHandovers: byId(source.standardWorkHandovers.getHandovers()).map((item) => ({ ...item })),
     standardWorkPlanning: source.standardWorkPlanning.getAll().map((item) => ({ ...item })),
-    shiftDefinitions: source.availability.getShifts().map((item) => ({ ...item })),
-    shiftBreaks: source.availability.getBreaks().map((item) => ({ ...item })),
-    availabilityCalendars: source.availability.getCalendars().map((item) => ({ ...item, weeklyPattern: Object.fromEntries(Object.entries(item.weeklyPattern).map(([day, ids]) => [day, [...ids]])) as typeof item.weeklyPattern })),
-    calendarExceptions: source.availability.getExceptions().map((item) => ({ ...item, replacementShiftIds: [...item.replacementShiftIds] })),
-    workspaces: {
-      active: source.workspaces.getActive(),
-      processFlow: source.workspaces.getViewport('processFlow'),
-      factoryLayout: source.workspaces.getViewport('factoryLayout'),
-    },
-    settings: { ...source.settings, units: { ...source.settings.units }, standardWork: { ...source.settings.standardWork, chart: { ...source.settings.standardWork.chart } } },
+    workspaces: { active: source.workspaces.getActive(), processFlow: source.workspaces.getViewport('processFlow'), factoryLayout: source.workspaces.getViewport('factoryLayout') },
   };
 }
 

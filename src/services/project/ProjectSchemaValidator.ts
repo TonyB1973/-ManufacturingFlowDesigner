@@ -31,8 +31,9 @@ import {
 import { isValidDateOnly } from '../availability/DateOnlyService';
 import { AvailabilityStore } from '../availability/AvailabilityStore';
 import { AvailabilityCalendarEvaluationService } from '../availability/AvailabilityCalendarEvaluationService';
+import type { ManufacturingScenario, ManufacturingScenarioState } from '../../models/scenarios/ManufacturingScenario';
 
-const LIMITS = { templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, studies: 10000, standardWorkEntries: 500000, standardWorkOperators: 100000, standardWorkHandovers: 1000000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
+const LIMITS = { scenarios: 128, templates: 2000, resources: 10000, operations: 10000, connections: 20000, boundaries: 10, walls: 50000, areas: 20000, aisles: 20000, routes: 50000, annotations: 100000, studies: 10000, standardWorkEntries: 500000, standardWorkOperators: 100000, standardWorkHandovers: 1000000, boundaryVertices: 50000, aislePoints: 500000, routeWaypoints: 1000000, waypointsPerRoute: 10000, leaderPoints: 1000000, leaderPointsPerAnnotation: 1000 } as const;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const ANCHOR_SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const CONNECTION_TYPES = new Set(['Standard', 'Rework', 'Alternate', 'Information']);
@@ -63,25 +64,31 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const metadata = metadataValue(root.project, issues);
   const resourceTemplates = resourceTemplateValues(root.resourceTemplates, issues);
   const operationTemplates = operationTemplateValues(root.operationTemplates, issues);
-  const resources = resourceValues(root.resources, issues);
-  const operations = operationValues(root.operations, issues);
-  const connections = connectionValues(root.connections, issues);
-  const layoutBoundaries = boundaryValues(root.layoutBoundaries, issues);
-  const walls = wallValues(root.walls, issues);
-  const areas = areaValues(root.areas, issues);
-  const aisles = aisleValues(root.aisles, issues);
-  const factoryRoutes = factoryRouteValues(root.factoryRoutes, issues);
-  const factoryAnnotations = factoryAnnotationValues(root.factoryAnnotations, issues);
-  const standardWorkStudies = standardWorkStudyValues(root.standardWorkStudies, issues);
-  const standardWorkEntries = standardWorkEntryValues(root.standardWorkEntries, issues);
-  const standardWorkOperators = standardWorkOperatorValues(root.standardWorkOperators, issues);
-  const standardWorkHandovers = standardWorkHandoverValues(root.standardWorkHandovers, issues);
-  const standardWorkPlanning = standardWorkPlanningValues(root.standardWorkPlanning, issues);
+  const scenarios = scenarioValues(root.scenarios, issues);
+  uniqueIds('scenario', scenarios, issues);
+  if (scenarios.length && scenarios.filter((item) => item.isBaseline).length !== 1) issues.push('Exactly one scenario must be designated as the baseline.');
+  const activeScenarioId = nonEmpty(root.activeScenarioId) ? root.activeScenarioId : '';
+  const activeScenario = scenarios.find((item) => item.id === activeScenarioId);
+  if (!activeScenario) issues.push('activeScenarioId must reference an existing scenario.');
+  const activeState = activeScenario?.state ?? emptyScenarioState();
+  const resources = [...activeState.resources];
+  const operations = [...activeState.operations];
+  const connections = [...activeState.connections];
+  const layoutBoundaries = [...activeState.layoutBoundaries];
+  const walls = [...activeState.walls];
+  const areas = [...activeState.areas];
+  const aisles = [...activeState.aisles];
+  const factoryRoutes = [...activeState.factoryRoutes];
+  const factoryAnnotations = [...activeState.factoryAnnotations];
+  const standardWorkStudies = [...activeState.standardWorkStudies];
+  const standardWorkEntries = [...activeState.standardWorkEntries];
+  const standardWorkOperators = [...activeState.standardWorkOperators];
+  const standardWorkHandovers = [...activeState.standardWorkHandovers];
+  const standardWorkPlanning = [...activeState.standardWorkPlanning];
   const shiftDefinitions = shiftValues(root.shiftDefinitions, issues);
   const shiftBreaks = shiftBreakValues(root.shiftBreaks, issues);
   const availabilityCalendars = availabilityCalendarValues(root.availabilityCalendars, issues);
   const calendarExceptions = calendarExceptionValues(root.calendarExceptions, issues);
-  const workspaces = workspaceValues(root.workspaces, issues);
   const settings = settingsValue(root.settings, issues);
 
   uniqueIds('resource template', resourceTemplates, issues);
@@ -102,6 +109,7 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   const studyIds = new Set(standardWorkStudies.map((item) => item.id));
   const operatorIds = new Set(standardWorkOperators.map((item) => item.id));
   const shiftIds = new Set(shiftDefinitions.map((item) => item.id)); const calendarIds = new Set(availabilityCalendars.map((item) => item.id));
+  for (const scenario of scenarios.filter((item) => item.id !== activeScenarioId)) validateScenarioReferences(scenario, resourceTemplateIds, operationTemplateIds, calendarIds, issues);
   const areaIds = new Set(areas.map((item) => item.id));
   const boundaryIds = new Set(layoutBoundaries.map((item) => item.id)); const wallIds = new Set(walls.map((item) => item.id)); const aisleIds = new Set(aisles.map((item) => item.id)); const routeIds = new Set(factoryRoutes.map((item) => item.id));
   resources.forEach((item) => { if (!resourceTemplateIds.has(item.templateId)) issues.push(`Resource ${item.id} references missing template ${item.templateId}.`); if (item.availabilityCalendarId !== null && !calendarIds.has(item.availabilityCalendarId)) issues.push(`Resource ${item.id} references missing availability calendar ${item.availabilityCalendarId}.`); });
@@ -164,8 +172,82 @@ export function validateProjectDocument(value: unknown): ProjectDocument {
   if (issues.length) throw new ProjectValidationError(issues);
   return {
     format: PROJECT_FORMAT, schemaVersion: PROJECT_SCHEMA_VERSION, applicationVersion: root.applicationVersion as string,
-    project: metadata!, resourceTemplates, operationTemplates, resources, operations, connections, layoutBoundaries, walls, areas, aisles, factoryRoutes, factoryAnnotations, standardWorkStudies, standardWorkEntries, standardWorkOperators, standardWorkHandovers, standardWorkPlanning, shiftDefinitions, shiftBreaks, availabilityCalendars, calendarExceptions,
-    workspaces: workspaces!, settings: settings!,
+    project: metadata!, resourceTemplates, operationTemplates, activeScenarioId, scenarios,
+    shiftDefinitions, shiftBreaks, availabilityCalendars, calendarExceptions, settings: settings!,
+  };
+}
+
+function scenarioValues(value: unknown, issues: string[]): ManufacturingScenario[] {
+  return arrayValue(value, 'scenarios', LIMITS.scenarios, issues).flatMap((raw, index) => {
+    const item = record(raw, `scenarios[${index}]`, issues); if (!item) return [];
+    const local: string[] = []; const state = record(item.state, `scenarios[${index}].state`, local);
+    if (!nonEmpty(item.id) || !/^SCN-\d+$/.test(String(item.id)) || !nonEmpty(item.name) || !boundedString(item.name, 200) || !boundedString(item.description) || !bool(item.isBaseline) || !bool(item.locked) || !isoUtc(item.createdUtc) || !isoUtc(item.modifiedUtc) || !(item.sourceScenarioId === null || nonEmpty(item.sourceScenarioId))) {
+      local.push('scenario metadata has invalid fields.');
+    }
+    const scenarioState: ManufacturingScenarioState = state ? {
+      resources: resourceValues(state.resources, local),
+      operations: operationValues(state.operations, local),
+      connections: connectionValues(state.connections, local),
+      layoutBoundaries: boundaryValues(state.layoutBoundaries, local),
+      walls: wallValues(state.walls, local),
+      areas: areaValues(state.areas, local),
+      aisles: aisleValues(state.aisles, local),
+      factoryRoutes: factoryRouteValues(state.factoryRoutes, local),
+      factoryAnnotations: factoryAnnotationValues(state.factoryAnnotations, local),
+      standardWorkStudies: standardWorkStudyValues(state.standardWorkStudies, local),
+      standardWorkEntries: standardWorkEntryValues(state.standardWorkEntries, local),
+      standardWorkOperators: standardWorkOperatorValues(state.standardWorkOperators, local),
+      standardWorkHandovers: standardWorkHandoverValues(state.standardWorkHandovers, local),
+      standardWorkPlanning: standardWorkPlanningValues(state.standardWorkPlanning, local),
+      workspaces: workspaceValues(state.workspaces, local) ?? emptyScenarioState().workspaces,
+    } : emptyScenarioState();
+    const scenario = { ...item, state: scenarioState } as unknown as ManufacturingScenario;
+    validateScenarioScopedIds(scenario, local);
+    issues.push(...local.map((message) => `Scenario ${String(item.id ?? index)}: ${message}`));
+    return [scenario];
+  });
+}
+
+function validateScenarioScopedIds(scenario: ManufacturingScenario, issues: string[]): void {
+  const state = scenario.state;
+  uniqueIds('resource', state.resources, issues); uniqueIds('operation', state.operations, issues); uniqueIds('connection', state.connections, issues);
+  uniqueIds('boundary', state.layoutBoundaries, issues); uniqueIds('wall', state.walls, issues); uniqueIds('area', state.areas, issues); uniqueIds('aisle', state.aisles, issues);
+  uniqueIds('FactoryRoute', state.factoryRoutes, issues); uniqueIds('FactoryAnnotation', state.factoryAnnotations, issues);
+  uniqueIds('Standard Work study', state.standardWorkStudies, issues); uniqueIds('Standard Work entry', state.standardWorkEntries, issues);
+  uniqueIds('Standard Work operator', state.standardWorkOperators, issues); uniqueIds('Standard Work handover', state.standardWorkHandovers, issues);
+}
+
+function validateScenarioReferences(scenario: ManufacturingScenario, resourceTemplateIds: ReadonlySet<string>, operationTemplateIds: ReadonlySet<string>, calendarIds: ReadonlySet<string>, issues: string[]): void {
+  const state = scenario.state; const prefix = `Scenario ${scenario.id}`;
+  const resourceIds = new Set(state.resources.map((item) => item.id)); const operationIds = new Set(state.operations.map((item) => item.id));
+  const studyIds = new Set(state.standardWorkStudies.map((item) => item.id)); const operatorIds = new Set(state.standardWorkOperators.map((item) => item.id));
+  const entryIds = new Set(state.standardWorkEntries.map((item) => item.id)); const areaIds = new Set(state.areas.map((item) => item.id));
+  for (const item of state.resources) {
+    if (!resourceTemplateIds.has(item.templateId)) issues.push(`${prefix}: Resource ${item.id} references missing template ${item.templateId}.`);
+    if (item.availabilityCalendarId !== null && !calendarIds.has(item.availabilityCalendarId)) issues.push(`${prefix}: Resource ${item.id} references missing availability calendar ${item.availabilityCalendarId}.`);
+  }
+  for (const item of state.operations) {
+    if (!operationTemplateIds.has(item.templateId)) issues.push(`${prefix}: Operation ${item.id} references missing template ${item.templateId}.`);
+    if (item.assignedResourceId !== null && !resourceIds.has(item.assignedResourceId)) issues.push(`${prefix}: Operation ${item.id} references missing physical resource ${item.assignedResourceId}.`);
+  }
+  for (const item of state.connections) if (!operationIds.has(item.sourceOperationId) || !operationIds.has(item.targetOperationId)) issues.push(`${prefix}: Connection ${item.id} references a missing operation.`);
+  for (const item of state.standardWorkOperators) {
+    if (!studyIds.has(item.studyId)) issues.push(`${prefix}: Standard Work operator ${item.id} references missing study ${item.studyId}.`);
+    if (item.linkedResourceId !== null && !resourceIds.has(item.linkedResourceId)) issues.push(`${prefix}: Standard Work operator ${item.id} references missing resource ${item.linkedResourceId}.`);
+    if (item.availabilityCalendarId !== null && !calendarIds.has(item.availabilityCalendarId)) issues.push(`${prefix}: Standard Work operator ${item.id} references missing calendar ${item.availabilityCalendarId}.`);
+  }
+  for (const item of state.standardWorkEntries) if (!studyIds.has(item.studyId) || !operationIds.has(item.operationId) || !operatorIds.has(item.assignedOperatorId)) issues.push(`${prefix}: Standard Work entry ${item.id} has a missing scenario-scoped reference.`);
+  for (const item of state.standardWorkHandovers) if (!studyIds.has(item.studyId) || !entryIds.has(item.fromEntryId) || !entryIds.has(item.toEntryId)) issues.push(`${prefix}: Standard Work handover ${item.id} has a missing scenario-scoped reference.`);
+  for (const item of state.standardWorkPlanning) if (!studyIds.has(item.studyId) || item.planningCalendarId !== null && !calendarIds.has(item.planningCalendarId)) issues.push(`${prefix}: Standard Work planning ${item.studyId} has a missing reference.`);
+  for (const item of state.factoryRoutes) for (const endpoint of [item.source, item.target]) if (endpoint.kind === 'resource' && !resourceIds.has(endpoint.resourceId) || endpoint.kind === 'area' && !areaIds.has(endpoint.areaId)) issues.push(`${prefix}: FactoryRoute ${item.id} has a missing endpoint reference.`);
+}
+
+function emptyScenarioState(): ManufacturingScenarioState {
+  return {
+    resources: [], operations: [], connections: [], layoutBoundaries: [], walls: [], areas: [], aisles: [],
+    factoryRoutes: [], factoryAnnotations: [], standardWorkStudies: [], standardWorkEntries: [],
+    standardWorkOperators: [], standardWorkHandovers: [], standardWorkPlanning: [],
+    workspaces: { active: 'processFlow', processFlow: defaultViewport(), factoryLayout: defaultViewport() },
   };
 }
 
@@ -338,7 +420,7 @@ function workspaceValues(value: unknown, issues: string[]): PersistedWorkspaces 
   const item = record(value, 'workspaces', issues); if (!item) return null;
   const processFlow = viewportValue(item.processFlow); const factoryLayout = viewportValue(item.factoryLayout);
   const active = item.active === undefined ? 'processFlow' : item.active;
-  if (active !== 'processFlow' && active !== 'factoryLayout' && active !== 'standardWork' && active !== 'availability') issues.push('workspaces.active is invalid.');
+  if (active !== 'processFlow' && active !== 'factoryLayout' && active !== 'standardWork' && active !== 'availability' && active !== 'scenarios') issues.push('workspaces.active is invalid.');
   if (!processFlow || !factoryLayout) issues.push('Workspace viewport state is invalid.');
   return processFlow && factoryLayout ? { active: active as PersistedWorkspaces['active'], processFlow, factoryLayout } : null;
 }

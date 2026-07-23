@@ -17,6 +17,7 @@ export interface StatusBarController {
   setHealth(errors: number, warnings: number): void;
   setWorkspace(workspace: string): void;
   setProject(name: string, dirty: boolean): void;
+  setScenario(name: string, id: string, baseline: boolean, locked: boolean): void;
   setHistory(state: HistoryState): void;
 }
 
@@ -27,6 +28,7 @@ export function createStatusBar(): StatusBarController {
   message.setAttribute('aria-live', 'polite');
   bar.append(message);
   const project = element('span', '', 'Untitled Project');
+  const scenario = element('span', 'statusbar__scenario', 'Scenario: Baseline · SCN-0001 · Baseline');
   const workspace = element('span', 'statusbar__workspace', 'Workspace: Process Flow');
   const zoom = element('span', 'statusbar__zoom', '100%');
   const grid = element('span', 'statusbar__grid', 'Grid: On');
@@ -40,11 +42,12 @@ export function createStatusBar(): StatusBarController {
   const activeTool = element('span', 'statusbar__tool', 'Tool: Select');
   const health = element('span', 'statusbar__health', 'Health: Healthy');
   const history = element('span', 'statusbar__history', 'Undo: 0 · Redo: 0');
-  bar.append(project, workspace, activeTool, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, connections, health, history);
+  bar.append(project, scenario, workspace, activeTool, zoom, grid, snap, coordinateX, coordinateY, selection, resources, operations, connections, health, history);
   return {
     element: bar,
     setMessage: (text) => { message.textContent = text; },
     setProject: (name, dirty) => { project.textContent = `${name}${dirty ? ' *' : ''}`; },
+    setScenario: (name, id, baseline, locked) => { scenario.textContent = `Scenario: ${name} · ${id}${baseline ? ' · Baseline' : ''}${locked ? ' · Locked' : ''}`; },
     setWorkspace: (value) => { workspace.textContent = `Workspace: ${value}`; },
     setZoom: (value) => { zoom.textContent = `${Math.round(value * 100)}%`; },
     setGridVisible: (visible) => { grid.textContent = `Grid: ${visible ? 'On' : 'Off'}`; },
